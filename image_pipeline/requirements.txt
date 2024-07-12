@@ -28,7 +28,7 @@ azure-storage-queue==12.10.0
 backcall==0.2.0
 bitarray==2.9.2
 Brotli==1.0.9
-certifi==2024.6.2
+certifi==2024.7.4
 cffi==1.16.0
 charset-normalizer==2.0.4
 click==8.1.7
