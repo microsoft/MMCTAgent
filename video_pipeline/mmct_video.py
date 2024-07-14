@@ -1,8 +1,10 @@
 import os
 import io
 import re
+import uuid
 import argparse
 import requests
+import subprocess
 import json
 import time
 import cv2
@@ -13,6 +15,7 @@ from tqdm import tqdm
 from openai import AzureOpenAI
 from datetime import datetime, timedelta
 from scipy.spatial.distance import cosine
+from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from azure.storage.blob import BlobServiceClient
 from azure.core.exceptions import ResourceExistsError
 
@@ -44,16 +47,72 @@ class VideoAgent:
         cap.release()
         return frames, timestamps
     
+    def moderate_video(self):
+        # Azure endpoint
+        moderation_endpoint = os.environ.get("AZURE_MODERATION_ENDPOINT")
+        moderation_api_version = "2023-10-01"
+        moderation_api_url = f"{moderation_endpoint}/contentsafety/image:analyze?api-version={moderation_api_version}"
+
+        def moderate_image(image):
+            img_byte_arr = io.BytesIO()
+            image.save(img_byte_arr, format='PNG')
+            img_str = base64.b64encode(img_byte_arr.getvalue()).decode('utf-8')
+            payload = json.dumps({"image": {"content": img_str}})
+            response = requests.post(moderation_api_url, headers=self.moderation_headers, data=payload)
+            return response.json()
+
+        moderated = False
+        thresholds = {'Hate': 2, 'SelfHarm': 4, 'Sexual': 2, 'Violence': 4}
+
+        # Select frames at 0.2 fps (every 5th frame if original is at 1 fps)
+        frames_to_moderate = self.frames[::5]
+
+        for frame in frames_to_moderate:
+            result = moderate_image(frame)
+            
+            for category in result['categoriesAnalysis']:
+                if category['severity'] >= thresholds[category['category']]:
+                    moderated = True
+                    break
+            
+            if moderated:
+                break
+
+        return moderated
+    
+    def moderate_text(self, text):
+        moderation_endpoint = os.environ.get("AZURE_MODERATION_ENDPOINT")
+        moderation_api_version = "2023-10-01"
+        moderation_api_url = f"{moderation_endpoint}/contentsafety/text:analyze?api-version={moderation_api_version}"
+        payload = json.dumps({"text": text})
+        response = requests.post(moderation_api_url, headers=self.moderation_headers, data=payload)
+        moderated = False
+        thresholds = {'Hate': 2, 'SelfHarm': 2, 'Sexual': 4, 'Violence': 2}
+        result = response.json()
+        print(result)
+        for category in result['categoriesAnalysis']:
+            print(category['category'])
+            if category['severity'] >= thresholds[category['category']]:
+                moderated = True
+                break
+        return moderated
+        
     
     def upload_video_to_blob(self):
-        # Get the connection string from an environment variable
-        connect_str = os.environ.get("BLOB_CONNECTION_STRING")
-        # Initialize the BlobServiceClient
-        blob_service_client = BlobServiceClient.from_connection_string(connect_str)
+        if self.blob_managed_identity:
+            account_url = os.environ.get("BLOB_ACCOUNT_URL")
+            # Initialize the BlobServiceClient
+            blob_service_client = BlobServiceClient(account_url, credential=self.credential)
+        else:
+            # Get the connection string from an environment variable
+            connect_str = os.environ.get("BLOB_CONNECTION_STRING")
+            # Initialize the BlobServiceClient
+            blob_service_client = BlobServiceClient.from_connection_string(connect_str)
+
         # Specify the container name
         container_name = os.environ.get("BLOB_CONTAINER_NAME")
         # Extract the video name from the file path
-        video_name_in_blob = os.path.basename(self.video_path)
+        video_name_in_blob = f"{self.session_id}.mp4"
         # Get the blob client for the specific blob
         self.blob_client = blob_service_client.get_blob_client(container=container_name, blob=video_name_in_blob)
 
@@ -72,11 +131,7 @@ class VideoAgent:
             return None
     
     def create_index(self):
-        index_url = f"{self.azurecv_endpoint}/computervision/retrieval/indexes/{self.video_base_name}?api-version=2023-05-01-preview"
-        headers = {
-            "Ocp-Apim-Subscription-Key": self.azurecv_subscription_key,
-            "Content-Type": "application/json"
-        }
+        index_url = f"{self.azurecv_endpoint}/computervision/retrieval/indexes/{self.session_id}?api-version=2023-05-01-preview"
         payload = {
             "features": [
                 {
@@ -85,45 +140,62 @@ class VideoAgent:
                 }
             ]
         }
-        response = requests.put(index_url, headers=headers, data=json.dumps(payload))
+        response = requests.put(index_url, headers=self.azurecv_headers, data=json.dumps(payload))
         return response.json()
 
     
     def add_video_to_index(self):
-        ingestion_url = f"{self.azurecv_endpoint}/computervision/retrieval/indexes/{self.video_base_name}/ingestions/my-ingestion?api-version=2023-05-01-preview"
-        headers = {
-            "Ocp-Apim-Subscription-Key": self.azurecv_subscription_key,
-            "Content-Type": "application/json"
-        }
-        sas_token = os.environ.get("BLOB_SAS_TOKEN")
-        document_url = self.blob_url + "?" + sas_token
-        payload = {
-            "moderation": False,
-            "videos": [
-                {
-                'mode': 'add',
-                'documentUrl': document_url
-                }
-            ]
-        }
-        response = requests.put(ingestion_url, headers=headers, data=json.dumps(payload))
+        ingestion_url = f"{self.azurecv_endpoint}/computervision/retrieval/indexes/{self.session_id}/ingestions/my-ingestion?api-version=2023-05-01-preview"
+        if self.blob_managed_identity:
+            document_url = self.blob_url
+            payload = {
+                "moderation": False,
+                "videos": [
+                    {
+                    'mode': 'add',
+                    'documentUrl': document_url
+                    }
+                ],
+                "documentAuthenticationKind" : "managedIdentity"
+            }
+        else:
+            sas_token = os.environ.get("BLOB_SAS_TOKEN")
+            document_url = self.blob_url + "?" + sas_token
+            payload = {
+                "moderation": False,
+                "videos": [
+                    {
+                    'mode': 'add',
+                    'documentUrl': document_url
+                    }
+                ]
+            }
+
+        response = requests.put(ingestion_url, headers=self.azurecv_headers, data=json.dumps(payload))
         print("Video Addition Initialized:", response.json())
 
-        check_url = f"{self.azurecv_endpoint}/computervision/retrieval/indexes/{self.video_base_name}/ingestions?api-version=2023-05-01-preview&$top=1"
+        check_url = f"{self.azurecv_endpoint}/computervision/retrieval/indexes/{self.session_id}/ingestions?api-version=2023-05-01-preview&$top=1"
+        video_indexed = False
         while True:
-            response = requests.get(check_url, headers=headers)
+            response = requests.get(check_url, headers=self.azurecv_headers)
             print("Video Addition Status:", response.json())
             if response.json()['value'][0]['state'] == "Completed":
+                video_indexed = True
                 print("Video Addition Completed")
                 break
+            elif response.json()['value'][0]['state'] == "Running":
+                pass
+            else:
+                print("Error adding video to index")
+                break
             time.sleep(10)
-
+        return video_indexed
     
     def process_srt(self, batch_size=16):
 
         def get_embeddings(texts, model):
             processed_texts = [text.replace("\n", " ") for text in texts]
-            response = self.client.embeddings.create(input=processed_texts, model=model)
+            response = self.client_embed.embeddings.create(input=processed_texts, model=model)
             return [data.embedding for data in response.data]
         
         subs = pysrt.open(self.transcript_path)
@@ -146,12 +218,22 @@ class VideoAgent:
         return processed_subs
 
     
-    def __init__(self, video_path, transcript_path, system_prompt_path="./system_prompt_planner.txt"):
+    def __init__(self, video_path, transcript_path, system_prompt_path="./system_prompt_planner_with_guardrails.txt"):
 
         self.video_path = video_path
         self.transcript_path = transcript_path
         self.system_prompt_path = system_prompt_path
 
+        self.blob_managed_identity = os.environ.get("BLOB_MANAGED_IDENTITY") == "True"
+        self.azurecv_managed_identity = os.environ.get("AZURECV_MANAGED_IDENTITY") == "True"
+        self.azure_openai_managed_identity = os.environ.get("AZURE_OPENAI_MANAGED_IDENTITY") == "True"
+        self.azure_moderation_managed_identity = os.environ.get("AZURE_MODERATION_MANAGED_IDENTITY") == "True"
+
+        self.session_id = str(uuid.uuid4())
+
+        if self.blob_managed_identity or self.azurecv_managed_identity or self.azure_openai_managed_identity or self.azure_moderation_managed_identity:
+            self.credential = DefaultAzureCredential()
+            self.token = self.credential.get_token("https://cognitiveservices.azure.com/.default")
         video_base_name_with_extension = os.path.basename(self.video_path)
         self.video_base_name, _ = os.path.splitext(video_base_name_with_extension)
 
@@ -165,32 +247,82 @@ class VideoAgent:
         print("Blob URL:", self.blob_url)
 
         self.azurecv_endpoint = os.environ.get("AZURECV_ENDPOINT")
-        self.azurecv_subscription_key = os.environ.get("AZURECV_SUBSCRIPTION_KEY")
+        if self.azurecv_managed_identity:
+            self.azurecv_headers = {
+                "Authorization": "Bearer "+self.token.token,
+                "Content-Type": "application/json"
+            }
+        else:
+            self.azurecv_key = os.environ.get("AZURECV_KEY")
+            self.azurecv_headers = {
+                "Ocp-Apim-Subscription-Key": self.azurecv_key,
+                "Content-Type": "application/json"
+            }
         index_creation_response = self.create_index()
         print(index_creation_response)
         if 'error' not in index_creation_response:
-            self.add_video_to_index()
-        print("Done")
+            self.video_index = self.add_video_to_index()
+        if self.video_index:
+            print("Done")
+        else:
+            print("Video indexing failed")
 
-        self.client = AzureOpenAI(
-                            azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT"), 
-                            api_key=os.getenv("AZURE_OPENAI_KEY"),  
-                            api_version="2023-03-15-preview"
-                            )
-        self.gpt4v_api_base = os.getenv("AZURE_OPENAI_ENDPOINT")
-        self.gpt4v_deployment_name = os.getenv("GPT4_V_DEPLOYMENT")
-        self.gpt4v_api_key = os.getenv("AZURE_OPENAI_KEY")
+        if self.azure_openai_managed_identity:
+            self.client_embed = AzureOpenAI(
+                                azure_endpoint = os.getenv("AZURE_OPENAI_EMBEDDING_ENDPOINT"), 
+                                api_version="2023-03-15-preview",
+                                azure_ad_token_provider=get_bearer_token_provider(self.credential, "https://cognitiveservices.azure.com/.default")
+                                )
+            self.client = AzureOpenAI(
+                                azure_endpoint = os.getenv("AZURE_OPENAI_GPT4_ENDPOINT"), 
+                                api_version="2023-03-15-preview",
+                                azure_ad_token_provider=get_bearer_token_provider(self.credential, "https://cognitiveservices.azure.com/.default")
+                                )
+        else:
+            self.client_embed = AzureOpenAI(
+                                azure_endpoint = os.getenv("AZURE_OPENAI_EMBEDDING_ENDPOINT"), 
+                                api_version="2023-03-15-preview",
+                                api_key=os.getenv("AZURE_OPENAI_EMBEDDING_KEY")
+                                )
+            self.client = AzureOpenAI(
+                                azure_endpoint = os.getenv("AZURE_OPENAI_GPT4_ENDPOINT"), 
+                                api_version="2023-03-15-preview",
+                                api_key=os.getenv("AZURE_OPENAI_GPT4_KEY")
+                                )
+            
+        self.gpt4v_api_base = os.getenv("AZURE_OPENAI_GPT4V_ENDPOINT")
+        self.gpt4v_deployment_name = os.getenv("GPT4V_DEPLOYMENT")
         self.gpt4v_base_url = f"{self.gpt4v_api_base}/openai/deployments/{self.gpt4v_deployment_name}" 
-        self.gpt4v_headers = {   
-            "Content-Type": "application/json",   
-            "api-key": self.gpt4v_api_key
-        }
+        if self.azure_openai_managed_identity:
+            self.gpt4v_headers = {   
+                "Content-Type": "application/json",   
+                "Authorization": "Bearer "+self.token.token 
+            }
+        else:
+            self.gpt4v_api_key = os.environ.get("AZURE_OPENAI_GPT4V_KEY")
+            self.gpt4v_headers = {   
+                "Content-Type": "application/json",   
+                "api-key": self.gpt4v_api_key 
+            }
+
         self.gpt4v_endpoint = f"{self.gpt4v_base_url}/chat/completions?api-version=2023-12-01-preview"
 
         print("Processing transcript and generating embeddings...")
         self.transcript_embeddings = self.process_srt()
         print("Done")
         print("")
+
+        if self.azure_moderation_managed_identity:
+            self.moderation_headers = {
+                "Content-Type": "application/json",
+                "Authorization": "Bearer " + self.token.token
+            }
+        else:
+            self.moderation_key = os.environ.get("AZURE_MODERATION_KEY")
+            self.moderation_headers = {
+                "Ocp-Apim-Subscription-Key": self.moderation_key,
+                "Content-Type": "application/json"
+            }
 
         # Reading the system prompt
         with open(self.system_prompt_path, "r") as file:
@@ -225,7 +357,7 @@ class VideoAgent:
 
             return "{:02}:{:02}:{:02}".format(hours, minutes, seconds)
         
-        query_embedding = self.client.embeddings.create(input = [transcript_query], model="text-embedding-ada-002").data[0].embedding
+        query_embedding = self.client_embed.embeddings.create(input = [transcript_query], model=os.getenv("ADA_EMBEDDING_DEPLOYMENT")).data[0].embedding
         similarities = []
         for embedding in self.transcript_embeddings:
             similarities.append(cosine(query_embedding, embedding['embedding']))
@@ -246,17 +378,13 @@ class VideoAgent:
 
     
     def query_frames_Azure_Computer_Vision(self, frames_query):
-        search_url = f"{self.azurecv_endpoint}/computervision/retrieval/indexes/{self.video_base_name}:queryByText?api-version=2023-05-01-preview"
-        headers = {
-            "Ocp-Apim-Subscription-Key": self.azurecv_subscription_key,
-            "Content-Type": "application/json"
-        }
+        search_url = f"{self.azurecv_endpoint}/computervision/retrieval/indexes/{self.session_id}:queryByText?api-version=2023-05-01-preview"
         search_payload = {
             "queryText": frames_query,
             "moderation": False,
             "top": 3
         }
-        search_response = requests.post(search_url, headers=headers, json=search_payload)
+        search_response = requests.post(search_url, headers=self.azurecv_headers, json=search_payload)
         response_data = search_response.json()
 
         results = []
@@ -321,7 +449,7 @@ class VideoAgent:
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": query},
+                    query,
                     *map(lambda x: {"image": x}, base64Frames),
                 ],
             },
@@ -638,11 +766,46 @@ class VideoAgent:
                 self.logs_reference+=tool_output
                 self.logs_reference+="\n"
 
+def save_transcript(video_path):
+    video_base_name, _ = os.path.splitext(os.path.basename(video_path))
+    video_base_path = os.path.dirname(video_path)
+    # Function to extract audio from a local video file
+    def extract_audio_from_local(video_path, output_path):
+        try:
+            with open(os.devnull, 'wb') as devnull:  # Suppress FFmpeg output
+                subprocess.call(['ffmpeg', '-i', video_path, '-q:a', '0', '-map', 'a', output_path], stdout=devnull, stderr=devnull)
+        except Exception as e:
+            print(f"An error occurred while extracting audio from {video_path}: {e}")
+
+    extract_audio_from_local(video_path, f'{video_base_path}/{video_base_name}.mp3')
+    if os.getenv("AZURE_OPENAI_MANAGED_IDENTITY")=="True":
+        credential = DefaultAzureCredential()
+        client = AzureOpenAI(
+            azure_ad_token_provider=get_bearer_token_provider(credential, "https://cognitiveservices.azure.com/.default"),  
+            api_version="2024-02-01",
+            azure_endpoint = os.getenv("AZURE_OPENAI_WHISPER_ENDPOINT")
+        )
+    else:
+        client = AzureOpenAI(
+            api_key=os.getenv("AZURE_OPENAI_WHISPER_KEY"),
+            api_version="2024-02-01",
+            azure_endpoint = os.getenv("AZURE_OPENAI_WHISPER_ENDPOINT")
+        )
+
+    deployment_id = os.getenv("WHISPER_DEPLOYMENT") #This will correspond to the custom name you chose for your deployment when you deployed a model."
+
+    result = client.audio.translations.create(
+        file=open(f'{video_base_path}/{video_base_name}.mp3', "rb"),            
+        model=deployment_id,
+        response_format='srt'
+    )
+    with open(f'{video_base_path}/{video_base_name}.srt', 'w') as f:
+        f.write(result)
+
 if __name__ == "__main__":
     # Set up the argument parser
     parser = argparse.ArgumentParser(description="Video Question Answering System.")
     parser.add_argument("video_path", type=str, help="Path to the video file")
-    parser.add_argument("transcript_path", type=str, help="Path to the transcript file")
     parser.add_argument("question", type=str, help="Question to ask about the video")
     parser.add_argument("--critic", action="store_true", default=False, help="Whether to use critic or not (default: False)")
     parser.add_argument("--max_num_critic", type=int, default=1, help="Maximum number of critic calls (default: 1)")
@@ -650,21 +813,52 @@ if __name__ == "__main__":
     # Parse the arguments
     args = parser.parse_args()
 
+    video_base_name, _ = os.path.splitext(os.path.basename(args.video_path))
+    video_base_path = os.path.dirname(args.video_path)
+    save_transcript(args.video_path)
+    transcript_path = f'{video_base_path}/{video_base_name}.srt'
+
     # Initialize the video agent with the provided paths
-    agent = VideoAgent(args.video_path, args.transcript_path)
-
+    agent = VideoAgent(args.video_path, transcript_path)
+    video_moderation = agent.moderate_video()
+    print("Video Moderation:", video_moderation)
+    question_moderation = agent.moderate_text(args.question)
+    print("Question Moderation:", question_moderation)
+    if video_moderation or question_moderation:
+        result = "Blocked"
+        logs = "Video or question contains inappropriate content"
     # Process the question on the video
-    result, logs = agent.process_query(args.question)
-    print(result)
-    print("\n\nLog Details:\n")
-    print(logs)
+    else:
+        try:
+            result, logs = agent.process_query(args.question)
+            answer_moderation = agent.moderate_text(result)
+            print("Answer Moderation:", answer_moderation)
+            if answer_moderation:
+                result = "Blocked"
+                logs = "Answer contains inappropriate content"
+            print(result)
+            print("\n\nLog Details:\n")
+            print(logs)
+        except Exception as e:
+            result = "Error"
+            logs = f"An error occurred: {e}"
+            print(result)
+            print("\n\nLog Details:\n")
+            print(logs)
 
-    # Optionally run the critic method
-    if args.critic:
-        num_critic = 0
-        check = ""
-        while check != "Done" and num_critic < args.max_num_critic:
-            check, final_logs = agent.post_critic()
-            num_critic += 1
-            print("\n\n\n\n\n\n\n\n\n\n")
-            print(final_logs)
+        check_whether_can_continue = result != "Blocked" and result != "Error"
+        
+        # Optionally run the critic method
+        if args.critic and check_whether_can_continue:
+            num_critic = 0
+            check = ""
+            while check != "Done" and num_critic < args.max_num_critic:
+                try:
+                    check, final_logs = agent.post_critic()
+                    num_critic += 1
+                    print("\n\n\n\n\n\n\n\n\n\n")
+                    print(final_logs)
+                except Exception as e:
+                    print("Error in Critic")
+                    print(e)
+                    break

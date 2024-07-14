@@ -7,3 +7,4 @@ openai
 scipy
 azure-storage-blob
 azure-core
+azure-identity

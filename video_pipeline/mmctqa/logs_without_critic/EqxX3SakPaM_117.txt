@@ -1,8 +1,0 @@
-User Input:
-Who is spiderman?
-GPT-4 Output:
-{
-"Observation": "The question is asking for information about the character Spiderman. This is a general knowledge question and does not require any video analysis.",
-"Thought": "Since this question does not require any video analysis, I can directly answer it.",
-"Answer": "Spiderman is a fictional superhero created by writer-editor Stan Lee and writer-artist Steve Ditko. He first appeared in the anthology comic book Amazing Fantasy #15 in August 1962 in the Silver Age of Comic Books. Spiderman, also known as Peter Parker, was an ordinary high school student living in New York City, who gained spider-like abilities after being bitten by a radioactive spider."
-}
