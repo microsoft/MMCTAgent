@@ -12,8 +12,83 @@ from typing import Union, List, Dict
 import os
 from functools import wraps
 from dotenv import load_dotenv
+from PIL import Image
+from types import SimpleNamespace
 
 load_dotenv()
+
+
+def sliding_window(text, max_chars=1024, overlap_words=2):
+    words = text.split()
+    windows = []
+    start = 0
+    while start < len(words):
+        window = []
+        current_length = 0
+        for i in range(start, len(words)):
+            word_length = len(words[i]) + 1 
+            if current_length + word_length > max_chars:
+                break
+            window.append(words[i])
+            current_length += word_length
+        windows.append(' '.join(window))
+        start += len(window) - overlap_words
+    return windows
+
+def merge_dicts(dict_a, dict_b):
+    if not isinstance(dict_a, dict) or not isinstance(dict_b, dict):
+        return [dict_a, dict_b] if dict_a != dict_b else dict_a
+
+    merged = dict_a.copy()
+    for key, value in dict_b.items():
+        if key in dict_a:
+            if isinstance(dict_a[key], dict) and isinstance(value, dict):
+                merged[key] = merge_dicts(dict_a[key], value)
+            elif isinstance(dict_a[key], list):
+                merged[key] += value if isinstance(value, list) else [value]
+            elif isinstance(value, list):
+                merged[key] = [dict_a[key]] + value
+            elif isinstance(dict_a[key], (int, float, str)) and isinstance(value, (int, float, str)):
+                merged[key] = [dict_a[key], value] if dict_a[key] != value else dict_a[key]
+            else:
+                merged[key] = value
+        else:
+            merged[key] = value
+    return merged
+
+def optimal_size(size, min_limit=(50, 50), max_limit=(2048, 2048)):
+    width, height = size
+    min_width, min_height = min_limit
+    max_width, max_height = max_limit
+
+    if min_width <= width <= max_width and min_height <= height <= max_height:
+        return size
+
+    scale_to_min = max(min_width / width, min_height / height)
+    scale_to_max = min(max_width / width, max_height / height)
+
+    if width < min_width or height < min_height:
+        new_width, new_height = width * scale_to_min, height * scale_to_min
+    elif width > max_width or height > max_height:
+        new_width, new_height = width * scale_to_max, height * scale_to_max
+    else:
+        return size
+    new_width = max(min_width, min(new_width, max_width))
+    new_height = max(min_height, min(new_height, max_height))
+
+    return int(new_width), int(new_height)
+
+    
+def resize_base64_image(base64_string, size=None):
+    imgdata = base64.b64decode(base64_string)
+    img = Image.open(BytesIO(imgdata))
+    if size is None:
+        size = optimal_size(img.size)
+    img = img.resize(size)
+    buffered = BytesIO()
+    img.save(buffered, format="JPEG")
+    img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
+    return img_str
 
 class AzureCognitiveServicesCredential(msrest.authentication.Authentication):
     def __init__(self):
@@ -41,16 +116,24 @@ class ContentModeratorDEF:
         self.client = ContentModeratorClient(endpoint, auth)
         
     def text_detect(self, text):
-        text_fd = BytesIO(text.encode('utf-8'))
-        screen = self.client.text_moderation.screen_text(
-                text_content_type="text/plain",
-                text_content=text_fd,
-                language="eng",
-                autocorrect=True,
-                pii=True
-            )
-        # print(screen.as_dict())
-        return screen.as_dict()
+        results = None
+        for windows in sliding_window(text, 1023, 0):
+            if len(windows)<=110:
+                windows += " " + "_"*(110-len(windows))
+            text_fd = BytesIO(windows.encode('utf-8'))
+            screen = self.client.text_moderation.screen_text(
+                    text_content_type="text/plain",
+                    text_content=text_fd,
+                    language="eng",
+                    autocorrect=True,
+                    pii=True
+                )
+            if results is None:
+                results = screen.as_dict()
+            else:
+                results = merge_dicts(results, screen.as_dict())
+            
+        return results
 
     def image_detect(self, img):
         img_stream = BytesIO()
@@ -69,15 +152,21 @@ class ContentModeratorDEF:
 
     def ocr_detect(self, img):
         img_stream = BytesIO()
+        size = optimal_size(img.size)
+        img = img.resize(size)
         img.save(img_stream, format="PNG") 
         img_byte_arr = img_stream.getvalue()
-        ocr = self.client.image_moderation.ocr_file_input(
-            image_stream=BytesIO(img_byte_arr),
-            language="eng",
-            data_representation="application/octet-stream",
-            mimetype="image/png",
-        )
-        # print(ocr.text)
+        img_byte_arr = img_byte_arr
+        try:
+            ocr = self.client.image_moderation.ocr_file_input(
+                image_stream=BytesIO(img_byte_arr),
+                language="eng",
+                data_representation="application/octet-stream",
+                mimetype="image/png",
+            )
+        except Exception as e:
+            ocr = {"text": ""}
+            ocr = SimpleNamespace(**ocr)
         return ocr
 
 
@@ -225,22 +314,42 @@ class ContentSafety(object):
         """
         url = self.build_url(media_type)
         headers = self.build_headers()
-        request_body = self.build_request_body(media_type, content, blocklists)
-        payload = json.dumps(request_body)
+        if media_type == MediaType.Image:
+            content = resize_base64_image(content)
+            request_body = self.build_request_body(media_type, content, blocklists)
+            payload = json.dumps(request_body)
+            
+            response = requests.post(url, headers=headers, data=payload)
 
-        response = requests.post(url, headers=headers, data=payload)
-        # print(response.status_code)
-        # print(response.headers)
-        # print(response.text)
+            res_content = response.json()
 
-        res_content = response.json()
+            if response.status_code != 200:
+                raise DetectionError(
+                    res_content["error"]["code"], res_content["error"]["message"]
+                )
 
-        if response.status_code != 200:
-            raise DetectionError(
-                res_content["error"]["code"], res_content["error"]["message"]
-            )
+            return res_content
+        elif media_type == MediaType.Text:
+            results = None
+            for windows in sliding_window(content, 9990, 0):
+                if len(windows)<=110:
+                    windows += " " + "_"*(110-len(windows))
+                request_body = self.build_request_body(media_type, windows, blocklists)
+                payload = json.dumps(request_body)
 
-        return res_content
+                response = requests.post(url, headers=headers, data=payload)
+                res_content = response.json()
+                if response.status_code != 200:
+                    raise DetectionError(
+                        res_content["error"]["code"], res_content["error"]["message"]
+                    )
+                
+                if results is None:
+                    results = res_content
+                else:
+                    results = merge_dicts(results, res_content)
+
+            return results
 
     def get_detect_result_by_category(
         self, category: Category, detect_result: dict
@@ -329,6 +438,15 @@ class ContentSafety(object):
         api_version = "2024-02-15-preview"
         url = f"{self.endpoint}/contentsafety/text:shieldPrompt?api-version={api_version}"
         headers = self.build_headers()
+        if len(user_prompt) <= 110:
+            user_prompt += " " + "_"*(110-len(user_prompt))
+        if isinstance(documents, list) and len(documents) > 0:
+            for i in range(len(documents)):
+                if len(documents[i]) <= 110:
+                    documents[i] += " " + "_"*(110-len(documents[i]))
+        else:
+            if len(documents) <= 110:
+                documents += " " + "_"*(110-len(documents))
         data = {
             "userPrompt": user_prompt,
             "documents": documents
@@ -349,11 +467,25 @@ class ContentSafety(object):
         api_version = "2023-10-15-preview"
         url = f"{self.endpoint}/contentsafety/text:detectProtectedMaterial?api-version={api_version}"
         headers = self.build_headers()
-        data = {
-            "text": text
-        }
-        response = requests.post(url, headers=headers, json=data)
-        return response.json()
+        results = None
+        for windows in sliding_window(text, 990, 0):
+            if len(windows)<=110:
+                windows += " " + "_"*(110-len(windows))
+            data = {
+                "text": windows
+            }
+            response = requests.post(url, headers=headers, json=data)
+            res_content = response.json()
+            if response.status_code != 200:
+                raise DetectionError(
+                    res_content["error"]["code"], res_content["error"]["message"]
+                )
+            if results is None:
+                results = res_content
+            else:
+                results = merge_dicts(results, res_content)
+        return results
+       
 
 class ContentModMMCT:
     _instance = None
@@ -367,6 +499,10 @@ class ContentModMMCT:
         # return cls._instance
     
     def __init__(self, content_moderation_endpoint, content_safety_endpoint, content_safety_multimodal_access = False):
+        
+        if content_moderation_endpoint is None or content_safety_endpoint is None:
+            self.exclude_content_moderation = True
+            return
         self.content_moderation = ContentModeratorDEF(content_moderation_endpoint)
         creds = DefaultAzureCredential()
         token = creds.get_token("https://cognitiveservices.azure.com/.default").token
@@ -408,6 +544,9 @@ class ContentModMMCT:
         return False
     
     def pipeline_check(self, query, img):
+        if self.exclude_content_moderation:
+            return False, "No Improper content detected"
+        
         ocr = self.content_moderation.ocr_detect(img)
         
         ## JailBreak detection
@@ -463,6 +602,9 @@ class ContentModMMCT:
         return False, "No Improper content detected"
 
     def step_check(self, query, img):
+        if self.exclude_content_moderation:
+            return False, "No Improper content detected"
+        
         tool_query_result = self.content_safety.detect(MediaType.Text, query, [])
         tool_query_decision = self.content_safety.make_decision(tool_query_result, self.text_threshold)
         
@@ -489,6 +631,9 @@ class ContentModMMCT:
         return False, "Safe Input"
     
     def output_check(self, out):
+        if self.exclude_content_moderation:
+            return False, "No Improper content detected"
+        
         output_result = self.content_safety.detect(MediaType.Text, out, [])
         output_decision = self.content_safety.make_decision(output_result, self.text_threshold)
         
@@ -513,6 +658,11 @@ class ContentModMMCT:
     
     
 def create_content_moderation_mmct_singleton_object():
+    content_moderation_mmct = os.environ.get("CONTENT_MODERATION_MMCT", "False").lower() == "true"
+    
+    if not content_moderation_mmct:
+        return ContentModMMCT(None, None)
+    
     content_moderation_endpoint = os.environ.get("CONTENT_MODERATION_ENDPOINT")
     content_safety_endpoint = os.environ.get("CONTENT_SAFETY_ENDPOINT")
     content_safety_multimodal_access = os.environ.get("CONTENT_SAFETY_MULTIMODAL_ACCESS", "False").lower() == "true"
