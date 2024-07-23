@@ -218,7 +218,7 @@ class VideoAgent:
         return processed_subs
 
     
-    def __init__(self, video_path, transcript_path, system_prompt_path="./system_prompt_planner_with_guardrails.txt"):
+    def __init__(self, video_path, transcript_path, system_prompt_path):
 
         self.video_path = video_path
         self.transcript_path = transcript_path
@@ -809,6 +809,7 @@ if __name__ == "__main__":
     parser.add_argument("question", type=str, help="Question to ask about the video")
     parser.add_argument("--critic", action="store_true", default=False, help="Whether to use critic or not (default: False)")
     parser.add_argument("--max_num_critic", type=int, default=1, help="Maximum number of critic calls (default: 1)")
+    parser.add_argument("--moderation", type=bool, default=True, help="Whether to use content moderation (default: True)")
 
     # Parse the arguments
     args = parser.parse_args()
@@ -818,47 +819,59 @@ if __name__ == "__main__":
     save_transcript(args.video_path)
     transcript_path = f'{video_base_path}/{video_base_name}.srt'
 
+    if args.moderation:
+        system_prompt_path = "./system_prompt_planner_with_guardrails.txt"
+    else:
+        system_prompt_path = "./system_prompt_planner.txt"
+
     # Initialize the video agent with the provided paths
     agent = VideoAgent(args.video_path, transcript_path)
-    video_moderation = agent.moderate_video()
-    print("Video Moderation:", video_moderation)
-    question_moderation = agent.moderate_text(args.question)
-    print("Question Moderation:", question_moderation)
-    if video_moderation or question_moderation:
-        result = "Blocked"
-        logs = "Video or question contains inappropriate content"
+    
+    if args.moderation:
+        video_moderation = agent.moderate_video()
+        print("Video Moderation:", video_moderation)
+        question_moderation = agent.moderate_text(args.question)
+        print("Question Moderation:", question_moderation)
+        if video_moderation or question_moderation:
+            result = "Blocked"
+            logs = "Video or question contains inappropriate content"
+            print(result)
+            print("\n\nLog Details:\n")
+            print(logs)
+            exit()
+
     # Process the question on the video
-    else:
-        try:
-            result, logs = agent.process_query(args.question)
+    try:
+        result, logs = agent.process_query(args.question)
+        if args.moderation:
             answer_moderation = agent.moderate_text(result)
             print("Answer Moderation:", answer_moderation)
             if answer_moderation:
                 result = "Blocked"
                 logs = "Answer contains inappropriate content"
-            print(result)
-            print("\n\nLog Details:\n")
-            print(logs)
-        except Exception as e:
-            result = "Error"
-            logs = f"An error occurred: {e}"
-            print(result)
-            print("\n\nLog Details:\n")
-            print(logs)
+        print(result)
+        print("\n\nLog Details:\n")
+        print(logs)
+    except Exception as e:
+        result = "Error"
+        logs = f"An error occurred: {e}"
+        print(result)
+        print("\n\nLog Details:\n")
+        print(logs)
 
-        check_whether_can_continue = result != "Blocked" and result != "Error"
-        
-        # Optionally run the critic method
-        if args.critic and check_whether_can_continue:
-            num_critic = 0
-            check = ""
-            while check != "Done" and num_critic < args.max_num_critic:
-                try:
-                    check, final_logs = agent.post_critic()
-                    num_critic += 1
-                    print("\n\n\n\n\n\n\n\n\n\n")
-                    print(final_logs)
-                except Exception as e:
-                    print("Error in Critic")
-                    print(e)
-                    break
+    check_whether_can_continue = result != "Blocked" and result != "Error"
+    
+    # Optionally run the critic method
+    if args.critic and check_whether_can_continue:
+        num_critic = 0
+        check = ""
+        while check != "Done" and num_critic < args.max_num_critic:
+            try:
+                check, final_logs = agent.post_critic()
+                num_critic += 1
+                print("\n\n\n\n\n\n\n\n\n\n")
+                print(final_logs)
+            except Exception as e:
+                print("Error in Critic")
+                print(e)
+                break

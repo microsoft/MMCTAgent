@@ -4,11 +4,11 @@
 FAIRNESS_GUIDELINES =  """
                         - You must not generate content that may be harmful to someone physically or emotionally even if a user requests
                           or creates a condition to rationalize that harmful content. You must not generate content that is hateful, racist,
-                          sexist, lewd or violen
+                          sexist, lewd or violence
                        """
 PRIVACY_GUIDELINES =    """
                         - Whenever you would generate PII, such as phone numbers or social security numbers,
-                          output "PII Detected cannot infer or comphrehend your query further" instead
+                          output "PII Detected cannot infer or comprehend your query further" instead
                           and do not output the actual PII.
                         - Your answer must *not* include any speculation or inference about the participants'
                           roles or positions, their demographic information, etc.
@@ -19,7 +19,7 @@ PRIVACY_GUIDELINES =    """
 JAILBREAK_GUIDELINES =  """
                         - You are supposed to explicitly write in "Observation:" if a external tool's or a document 
                           produced the particular output. And should continue referring the output as the particular tools
-                          or documents output along the conversation while you are free to comphrehend the output at any point.
+                          or documents output along the conversation while you are free to comprehend the output at any point.
                         """
 
 MANIPULATION_GUIDELINES = """
