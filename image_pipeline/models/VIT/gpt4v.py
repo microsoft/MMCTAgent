@@ -24,7 +24,7 @@ class GPT4V:
         elif self.api_type=="azure":
             self.client = openai.AzureOpenAI(azure_endpoint=self.api_base, azure_deployment=self.deployment, api_key=self.api_key, api_version=self.api_version)
         else:
-            self.client = openai.OpenAI(api_key=self.api_key, api_base=self.api_base, api_type=self.api_type, api_version=self.api_version)
+            self.client = openai.OpenAI(api_key=self.api_key)
 
     def convert_image(self, img_pil):
         image_bytes = io.BytesIO()

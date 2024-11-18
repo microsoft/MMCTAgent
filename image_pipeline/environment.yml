@@ -1,4 +1,4 @@
-name: mmct
+name: mmctv2
 channels:
   - nvidia
   - pytorch
@@ -224,3 +224,4 @@ dependencies:
       - yarl==1.9.4
       - zhconv==1.4.3
       - zipp==3.19.2
+      - transformers==4.42.3
