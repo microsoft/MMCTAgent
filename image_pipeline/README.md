@@ -13,6 +13,8 @@ or
 ```bash
 $ pip install -r requirements.txt
 ```
+and
+Python version must be 3.8.19
 
 ### Scripts
 
