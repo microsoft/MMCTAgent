@@ -1,7 +1,0 @@
-data/nlvr/nlvr2/train_data/*
-data/nlvr/nlvr2/train_data1/*
-data/mm_vet/images/*
-models/VIT/*.pth
-.env
-*.pt
-*.pth

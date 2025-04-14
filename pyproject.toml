@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "MMCT"
+version = "0.1.1"
+description = "MMCT pipeline"
+authors = [
+    { name="Anonymous" }
+]
+dependencies = []
+
+[tool.setuptools]
+packages = ["mmct"]
+
+[project.optional-dependencies]
+test = []
