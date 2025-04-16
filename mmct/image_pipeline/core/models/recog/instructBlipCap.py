@@ -1,4 +1,4 @@
-from mmct.image_pipeline.core.models.VIT.instructblip import BlipT5XXL
+from mmct.image_pipeline.core.models.recog.instructblip import BlipT5XXL
 from PIL import Image
 import requests
 

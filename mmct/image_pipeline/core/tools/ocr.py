@@ -2,9 +2,9 @@
 functionality of this tool is optical character recognition
 """
 
-from mmct.image_pipeline.core.models.VIT.ocr.trocr_base import TROCRBase
-from mmct.image_pipeline.core.models.VIT.ocr.trocr_small import TROCRSmall
-from mmct.image_pipeline.core.models.VIT.ocr.trocr_large import TROCRLarge
+from mmct.image_pipeline.core.models.ocr.trocr_base import TROCRBase
+from mmct.image_pipeline.core.models.ocr.trocr_small import TROCRSmall
+from mmct.image_pipeline.core.models.ocr.trocr_large import TROCRLarge
 from PIL import Image
 from typing_extensions import Annotated
 

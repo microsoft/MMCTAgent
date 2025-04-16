@@ -1,23 +1,21 @@
 from transformers import TrOCRProcessor
-
-
 from transformers import VisionEncoderDecoderModel
 import torch
-
-
-
+import asyncio
 from PIL import Image
 import requests
 
-
-class TROCRBase:
+class TROCRLarge:
     def __init__(self, device = None):
-        self.device = device or "cuda" if torch.cuda.is_available() else "cpu"
-        self.device_map = device or "auto"
-        self.model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-base-printed").to(self.device) #, device_map = self.device_map)
-        self.processor = TrOCRProcessor.from_pretrained("microsoft/trocr-base-printed")
-
-    def get_concat_h_resize(self, im1, im2):
+        try:
+            self.device = device or "cuda" if torch.cuda.is_available() else "cpu"
+            self.device_map = device or "auto"
+            self.model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-large-printed").to(self.device)#, device_map = self.device_map)
+            self.processor = TrOCRProcessor.from_pretrained("microsoft/trocr-large-printed")
+        except Exception as e:
+            raise Exception(f"Exception occured when loading the TROCR Large Model: {e}")
+        
+    async def get_concat_h_resize(self, im1, im2):
         if im2.height > im1.height:
             ratio = im2.height/im1.height
             im1 = im1.resize((int(ratio*im1.width), int(ratio*im1.height)))
@@ -38,7 +36,7 @@ class TROCRBase:
             dst.paste(im2, (im1.width + padding, pad_h))
         return dst
     
-    def __call__(self, image):
+    async def __call__(self, image):
         pixel_values = self.processor(images=image, return_tensors="pt").pixel_values
 
         pixel_values = pixel_values.to(self.device)
@@ -82,9 +80,8 @@ class TROCRBase:
 
 
 if __name__ == "__main__":
-    a = TROCRBase()
+    ocr_model = TROCRLarge()
     url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02-00.jpg"
     image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
-    # prompt = "What is unusual about this image?"
-    resp = a(image)
+    resp = asyncio.run(ocr_model(image))
     print(resp)

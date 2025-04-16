@@ -1,9 +1,9 @@
 """
 functionality of this tool is optical character recognition
 """
-from mmct.image_pipeline.core.models.VIT.recog.mplug_base import MPLUGBase
-from mmct.image_pipeline.core.models.VIT.recog.mplug_large import MPLUGLarge
-from mmct.image_pipeline.core.models.VIT.recog.instructBlipCap import BlipCap
+from mmct.image_pipeline.core.models.recog.mplug_base import MPLUGBase
+from mmct.image_pipeline.core.models.recog.mplug_large import MPLUGLarge
+from mmct.image_pipeline.core.models.recog.instructBlipCap import BlipCap
 from PIL import Image
 from typing_extensions import Annotated
 

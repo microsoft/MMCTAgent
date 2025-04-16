@@ -3,42 +3,47 @@ from modelscope.utils.constant import Tasks
 import torch
 from PIL import Image
 import requests
+import asyncio
 
-class MPLUGLarge:
-    def __init__(self, device = None):
-        self.device = device or "cuda" if torch.cuda.is_available() else "cpu"
-        self.device_map = device or "auto"
-        self.model_id = 'iic/mplug_image-captioning_coco_large_en'
-        
-        self.pipeline_caption = pipeline(Tasks.image_captioning, model=self.model_id)
-        
-        
+
+class MPLUGBase:
+    def __init__(self, device=None):
+        try:
+            self.device = device or "cuda" if torch.cuda.is_available() else "cpu"
+            self.device_map = device or "auto"
+            self.model_id = "iic/mplug_image-captioning_coco_base_en"
+
+            self.pipeline_caption = pipeline(
+                Tasks.image_captioning, model=self.model_id
+            )
+        except Exception as e:
+            raise Exception(f"Exception occured while loading MPLUG Base model: {e}")
 
     def get_concat_h_resize(self, im1, im2):
         if im2.height > im1.height:
-            ratio = im2.height/im1.height
-            im1 = im1.resize((int(ratio*im1.width), int(ratio*im1.height)))
+            ratio = im2.height / im1.height
+            im1 = im1.resize((int(ratio * im1.width), int(ratio * im1.height)))
         else:
-            ratio = im1.height/im2.height
-            im2 = im2.resize((int(ratio*im2.width), int(ratio*im2.height)))
-        
-        padding = int(0.04*max(im1.width, im2.width))
+            ratio = im1.height / im2.height
+            im2 = im2.resize((int(ratio * im2.width), int(ratio * im2.height)))
+
+        padding = int(0.04 * max(im1.width, im2.width))
         new_width = im1.width + padding + im2.width
-        dst = Image.new('RGB', (new_width, max(im1.height, im2.height)))
-        if im2.height>im1.height:
-            pad_h = (im2.height-im1.height)//2
+        dst = Image.new("RGB", (new_width, max(im1.height, im2.height)))
+        if im2.height > im1.height:
+            pad_h = (im2.height - im1.height) // 2
             dst.paste(im1, (0, pad_h))
             dst.paste(im2, (im1.width + padding, 0))
         else:
-            pad_h = (im1.height-im2.height)//2
+            pad_h = (im1.height - im2.height) // 2
             dst.paste(im1, (0, 0))
             dst.paste(im2, (im1.width + padding, pad_h))
         return dst
-    
-    def __call__(self, image):
+
+    async def __call__(self, image):
         result = self.pipeline_caption(image)
-        return result['caption']
-        
+        return result["caption"]
+
         # pixel_values = image.to(self.device)
         # outputs = self.model.generate(pixel_values)
 
@@ -50,6 +55,7 @@ class MPLUGLarge:
         return """
                 Vision Expert: vit\n
                """
+
     def get_desc(self):
         return """
                 You can query information about the given image/images using simple natural language,
@@ -66,23 +72,23 @@ class MPLUGLarge:
                 response:
                     The output is simple text answering the query given.
                """
+
     def get_fn_schema(self):
         return """
                 query: str
                 selected_image: Optional[str] = "both" \n \t possible values: ["left","right","both"]
                """
+
     def __str__(self):
         return f"""
                 {self.get_name()}
                 {self.get_desc()}
                """
-
-
-
+               
 if __name__ == "__main__":
-    a = MPLUGLarge()
-    url = "https://raw.githubusercontent.com/salesforce/LAVIS/main/docs/_static/Confusing-Pictures.jpg"
+    recog_model = MPLUGBase()
+    url = "https://raw.githubusercontent.com/salesforce/LAVIS/main/docs/_static/architecture.png"
     image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
     # prompt = "What is unusual about this image?"
-    resp = a(image)
+    resp = asyncio.run(recog_model(image))
     print(resp)

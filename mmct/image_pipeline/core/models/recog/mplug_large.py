@@ -1,53 +1,60 @@
-from ultralytics import YOLO
+from modelscope.pipelines import pipeline
+from modelscope.utils.constant import Tasks
 import torch
+import asyncio
 from PIL import Image
 import requests
 
+class MPLUGLarge:
+    def __init__(self, device=None):
+        try:
+            self.device = device or "cuda" if torch.cuda.is_available() else "cpu"
+            self.device_map = device or "auto"
+            self.model_id = "iic/mplug_image-captioning_coco_large_en"
 
-class YOLOs:
-    def __init__(self, device = None):
-        self.device = device or "cuda" if torch.cuda.is_available() else "cpu"
-        self.device_map = device or "auto"
-        self.model = YOLO('yolov8s.pt')
+            self.pipeline_caption = pipeline(
+                Tasks.image_captioning, model=self.model_id
+            )
+        except Exception as e:
+            raise Exception(e)
 
     def get_concat_h_resize(self, im1, im2):
         if im2.height > im1.height:
-            ratio = im2.height/im1.height
-            im1 = im1.resize((int(ratio*im1.width), int(ratio*im1.height)))
+            ratio = im2.height / im1.height
+            im1 = im1.resize((int(ratio * im1.width), int(ratio * im1.height)))
         else:
-            ratio = im1.height/im2.height
-            im2 = im2.resize((int(ratio*im2.width), int(ratio*im2.height)))
-        
-        padding = int(0.04*max(im1.width, im2.width))
+            ratio = im1.height / im2.height
+            im2 = im2.resize((int(ratio * im2.width), int(ratio * im2.height)))
+
+        padding = int(0.04 * max(im1.width, im2.width))
         new_width = im1.width + padding + im2.width
-        dst = Image.new('RGB', (new_width, max(im1.height, im2.height)))
-        if im2.height>im1.height:
-            pad_h = (im2.height-im1.height)//2
+        dst = Image.new("RGB", (new_width, max(im1.height, im2.height)))
+        if im2.height > im1.height:
+            pad_h = (im2.height - im1.height) // 2
             dst.paste(im1, (0, pad_h))
             dst.paste(im2, (im1.width + padding, 0))
         else:
-            pad_h = (im1.height-im2.height)//2
+            pad_h = (im1.height - im2.height) // 2
             dst.paste(im1, (0, 0))
             dst.paste(im2, (im1.width + padding, pad_h))
         return dst
-    
-    def __call__(self, image):
-        
-        results = self.model(image)
-        boxes = {}
-        for result in results:
-            bxcls = result.boxes.cls.detach().cpu().numpy()
-            bxxywh = result.boxes.xywh.detach().cpu().numpy()
-            for class_n, xywh in zip( bxcls, bxxywh  ):
-                
-                boxes[result.names[int(class_n.item())]] = xywh
 
-        return boxes
+    async def __call__(self, image):
+        result = self.pipeline_caption(image)
+        return result["caption"]
+
+        # pixel_values = image.to(self.device)
+        # outputs = self.model.generate(pixel_values)
+
+        # # decode
+        # pred_str = self.processor.batch_decode(outputs, skip_special_tokens=True)
+        # return pred_str
 
     def get_name(self):
         return """
                 Vision Expert: vit\n
                """
+
     def get_desc(self):
         return """
                 You can query information about the given image/images using simple natural language,
@@ -64,11 +71,13 @@ class YOLOs:
                 response:
                     The output is simple text answering the query given.
                """
+
     def get_fn_schema(self):
         return """
                 query: str
                 selected_image: Optional[str] = "both" \n \t possible values: ["left","right","both"]
                """
+
     def __str__(self):
         return f"""
                 {self.get_name()}
@@ -76,11 +85,10 @@ class YOLOs:
                """
 
 
-
 if __name__ == "__main__":
-    a = YOLOs()
-    url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+    recog_model = MPLUGLarge()
+    url = "https://raw.githubusercontent.com/salesforce/LAVIS/main/docs/_static/Confusing-Pictures.jpg"
     image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
     # prompt = "What is unusual about this image?"
-    resp = a(image)
+    resp = asyncio.run(recog_model(image))
     print(resp)

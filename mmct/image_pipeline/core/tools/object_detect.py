@@ -1,7 +1,7 @@
 """
 functionality of this tool is object detection
 """
-from mmct.image_pipeline.core.models.VIT.object_detect.yolov8s import YOLOs
+from mmct.image_pipeline.core.models.object_detect.yolov8s import YOLOs
 from PIL import Image
 import numpy as np
 from typing_extensions import Annotated
