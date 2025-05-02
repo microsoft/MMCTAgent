@@ -11,7 +11,7 @@ from azure.identity import DefaultAzureCredential
 from datetime import datetime
 
 
-async def query_frames_Azure_Computer_Vision(frames_query:Annotated[str,"search query over the frames"], video_id:Annotated[str,'video id'])->str:
+async def query_frames_azure_computer_vision(frames_query:Annotated[str,"search query over the frames"], video_id:Annotated[str,'video id'])->str:
         # Getting requred environment variables
         AZURECV_ENDPOINT = os.environ.get("AZURECV_ENDPOINT")
         BLOB_MANAGED_IDENTITY = os.environ.get("BLOB_MANAGED_IDENTITY") == "True"

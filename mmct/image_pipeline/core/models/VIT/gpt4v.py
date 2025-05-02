@@ -15,14 +15,18 @@ import re
 import asyncio
 from dotenv import load_dotenv, find_dotenv
 
-load_dotenv(find_dotenv(),override=True)
+load_dotenv(find_dotenv(), override=True)
 
 
 class GPT4V:
-    def __init__(self, api_key=None):
-        self.model_name = os.getenv("GPT4V_DEPLOYMENT")
+    def __init__(self):
+        self.model_name = os.getenv(
+            "AZURE_OPENAI_MODEL"
+            if os.getenv("LLM_PROVIDER") == "azure"
+            else "OPENAI_MODEL"
+        )
         service_provider = os.getenv("LLM_PROVIDER", "azure")
-        self.client = LLMClient(service_provider=service_provider).get_client()
+        self.client = LLMClient(service_provider=service_provider, isAsync=True).get_client()
 
     def convert_image(self, img_pil):
         # Convert the image to base64
@@ -64,8 +68,7 @@ class GPT4V:
                     im = self.get_concat_h_resize(*images)
             else:
                 im = images
-            response = await asyncio.to_thread(
-                self.client.chat.completions.create,
+            response = await self.client.chat.completions.create(
                 messages=[
                     {
                         "role": "user",

@@ -1,0 +1,62 @@
+import asyncio
+import os
+from mmct.video_pipeline.core.ingestion.transcription.base_transcription import (
+    Transcription,
+)
+from mmct.video_pipeline.core.ingestion.languages import Languages
+from mmct.video_pipeline.utils.helper import extract_mp3_from_video, get_media_folder
+from dotenv import load_dotenv, find_dotenv
+
+# Load environment variables
+load_dotenv(find_dotenv(), override=True)
+
+
+class WhisperTranscription(Transcription):
+    def __init__(self, video_path: str, hash_id: str) -> None:
+        super().__init__(video_path=video_path, hash_id=hash_id)
+        self.local_save = []
+
+    async def load_audio(self):
+        try:
+            self.audio_path = os.path.join(
+                await get_media_folder(), f"{self.hash_id}.mp3"
+            )
+            await extract_mp3_from_video(
+                video_path=self.video_path, output_path=self.audio_path
+            )
+            self.local_save.append(self.audio_path)
+        except Exception as e:
+            raise Exception(f"Error loading audio, {e}")
+
+    async def get_transcript_whisper(self) -> str:
+        """Extracts audio from a video file and transcribes it using Azure OpenAI Whisper."""
+        try:
+            model = os.getenv(
+                "AZURE_OPENAI_STT_MODEL"
+                if os.getenv("LLM_PROVIDER") == "azure"
+                else "OPENAI_STT_MODEL"
+            )
+            with open(self.audio_path, "rb") as file:
+                result = await self.openai_stt_client.audio.translations.create(
+                    file=file, model=model, response_format="srt"
+                )
+            base_path = self.audio_path.split(".mp3")[0]
+            transcript_local_path = os.path.join(base_path, ".srt")
+            self.local_save.append(transcript_local_path)
+
+            return result
+        except Exception as e:
+            raise Exception(f"Error in speech-to-text conversion: {e}")
+
+    async def __call__(self):
+        await self.load_audio()
+        transcript = await self.get_transcript_whisper()
+        return transcript, self.local_save
+
+
+if __name__ == "__main__":
+    video_path = "C:/Users/v-amanpatkar/Downloads/sample_video2.mp4"
+    hash_id = "abcd"
+    transcriber = WhisperTranscription(video_path=video_path, hash_id=hash_id)
+    transcipt = asyncio.run(transcriber.run())
+    print(transcipt)

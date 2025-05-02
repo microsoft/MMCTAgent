@@ -27,5 +27,5 @@ async def ocrTool(
         if priority == "1"
         else TROCRBase() if priority == "2" else TROCRLarge()
     )
-    resp = model(img)
+    resp = await model(img)
     return resp
