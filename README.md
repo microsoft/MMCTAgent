@@ -86,7 +86,7 @@ To get started with this repository:
 1. **Clone the repository**
 
    ```sh
-   git clone --branch mmct_opensource https://msri@dev.azure.com/msri/Project%20Gecko/_git/Project%20Gecko
+   git clone --branch <branch_name> <git repo url>
    cd "Project Gecko"
     ```
 2. **FFMPEG Installation**
