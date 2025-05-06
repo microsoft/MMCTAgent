@@ -273,5 +273,6 @@ class ChapterGeneration:
             # Return ChapterCreationResponse instance directly
             return response_object
         except Exception as e:
-            raise Exception(f"Error Creating chapters: {e}")
+            logger.exception(f"Error Creating chapters: {e}")
+            raise
     

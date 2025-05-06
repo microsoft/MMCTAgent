@@ -86,8 +86,8 @@ To get started with this repository:
 1. **Clone the repository**
 
    ```sh
-   git clone --branch <branch_name> <git repo url>
-   cd "Project Gecko"
+   git clone --branch <branch-name> <repository-url>
+   cd <project-directory>
     ```
 2. **FFMPEG Installation**
     - For Linux Environment:
@@ -214,14 +214,16 @@ autogen_ext
 ├── mmct
 │   ├── .
 │   ├── image_pipeline
-│   │   └── agents
-│   │       └── image_agent.py      #  Entry point for the MMCT Image Agentic Workflow
+│   │   ├── agents
+│   │   │    └── image_agent.py      #  Entry point for the MMCT Image Agentic Workflow
+│   │   └── README.md                #  Guide for Image Pipeline
 │   └── video_pipeline
 │       ├── agents
 │       │   └── video_agent.py      # Entry point for the MMCT Video Agentic Workflow
-│       └── core
-│           └── ingestion
-│                 └── ingestion_pipeline.py   # Entry point for the Video Ingestion Workflow
+│       ├── core
+│       │     └── ingestion
+│       │           └── ingestion_pipeline.py   # Entry point for the Video Ingestion Workflow
+│       └── README.md                # Guide for Video Pipeline  
 ├── requirements.txt
 └──README.md  
 ```

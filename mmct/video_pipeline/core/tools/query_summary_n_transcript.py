@@ -15,7 +15,7 @@ from datetime import datetime
 from mmct.llm_client import LLMClient
 from loguru import logger
 from dotenv import load_dotenv, find_dotenv
-
+from mmct.video_pipeline.utils.helper import get_media_folder
 # Load environment variables
 load_dotenv(find_dotenv(), override=True)
 
@@ -32,12 +32,9 @@ async def query_summary_n_transcript(
 ) -> str:
     try:
         logger.info("Initialization of query summary and transcript tool")
-        base_dir = os.getenv("BLOB_DOWNLOAD_DIR")
+        base_dir = await get_media_folder()
         os.makedirs(base_dir, exist_ok=True)
         summary_path = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)),
-            "..",
-            "utils",
             base_dir,
             f"{video_id}.json",
         )

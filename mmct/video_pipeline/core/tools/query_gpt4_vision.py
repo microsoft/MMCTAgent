@@ -7,7 +7,7 @@ import os
 from typing_extensions import Annotated
 import time
 import asyncio
-from mmct.video_pipeline.utils.helper import download_blobs, load_images, encode_image_to_base64
+from mmct.video_pipeline.utils.helper import download_blobs, load_images, encode_image_to_base64, get_media_folder
 from mmct.llm_client import LLMClient
 from dotenv import load_dotenv, find_dotenv
 from loguru import logger
@@ -46,10 +46,8 @@ async def query_gpt4_vision(
         frame_indices = [idx for idx in frame_indices if idx>=0]
 
         # Prepare download paths
-        base_dir = f"Media/frames_{video_id}"
-        frames_download_path = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)), "..", "utils", base_dir
-        )
+        base_dir = os.path.join(await get_media_folder(),"Frames",f"{video_id}")
+        frames_download_path = base_dir
         os.makedirs(frames_download_path, exist_ok=True)
         if not os.path.exists(frames_download_path):
             logger.error(f"File path do not exists: {frames_download_path}")

@@ -67,7 +67,7 @@ class SemanticChunking:
         else:
             logger.info(f"Index {self.index_name} already exists.")
     
-    async def create_embedding_normal(self,text:str) -> List[float]:
+    async def _create_embedding_normal(self,text:str) -> List[float]:
         try:
             response = await self.embed_client.embeddings.create(
                 input=[text], 
@@ -77,7 +77,12 @@ class SemanticChunking:
         except Exception as e:
             raise Exception(f'Failed to create embedding:{e}',)
 
-    async def pre_process(self):
+    async def _pre_process(self):
+        # 1. Check duplicate
+        existing = await self.index_client.check_if_exists(hash_id=self.hash_id)
+        if existing:
+            return True
+        
         self.transcript = await process_transcript(srt_text=self.transcript) #Parses an SRT transcript, removes redundant chunks (e.g., "Music" segments), and performs semantic chunking based on content similarity.
         self.transcript = await add_empty_intervals(transcript_text=self.transcript)
         
@@ -94,9 +99,10 @@ class SemanticChunking:
         self.species_data = await (self.chapter_generator.species_and_variety(transcript=titled_transcript))
         self.species_data = eval(self.species_data)
         logger.info(self.species_data)
+        return False
         
         
-    async def create_chapters(self):
+    async def _create_chapters(self):
         for idx, (seg, fr) in enumerate(zip(self.clusters, self.frames_per_cluster)):
             attempts = 0
             max_attempts = 3
@@ -140,12 +146,11 @@ class SemanticChunking:
         logger.info("Chapter Generation Completed!")
         
         
-    async def ingest(self, video_blob_url, youtube_url=None):
-        await self._create_search_index()
+    async def _ingest(self, video_blob_url, youtube_url=None):
         url_info = f'BLOB={video_blob_url}\nYT_URL={youtube_url}'
         doc_objects: List[AISearchDocument] = [] 
         current_time = datetime.now()
-        for chapter_response, chapter_transcript in zip(self.chapter_responses, self.chapter_transcripts):  # Use strings with transcript for indexing
+        for chapter_response, chapter_transcript in zip(self.chapter_responses, self.chapter_transcripts):
             chapter_content_str = chapter_response.__str__(transcript=chapter_transcript)
             obj = AISearchDocument(
                 id=str(uuid.uuid4()),
@@ -167,18 +172,22 @@ class SemanticChunking:
                 blob_frames_folder_path=self.blob_urls['frames_blob_folder_url'] or "None",
                 blob_timestamps_file_url=self.blob_urls['timestamps_blob_url'] or "None",
                 blob_transcript_and_summary_file_url=self.blob_urls['transcript_and_summary_file_url'] or "None",
-                embeddings=await self.create_embedding_normal(chapter_content_str)
+                embeddings=await self._create_embedding_normal(chapter_content_str)
             )
             doc_objects.append(obj)
             
         await self.index_client.upload_documents(documents=[doc.model_dump() for doc in doc_objects])
         
     async def run(self,video_blob_url, youtube_url=None):
-        await self.pre_process()
-        await self.create_chapters()
-        await self.ingest(video_blob_url=video_blob_url, youtube_url=youtube_url)
+        await self._create_search_index() # checking if index is available, if not then creating the same.
+        is_exist = await self._pre_process()
+        if is_exist:
+            logger.info("Document already exists in the index.")
+            return None, None, is_exist
+        await self._create_chapters()
+        await self._ingest(video_blob_url=video_blob_url, youtube_url=youtube_url)
         await self.index_client.close()
-        return self.chapter_responses, self.chapter_transcripts
+        return self.chapter_responses, self.chapter_transcripts, is_exist
         
 if __name__=="__main__":
     semantic_chunker = SemanticChunking()

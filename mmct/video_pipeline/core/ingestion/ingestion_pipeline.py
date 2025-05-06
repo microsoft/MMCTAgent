@@ -1,6 +1,6 @@
 import asyncio
 import aiofiles
-from typing import Optional
+from typing import Optional, Annotated
 import os
 from loguru import logger
 import gc
@@ -23,8 +23,6 @@ from mmct.video_pipeline.core.ingestion.languages import Languages
 from mmct.video_pipeline.core.ingestion.transcription.transcription_services import (
     TranscriptionServices,
 )
-
-
 from mmct.video_pipeline.core.ingestion.semantic_chunking.semantic import (
     SemanticChunking,
 )
@@ -37,6 +35,7 @@ from mmct.video_pipeline.core.ingestion.merge_summary_n_transcript.merge_visual_
 from mmct.blob_store_manager import BlobStorageManager
 from mmct.video_pipeline.utils.helper import get_media_folder
 from dotenv import load_dotenv, find_dotenv
+from mmct.custom_logger import log_manager
 
 # Load environment variables
 load_dotenv(find_dotenv(), override=True)
@@ -60,19 +59,22 @@ class IngestionPipeline:
         transcription_service (str): Transcription service to use ("azure-stt" or "whisper"). Defaults to "azure-stt".
         youtube_url (str, optional): Optional YouTube URL associated with the video.
         use_azure_computer_vision (bool): Whether to use Azure Computer Vision for content analysis. Defaults to True.
-
+        disable_console_log (bool):
+            Boolean flag to disable console logs. Default set to False.
     Example Usage:
     ---------------
     >>> from mmct.video_pipeline.ingestion import IngestionPipeline
     >>> from mmct.video_pipeline.language import Languages
+    >>> from mmct.video_pipeline.core.ingestion.transcription.transcription_services import
+    TranscriptionServices
     >>> import asyncio
     >>>
     >>> async def run_ingestion():
     >>>     ingestion = IngestionPipeline(
-    >>>         video_path="C:/Users/v-amanpatkar/Downloads/Preparation of Neemasthram - Telugu - SERP- Mahabubnagar - Andhra Pradesh.mp4",
-    >>>         index_name="general-video-index-v2",
+    >>>         video_path="<valid-video-path>",
+    >>>         index_name="<ai-search-index-name>",
     >>>         language=Languages.TELUGU_INDIA,
-    >>>         transcription_service="azure-stt",
+    >>>         transcription_service=TranscriptionServices.AZURE_STT",
     >>>         youtube_url=None,
     >>>         use_azure_computer_vision=True
     >>>     )
@@ -90,14 +92,21 @@ class IngestionPipeline:
         transcription_service: Optional[str] = TranscriptionServices.AZURE_STT.value,
         youtube_url: Optional[str] = None,
         use_azure_computer_vision: Optional[str] = True,
+        disable_console_log: Annotated[
+            bool, "boolean flag to disable console logs"
+        ] = False,
     ):
+        if disable_console_log == False:
+            log_manager.enable_console()
+        else:
+            log_manager.disable_console()
+        self.logger = log_manager.get_logger()
         self.video_container = os.getenv("VIDEO_CONTAINER")
         self.audio_container = os.getenv("AUDIO_CONTAINER")
         self.transcript_container = os.getenv("TRANSCRIPT_CONTAINER")
         self.frames_container = os.getenv("FRAMES_CONTAINER")
         self.timestamps_container = os.getenv("TIMESTAMPS_CONTAINER")
         self.summary_n_transcript = os.getenv("SUMMARY_CONTAINER_NAME")
-        self.blob_manager = BlobStorageManager()
         self.video_path = video_path
         _, self.video_extension = os.path.splitext(self.video_path)
         self.transcription_service = transcription_service
@@ -108,196 +117,300 @@ class IngestionPipeline:
         self.local_resources = []
         self.pending_upload_tasks = []
         self.blob_urls = {}
+        self.blob_manager = BlobStorageManager()
 
     async def get_transcription(self):
-        self.hash_id = await get_file_hash(file_path=self.video_path)
-        transcriber = (
-            AzureTranscription(
-                video_path=self.video_path, hash_id=self.hash_id, language=self.language
+        try:
+            self.hash_id = await get_file_hash(file_path=self.video_path)
+            self.logger.info(
+                f"Successfully generated the file hash for the video path: {self.video_path}\nHash Id: {self.hash_id}"
             )
-            if self.transcription_service == TranscriptionServices.AZURE_STT
-            else WhisperTranscription(video_path=self.video_path, hash_id=self.hash_id)
-        )
-        audio_extension = (
-            ".wav"
-            if self.transcription_service == TranscriptionServices.AZURE_STT
-            else ".mp3"
-        )
-        self.blob_urls["audio_blob_url"] = self.blob_manager.get_blob_url(
-            container=self.audio_container,
-            blob_name=f"{self.hash_id}" + audio_extension,
-        )
-        self.transcript, local_paths = await transcriber()
-        logger.info(f"ingestion first transcript:{self.transcript}")
-        self.pending_upload_tasks.append(
-            self.blob_manager.upload_file(
+            transcriber = (
+                AzureTranscription(
+                    video_path=self.video_path,
+                    hash_id=self.hash_id,
+                    language=self.language,
+                )
+                if self.transcription_service == TranscriptionServices.AZURE_STT
+                else WhisperTranscription(
+                    video_path=self.video_path, hash_id=self.hash_id
+                )
+            )
+            self.logger.info("Initialized the transcriber instance")
+            audio_extension = (
+                ".wav"
+                if self.transcription_service == TranscriptionServices.AZURE_STT
+                else ".mp3"
+            )
+            self.blob_urls["audio_blob_url"] = self.blob_manager.get_blob_url(
                 container=self.audio_container,
                 blob_name=f"{self.hash_id}" + audio_extension,
-                file_path=os.path.join(
-                    await get_media_folder(),
-                    (f"{self.hash_id}" + audio_extension),
-                ),
             )
-        )
+            self.logger.info("Generating Transcript for the input video...")
+            self.transcript, local_paths = await transcriber()
+            self.logger.info("Successfully generated the transcript for the video.")
+            self.pending_upload_tasks.append(
+                self.blob_manager.upload_file(
+                    container=self.audio_container,
+                    blob_name=f"{self.hash_id}" + audio_extension,
+                    file_path=os.path.join(
+                        await get_media_folder(),
+                        (f"{self.hash_id}" + audio_extension),
+                    ),
+                )
+            )
+            self.logger.info("Added Audio File to pending upload tasks list")
 
-        self.pending_upload_tasks.append(
-            self.blob_manager.upload_file(
+            self.pending_upload_tasks.append(
+                self.blob_manager.upload_file(
+                    container=self.transcript_container,
+                    blob_name=f"transcript_{self.hash_id}.srt",
+                    file_path=os.path.join(
+                        await get_media_folder(),
+                        f"transcript_{self.hash_id}.srt",
+                    ),
+                )
+            )
+            self.logger.info("Added Transcript File to pending upload tasks list")
+
+            self.blob_urls["transcript_blob_url"] = self.blob_manager.get_blob_url(
                 container=self.transcript_container,
                 blob_name=f"transcript_{self.hash_id}.srt",
-                file_path=os.path.join(
-                    await get_media_folder(),
-                    f"transcript_{self.hash_id}.srt",
-                ),
             )
-        )
+            self.logger.info(
+                "Logged the transcript blob url to the blob urls mapping dictionary"
+            )
 
-        self.blob_urls["transcript_blob_url"] = self.blob_manager.get_blob_url(
-            container=self.transcript_container,
-            blob_name=f"transcript_{self.hash_id}.srt",
-        )
-        
-        self.blob_urls['transcript_and_summary_file_url'] = self.blob_manager.get_blob_url(
-            container=self.summary_n_transcript,
-            blob_name=f"{self.hash_id}.json",
-        )
+            self.blob_urls["transcript_and_summary_file_url"] = (
+                self.blob_manager.get_blob_url(
+                    container=self.summary_n_transcript,
+                    blob_name=f"{self.hash_id}.json",
+                )
+            )
+            self.logger.info(
+                "Logged the transcript and summary file url to the blob urls mapping dictionary"
+            )
 
-        self.local_resources.extend(local_paths)
-        del local_paths
-        gc.collect()
+            self.local_resources.extend(local_paths)
+            del local_paths
+            gc.collect()
+        except Exception as e:
+            self.logger.exception(
+                f"Exception occured while performing transcription: {e}"
+            )
+            raise
 
     async def _create_ingest_azurecv_index(self):
         """
         This method created and ingest the video into the azure computer vision indexes.
         """
-        azure_cv = AzureComputerVision(video_id=self.hash_id)
-        await azure_cv.create_index()
-        await azure_cv.add_video_to_index(blob_url=self.video_url)
+        try:
+            self.logger.info("Ingesting the video the Computer Vision Index")
+            azure_cv = AzureComputerVision(video_id=self.hash_id)
+            await azure_cv.create_index()
+            self.logger.info("Successfully created the index!")
+            await azure_cv.add_video_to_index(blob_url=self.video_url)
+            self.logger.info("Successfully added video to the Computer Vision Index")
+        except Exception as e:
+            self.logger.exception(
+                f"Exception occured while ingesting Video to Azure Computer Vision Index: {e}"
+            )
+            raise
 
     async def _merge_visual_summary_with_transcript(self):
         """
         This method merge summaries from chapters and transcript.
         """
-        merge_summary_transcript = MergeVisualSummaryWithTranscript(
-            chapter_responses=self.chapter_responses,
-            video_id=self.hash_id,
-            full_transcript_string=self.transcript,
-            transcripts=self.chapter_transcripts,
-        )
-        await merge_summary_transcript()
-        self.pending_upload_tasks.append(
-            self.blob_manager.upload_file(
-                container=self.summary_n_transcript,
-                blob_name=f"{self.hash_id}.json",
-                file_path=os.path.join(
-                    await get_media_folder(), f"{self.hash_id}.json"
-                ),
+        try:
+            self.logger.info(
+                "Creating an instance of class MergeVisualSummaryWithTranscript"
             )
-        )
-        
+            merge_summary_transcript = MergeVisualSummaryWithTranscript(
+                chapter_responses=self.chapter_responses,
+                video_id=self.hash_id,
+                full_transcript_string=self.transcript,
+                transcripts=self.chapter_transcripts,
+            )
+            self.logger.info("Merging the visual summary and transcript")
+            await merge_summary_transcript()
+            self.logger.info("Successfully merged the visual summary and transcript")
+            self.pending_upload_tasks.append(
+                self.blob_manager.upload_file(
+                    container=self.summary_n_transcript,
+                    blob_name=f"{self.hash_id}.json",
+                    file_path=os.path.join(
+                        await get_media_folder(), f"{self.hash_id}.json"
+                    ),
+                )
+            )
+            self.logger.info(
+                "Logged the transcript and summary file url to the blob urls mapping dictionary"
+            )
+        except Exception as e:
+            self.logger.exception(
+                f"Exception occured while merging visual summary with transcript: {e}"
+            )
+            raise
 
     async def _semantic_chunking_chapter_generation(self):
         """
         This method intitalise the semantic chunker
         """
-        self.semantic_chunker = SemanticChunking(
-            hash_id=self.hash_id,
-            index_name=self.index_name,
-            transcript=self.transcript,
-            base64Frames=self.base64Frames,
-            blob_urls=self.blob_urls
-        )
+        try:
+            self.logger.info(
+                "Creating an instance of SemanticChunking class to perform operations related to semantic chunking"
+            )
+            self.semantic_chunker = SemanticChunking(
+                hash_id=self.hash_id,
+                index_name=self.index_name,
+                transcript=self.transcript,
+                base64Frames=self.base64Frames,
+                blob_urls=self.blob_urls,
+            )
+            self.logger.info(
+                "Successfully created an instance of SemanticChunking class!"
+            )
+        except Exception as e:
+            self.logger.exception(
+                f"Exception occured while creating an instance of SemanticChunking class: {e}"
+            )
+            raise
 
     async def _get_frames_timestamps(self):
-        self.frames, self.timestamps = await extract_frames(video_path=self.video_path)
-        self.base64Frames = await encode_frames_to_base64(self.frames)
-        png_paths = await save_frames_as_png(
-            self.frames, os.path.join(await get_media_folder(), f"Frames", self.hash_id)
-        )
-        self.local_resources.extend(png_paths)  # Track for cleanup
-
-        for i, png_path in enumerate(png_paths):
-            self.pending_upload_tasks.append(
-                self.blob_manager.upload_file(
-                    container=self.frames_container,
-                    blob_name=f"frames/{self.hash_id}/frame_{i}.png",
-                    file_path=png_path,
-                )
+        try:
+            self.logger.info("Extracting frames and timestamps from the video...")
+            self.frames, self.timestamps = await extract_frames(
+                video_path=self.video_path
+            )
+            self.logger.info(
+                "Successfully extracted the frames and timestamps from the video!"
             )
 
-        async with aiofiles.open(
-            os.path.join(await get_media_folder(), f"timestamps_{self.hash_id}.txt"),
-            "w",
-            encoding="utf-8",
-        ) as f:
-            await f.write("\n".join(map(str, self.timestamps)))
+            self.logger.info("Encoding frames to base64...")
+            self.base64Frames = await encode_frames_to_base64(self.frames)
+            self.logger.info("Successfully converted frames to base64 strings!")
 
-        self.pending_upload_tasks.append(
-            self.blob_manager.upload_file(
-                container=self.timestamps_container,
-                blob_name=f"timestamps_{self.hash_id}.txt",
-                file_path=os.path.join(
+            self.logger.info("Saving frames as png files")
+            png_paths = await save_frames_as_png(
+                self.frames,
+                os.path.join(await get_media_folder(), f"Frames", self.hash_id),
+            )
+            self.local_resources.extend(png_paths)  # Track for cleanup
+            self.logger.info("Successfully saved the frames")
+
+            for i, png_path in enumerate(png_paths):
+                self.pending_upload_tasks.append(
+                    self.blob_manager.upload_file(
+                        container=self.frames_container,
+                        blob_name=f"frames/{self.hash_id}/frame_{i}.png",
+                        file_path=png_path,
+                    )
+                )
+            self.logger.info("Logged the frames to pending upload tasks list")
+
+            self.logger.info("Saving the timestamps file to the local directory")
+            async with aiofiles.open(
+                os.path.join(
                     await get_media_folder(), f"timestamps_{self.hash_id}.txt"
                 ),
+                "w",
+                encoding="utf-8",
+            ) as f:
+                await f.write("\n".join(map(str, self.timestamps)))
+            self.logger.info(
+                f"Successfully saved the timestamps file to the local directory: timestamps_{self.hash_id}.txt"
             )
-        )
 
-        self.blob_urls["frames_blob_folder_url"] = self.blob_manager.get_blob_url(
-            container=self.frames_container, blob_name=f"frames/{self.hash_id}"
-        )
-        
-        self.blob_urls['timestamps_blob_url'] = self.blob_manager.get_blob_url(
-            container=self.timestamps_container,
-            blob_name=f"timestamps_{self.hash_id}.txt",
-        )
+            self.pending_upload_tasks.append(
+                self.blob_manager.upload_file(
+                    container=self.timestamps_container,
+                    blob_name=f"timestamps_{self.hash_id}.txt",
+                    file_path=os.path.join(
+                        await get_media_folder(), f"timestamps_{self.hash_id}.txt"
+                    ),
+                )
+            )
+            self.logger.info("Logged the timestamps file to pending upload tasks list")
 
-        del png_paths
-        gc.collect()
+            self.blob_urls["frames_blob_folder_url"] = self.blob_manager.get_blob_url(
+                container=self.frames_container, blob_name=f"frames/{self.hash_id}"
+            )
+            self.logger.info(
+                "Successfully loggeed the frames blob folder path url to the blob urls mapping dictionary!"
+            )
+            self.blob_urls["timestamps_blob_url"] = self.blob_manager.get_blob_url(
+                container=self.timestamps_container,
+                blob_name=f"timestamps_{self.hash_id}.txt",
+            )
+            self.logger.info(
+                "Successfully logged the timestamps blob url to the blob urls mapping dictionary!"
+            )
+
+            del png_paths
+            gc.collect()
+        except Exception as e:
+            self.logger.exception(
+                f"Exception occured while generating the frames and timestamps from video: {e}"
+            )
+            raise
 
     async def __call__(self):
         try:
             await self.get_transcription()  # transcribing the audio from video
-            print("Got transcript!")
+            self.logger.info("Transcript Generated!")
 
             await self._get_frames_timestamps()  # extact, encoding & saving the frames
-            print("Got frames!")
+            self.logger.info("Frames and Timestamps Generated!")
+
             self.video_url = await file_upload_to_blob(
                 file_path=self.video_path,
                 blob_file_name=f"{self.hash_id}" + f"{self.video_extension}",
                 container_name=self.video_container,
-            )  # uploading local video to blob
-            print("Uploaded local video to blob")
+            )
+            self.logger.info("Uploaded local video to blob")
+
             await self._semantic_chunking_chapter_generation()
-            self.chapter_responses, self.chapter_transcripts = (
+            self.chapter_responses, self.chapter_transcripts, self.is_already_ingested = (
                 await self.semantic_chunker.run(
                     video_blob_url=self.video_url, youtube_url=self.youtube_url
                 )
             )
-            print("chapter generated and ingestion to index(AI Search)!")
-            if self.use_azure_computer_vision:
-                await self._create_ingest_azurecv_index()
-                print("Created and Ingested to azure computer vision index")
+            print(self.is_already_ingested, type(self.is_already_ingested))
+            if not self.is_already_ingested:
+                self.logger.info(
+                "Chapter generated for the visual summary and successfully ingested to index!"
+                )
+                if self.use_azure_computer_vision:
+                    await self._create_ingest_azurecv_index()
+                    self.logger.info(
+                        "Azure CV Index Created and Ingested to azure computer vision index"
+                    )
 
-            await self._merge_visual_summary_with_transcript()
-            print("Got Summary & transcript merged file!")
+                await self._merge_visual_summary_with_transcript()
+                self.logger.info("Successfully merged Summary & transcript file!")
 
             for batch in chunked(self.pending_upload_tasks, 5):
                 upload_results = await asyncio.gather(*batch)
                 # Free completed upload tasks to prevent memory buildup
                 del upload_results
                 gc.collect()
+            self.logger.info(
+                "Successfully uploaded the files to blob present in the pending upload tasks list!"
+            )
 
             await self.blob_manager.close()
             del self.frames, self.timestamps, self.base64Frames, self.video_url
             gc.collect()
-            print("Ingestion pipeline ran succesfully!")
+            self.logger.info("Ingestion pipeline ran succesfully!")
         except Exception as e:
-            raise Exception(f"Error while ingestion:{e}")
-        finally:
-            pass
+            self.logger.exception(
+                f"Exception occured while running Ingestion pipeline: {e}"
+            )
+            raise
 
 
 if __name__ == "__main__":
-    video_path = "C:/Users/v-amanpatkar/Downloads/mastering_happiness_lesson.mp4"
+    video_path = r"C:\Users\v-amanpatkar\Downloads\mastering_happiness_lesson.mp4"
     index = "telangana-video-index-latest-test"
     source_language = Languages.ENGLISH_INDIA
     ingestion = IngestionPipeline(
@@ -307,3 +420,4 @@ if __name__ == "__main__":
         language=source_language,
     )
     asyncio.run(ingestion())
+

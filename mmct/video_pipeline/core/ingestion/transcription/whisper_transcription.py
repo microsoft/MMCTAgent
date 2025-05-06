@@ -1,12 +1,13 @@
 import asyncio
 import os
+import aiofiles
 from mmct.video_pipeline.core.ingestion.transcription.base_transcription import (
     Transcription,
 )
 from mmct.video_pipeline.core.ingestion.languages import Languages
 from mmct.video_pipeline.utils.helper import extract_mp3_from_video, get_media_folder
 from dotenv import load_dotenv, find_dotenv
-
+from loguru import logger
 # Load environment variables
 load_dotenv(find_dotenv(), override=True)
 
@@ -21,12 +22,16 @@ class WhisperTranscription(Transcription):
             self.audio_path = os.path.join(
                 await get_media_folder(), f"{self.hash_id}.mp3"
             )
+            logger.info("Initialized the audio path to save the extracted audio")
             await extract_mp3_from_video(
                 video_path=self.video_path, output_path=self.audio_path
             )
+            logger.info("Extracted the audio from the video")
             self.local_save.append(self.audio_path)
+            logger.info(f"Saved the audio to : {self.audio_path}")
         except Exception as e:
-            raise Exception(f"Error loading audio, {e}")
+            logger.exception(f"Error loading audio, {e}")
+            raise
 
     async def get_transcript_whisper(self) -> str:
         """Extracts audio from a video file and transcribes it using Azure OpenAI Whisper."""
@@ -36,21 +41,28 @@ class WhisperTranscription(Transcription):
                 if os.getenv("LLM_PROVIDER") == "azure"
                 else "OPENAI_STT_MODEL"
             )
+            logger.info("Performing translation using openai whisper endpoint")
             with open(self.audio_path, "rb") as file:
                 result = await self.openai_stt_client.audio.translations.create(
                     file=file, model=model, response_format="srt"
                 )
+            logger.info("Successfully retrieved the translated transcript using Whisper")
             base_path = self.audio_path.split(".mp3")[0]
             transcript_local_path = os.path.join(base_path, ".srt")
             self.local_save.append(transcript_local_path)
-
             return result
         except Exception as e:
-            raise Exception(f"Error in speech-to-text conversion: {e}")
-
+            logger.exception(f"Error in speech-to-text conversion: {e}")
+            raise
+        
     async def __call__(self):
         await self.load_audio()
         transcript = await self.get_transcript_whisper()
+        transcript_save_path = os.path.join(await get_media_folder(),f"transcript_{self.hash_id}.srt")
+        async with aiofiles.open(
+            transcript_save_path, "w", encoding="utf-8"
+        ) as f:
+            await f.write(transcript)
         return transcript, self.local_save
 
 

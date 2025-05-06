@@ -200,9 +200,12 @@ async def get_file_hash(file_path, hash_algorithm="sha256"):
                     break
                 hash_func.update(chunk)
 
-        return hash_func.hexdigest()
+        hash_id =  hash_func.hexdigest()
+        logger.info("Hash Id Generated")
+        return hash_id
     except Exception as e:
-        raise Exception(f"Error generating hash id of video, error:{e}")
+        logger.exception(f"Error generating hash id of video, error:{e}")
+        raise
 
 
 async def file_upload_to_blob(
@@ -376,23 +379,27 @@ async def save_frames_as_png(frames, directory_path, name_prefix="frame_"):
     Returns:
         list: List of paths to the saved PNG files.
     """
-    os.makedirs(directory_path, exist_ok=True)
-    saved_paths = []
+    try:
+        os.makedirs(directory_path, exist_ok=True)
+        saved_paths = []
+        logger.info(f"Saving frames to the provided directory: {directory_path}")
+        for i, frame in enumerate(frames):
+            # Generate file path
+            file_path = os.path.join(directory_path, f"{name_prefix}_{i}.png")
 
-    for i, frame in enumerate(frames):
-        # Generate file path
-        file_path = os.path.join(directory_path, f"{name_prefix}_{i}.png")
+            # Save the frame as PNG
+            frame.save(file_path, format="PNG")
+            saved_paths.append(file_path)
 
-        # Save the frame as PNG
-        frame.save(file_path, format="PNG")
-        saved_paths.append(file_path)
+            # Log progress for every 10th frame to avoid excessive logging
+            # if i % 10 == 0:
+            #     logger.info(f"Saved frame {i} as PNG")
 
-        # Log progress for every 10th frame to avoid excessive logging
-        # if i % 10 == 0:
-        #     logger.info(f"Saved frame {i} as PNG")
-
-    logger.info(f"Saved {len(saved_paths)} frames as PNG files to {directory_path}")
-    return saved_paths
+        logger.info(f"Saved {len(saved_paths)} frames as PNG files to {directory_path}")
+        return saved_paths
+    except Exception as e:
+        logger.exception(f"Exception occured while saving frames: {e}")
+        raise
 
 
 # Helper to batch tasks

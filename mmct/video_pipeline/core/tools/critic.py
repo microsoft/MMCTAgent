@@ -15,6 +15,7 @@ from mmct.video_pipeline.utils.helper import (
     encode_image_to_base64,
     stack_images_horizontally,
     load_images,
+    get_media_folder
 )
 
 from dotenv import load_dotenv, find_dotenv
@@ -96,10 +97,8 @@ async def critic_tool(
         frame_indices = [idx for idx in frame_indices if idx >= 0]
 
         # Prepare download paths
-        base_dir = f"Media/frames_{video_id}"
-        frames_download_path = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)), "..", "utils", base_dir
-        )
+        base_dir = os.path.join(await get_media_folder(),"Frames",f"{video_id}")
+        frames_download_path = base_dir
         os.makedirs(frames_download_path, exist_ok=True)
 
         # Download blobs

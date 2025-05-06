@@ -2,8 +2,7 @@ from typing import List, Optional
 from pydantic import BaseModel, Field, ConfigDict
 
 class TranslationResponse(BaseModel):
-    """Pydantic model for validating translation responses from Azure OpenAI API.
-    
+    """
     This model ensures that responses from the translation service have the correct structure
     with a list of translated text segments and other linked details like timestamps, count etc.
     """
