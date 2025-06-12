@@ -95,12 +95,14 @@ class IngestionPipeline:
         disable_console_log: Annotated[
             bool, "boolean flag to disable console logs"
         ] = False,
+        hash_video_id: Annotated[str, "unique Hash Video Id"] = None,
     ):
         if disable_console_log == False:
             log_manager.enable_console()
         else:
             log_manager.disable_console()
         self.logger = log_manager.get_logger()
+        self.hash_video_id = hash_video_id
         self.video_container = os.getenv("VIDEO_CONTAINER")
         self.audio_container = os.getenv("AUDIO_CONTAINER")
         self.transcript_container = os.getenv("TRANSCRIPT_CONTAINER")
@@ -358,10 +360,9 @@ class IngestionPipeline:
         try:
             await self.get_transcription()  # transcribing the audio from video
             self.logger.info("Transcript Generated!")
-
             await self._get_frames_timestamps()  # extact, encoding & saving the frames
             self.logger.info("Frames and Timestamps Generated!")
-
+            
             self.video_url = await file_upload_to_blob(
                 file_path=self.video_path,
                 blob_file_name=f"{self.hash_id}" + f"{self.video_extension}",
@@ -375,6 +376,7 @@ class IngestionPipeline:
                     video_blob_url=self.video_url, youtube_url=self.youtube_url
                 )
             )
+    
             print(self.is_already_ingested, type(self.is_already_ingested))
             if not self.is_already_ingested:
                 self.logger.info(

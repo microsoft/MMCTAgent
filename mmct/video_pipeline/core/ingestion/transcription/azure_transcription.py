@@ -296,7 +296,7 @@ class AzureTranscription(Transcription):
             if curr_batch:
                 batches.append(curr_batch)
 
-            system_prompt = """You are a highly skilled translator. Your task is to translate the provided JSON array of text from {source_language} to English with utmost accuracy.
+            prompt = """You are a highly skilled translator. Your task is to translate the provided JSON array of text from {source_language} to English with utmost accuracy.
 
             # Instructions:
             - Translate each line of the input text exactly as it is, without adding, omitting, or altering any information.

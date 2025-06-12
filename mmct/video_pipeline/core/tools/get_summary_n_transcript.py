@@ -14,4 +14,6 @@ async def get_summary_n_transcript(video_id:Annotated[str,'video id'])->str:
     if not os.path.exists(summary_path):
         logger.error(f"File path do not exists: {summary_path}")
     with open(summary_path, 'r', encoding="utf-8") as file:
-        return file.read()
+        content = file.read()
+        logger.info(f"Summary and Transcript for {video_id} retrieved successfully.{content}")
+        return content

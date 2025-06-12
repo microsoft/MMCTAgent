@@ -3,6 +3,7 @@ from PIL import Image
 import base64
 import hashlib
 import aiofiles
+import shutil
 from loguru import logger
 import os
 import cv2
@@ -416,3 +417,40 @@ async def get_media_folder() -> str:
     media_path = os.path.join(os.getcwd(), "media")
     os.makedirs(media_path, exist_ok=True)
     return media_path
+
+async def remove_file(session_id):
+    try:
+        base_dir = await get_media_folder()
+
+        def remove_entity(filename):
+            local_path = os.path.join(base_dir, filename)
+            try:
+                print(f"Trying to remove file: {local_path}")
+                if os.path.exists(local_path):
+                    os.remove(local_path)
+                    print(f"Trying to remove file: {local_path}")
+                    
+            except Exception as e:
+                print(f"Error deleting file {local_path}: {e}")
+
+        def remove_dir(dir_name):
+            local_path = os.path.join(base_dir, dir_name)
+            try:
+                print(f"Trying to remove directory: {local_path}")
+                if os.path.exists(local_path):
+                    shutil.rmtree(local_path)
+            except Exception as e:
+                print(f"Error deleting directory {local_path}: {e}")
+                    
+        transcript_blob_name = f"transcript_{session_id}.srt"
+        timestamps_blob_name = f"timestamps_{session_id}.txt"
+        frames_dir_name = f"Frames/{session_id}"
+        summary_blob_name = f"{session_id}.json"
+        remove_entity(transcript_blob_name)
+        remove_entity(timestamps_blob_name)
+        # await remove_entity(frames_blob_name)
+        remove_dir(frames_dir_name)
+        remove_entity(summary_blob_name)
+        
+    except Exception as e:
+        raise Exception(e)

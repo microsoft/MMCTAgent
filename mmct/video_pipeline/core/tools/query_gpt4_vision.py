@@ -105,7 +105,6 @@ async def query_gpt4_vision(
                 }
             ],
             "temperature": 0,
-            "max_tokens":1000,
             "top_p":0.1
         }
         logger.info("Payload ready")

@@ -166,12 +166,12 @@ class SemanticChunking:
                 chapter_transcript=chapter_transcript,
                 species=self.species_data['species'] or "None",
                 variety=self.species_data['Variety_of_species'] or "None",
-                blob_audio_url=self.blob_urls['audio_blob_url'] or "None",
-                blob_video_url=video_blob_url or "None",
-                blob_transcript_file_url=self.blob_urls['transcript_blob_url'] or "None",
-                blob_frames_folder_path=self.blob_urls['frames_blob_folder_url'] or "None",
-                blob_timestamps_file_url=self.blob_urls['timestamps_blob_url'] or "None",
-                blob_transcript_and_summary_file_url=self.blob_urls['transcript_and_summary_file_url'] or "None",
+                blob_audio_url=self.blob_urls['audio_blob_url'].split(".net")[-1][1:] or "None",
+                blob_video_url=video_blob_url.split(".net")[-1][1:] or "None",
+                blob_transcript_file_url=self.blob_urls['transcript_blob_url'].split(".net")[-1][1:] or "None",
+                blob_frames_folder_path=self.blob_urls['frames_blob_folder_url'].split(".net")[-1][1:] or "None",
+                blob_timestamps_file_url=self.blob_urls['timestamps_blob_url'].split(".net")[-1][1:] or "None",
+                blob_transcript_and_summary_file_url=self.blob_urls['transcript_and_summary_file_url'].split(".net")[-1][1:] or "None",
                 embeddings=await self._create_embedding_normal(chapter_content_str)
             )
             doc_objects.append(obj)

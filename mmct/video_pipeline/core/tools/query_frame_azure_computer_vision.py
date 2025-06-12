@@ -45,7 +45,7 @@ async def query_frames_azure_computer_vision(frames_query:Annotated[str,"search 
         response_data = search_response.json()
 
         results = []
-        best_times = []
+        relevant_timestamps = []
         for item in response_data.get("value", [])[:3]:
             best_time = item["best"]
             try:
@@ -59,11 +59,11 @@ async def query_frames_azure_computer_vision(frames_query:Annotated[str,"search 
                 else:
                     adjusted_best_time = best_time
                 # First, try parsing with microseconds
-                formatted_best_time = datetime.strptime(adjusted_best_time, "%H:%M:%S.%f").strftime("%H:%M:%S")
+                formatted_relevant_timestamp = datetime.strptime(adjusted_best_time, "%H:%M:%S.%f").strftime("%H:%M:%S")
             except ValueError:
                 # If there's a ValueError, it means microseconds weren't present, so parse without them
-                formatted_best_time = datetime.strptime(best_time, "%H:%M:%S").strftime("%H:%M:%S")
-            best_times.append(formatted_best_time)
+                formatted_relevant_timestamp = datetime.strptime(best_time, "%H:%M:%S").strftime("%H:%M:%S")
+            relevant_timestamps.append(formatted_relevant_timestamp)
             results.append({
                 "best": item["best"],
                 "start": item["start"],
@@ -71,4 +71,4 @@ async def query_frames_azure_computer_vision(frames_query:Annotated[str,"search 
                 "relevance": item["relevance"]
             })
 
-        return ", ".join(best_times)
+        return ", ".join(relevant_timestamps)

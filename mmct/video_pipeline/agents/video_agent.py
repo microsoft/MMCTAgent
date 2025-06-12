@@ -3,6 +3,9 @@ import asyncio
 import os
 from typing import Optional, Annotated
 from dotenv import load_dotenv
+from azure.identity import DefaultAzureCredential
+from azure.core.credentials import AzureKeyCredential
+from azure.search.documents.aio import SearchClient
 # Local Imports
 from mmct.video_pipeline.core.tools.video_qna import video_qna, VideoQnaTools
 from mmct.video_pipeline.core.tools.video_search import video_search
@@ -10,6 +13,7 @@ from mmct.video_pipeline.prompts_and_description import (
     VIDEO_AGENT_SYSTEM_PROMPT,
     VideoAgentResponse,
 )
+from mmct.video_pipeline.utils.helper import remove_file
 from mmct.llm_client import LLMClient
 from mmct.custom_logger import log_manager
 # Load environment variables
@@ -44,6 +48,7 @@ class VideoAgent:
         self,
         query: str,
         index_name: str,
+        video_id: Optional[str]=None,
         top_n: int = 1,
         use_azure_cv_tool: bool = True,
         use_critic_agent: Optional[bool] = True,
@@ -52,6 +57,7 @@ class VideoAgent:
     ):
         try:
             self.query = query
+            self.video_id = video_id
             self.index_name = index_name
             self.top_n = top_n
             self.use_azure_cv_tool = use_azure_cv_tool
@@ -86,16 +92,87 @@ class VideoAgent:
         except Exception as e:
             self.logger.exception(f"Exception occured while initializing the Video Agent: {e}")
             raise
+        
+    async def fetch_metadata_ai_index(self, index_name, hash_video_id):
+        try:
+            AZURE_MANAGED_IDENTITY = os.environ.get("AZURE_OPENAI_MANAGED_IDENTITY", None)
+            azure_search_endpoint = os.getenv("AZURE_AI_SEARCH_ENDPOINT", None)
+
+            if azure_search_endpoint is None:
+                raise Exception("Azure search endpoint is missing in env!")
+
+            if AZURE_MANAGED_IDENTITY is None:
+                raise Exception(
+                    "AZURE_OPENAI_MANAGED_IDENTITY requires boolean value for selecting authorization either with Managed Identity or API Key"
+                )
+
+            # Setup credentials
+            if AZURE_MANAGED_IDENTITY.upper() == "TRUE":
+                credential = DefaultAzureCredential()
+            else:
+                azure_search_key = os.environ.get("AZURE_SEARCH_KEY", None)
+                if azure_search_key is None:
+                    raise Exception("Azure Search Key is missing!")
+                credential = AzureKeyCredential(azure_search_key)
+
+            # Create async search client
+            search_client = SearchClient(
+                endpoint=azure_search_endpoint,
+                index_name=index_name,
+                credential=credential,
+            )
+
+            # Perform async search with filter
+            results = await search_client.search(
+                search_text="*",
+                filter=f"hash_video_id eq '{hash_video_id}'",
+                select=["youtube_url","blob_video_url","hash_video_id"]
+            )
+
+            youtube_urls = []
+            async for result in results:
+                print(result)
+                metadata = {"video_id": [result.get("hash_video_id")], "video_url": [{"BLOB":result.get("blob_video_url"),"YT_URL":result.get("youtube_url")}]}
+                #youtube_urls.append(result.get("youtube_url"))
+            
+            if search_client:
+                await search_client.close()
+            if isinstance(credential, DefaultAzureCredential):
+                credential.close()
+                
+
+            return metadata#youtube_urls[0] if (isinstance(youtube_urls,list) and len(youtube_urls)!=0) else None
+
+        except Exception as e:
+            raise
+
 
     async def __call__(self) -> VideoAgentResponse:
         try:
-            self.logger.info("Performing the Video Search for the provided input")
-            self.video_ids = await video_search(
-                query=self.query, index_name=self.index_name, top_n=self.top_n
-            )
-            self.logger.info("Successfully retrieved the results from the Video Search")
+            if self.video_id:
+                self.video_ids = await self.fetch_metadata_ai_index(hash_video_id=self.video_id, index_name=self.index_name)
+            else:
+                self.logger.info("Performing the Video Search for the provided input")
+                self.video_ids = await video_search(
+                    query=self.query, index_name=self.index_name, top_n=self.top_n
+                )
+                self.logger.info("Successfully retrieved the results from the Video Search")
+                
+                filtered_pairs = [
+                    (vid, url) for vid, url in zip(self.video_ids["video_id"], self.video_ids["video_url"])
+                    if url.get("YT_URL") not in [None, "None"]
+                ]
+                
 
-            self.logger.info(f"Video ids from AI Search:{self.video_ids['video_id']}")
+                # Rebuild the self.video_ids structure
+                self.video_ids = {
+                    "video_id": [vid for vid, _ in filtered_pairs],
+                    "video_url": [url for _, url in filtered_pairs]
+                }
+                self.logger.info("Filtered out the video ids with None or empty youtube urls")
+                if len(self.video_ids['video_id'])==0:
+                    return {"is_video_unavailable":True}
+                self.logger.info(f"Video ids from AI Search:{self.video_ids['video_id']}")
 
             self.logger.info(f"Accumulating the MMCT Video Agent Response for retrieved Video Ids")
             self.session_results = await asyncio.gather(
@@ -105,7 +182,15 @@ class VideoAgent:
                 )
             )
             self.logger.info("Successfully retrieved the results for the Video Ids")
-            
+            # Remove files
+            self.logger.info("Cleaning up media files for the retrieved Video Ids")
+            await asyncio.gather(
+                *(
+                    remove_file(video_id)
+                    for video_id in self.video_ids["video_id"]
+                )
+            )
+            self.logger.info("Media cleanup completed.")
             self.logger.info("Generating the final answer from the accumulated answers")
             return await self._generate_final_answer()
         except Exception as e:
@@ -164,16 +249,17 @@ class VideoAgent:
 if __name__ == "__main__":
 
     async def main():
-        query = "who is master sito, what is the story about?"
-        index_name = "telangana-video-index-latest-test"
+        query = "What is the neemastram?"
+        index_name = "telugu-video-index"
         use_azure_cv_tool = False
         stream = False
-        use_critic_agent = False
+        use_critic_agent = True
         top_n = 1
 
         video_agent = VideoAgent(
             query = query,
             index_name = index_name,
+            video_id=video_id,
             top_n = top_n,
             use_critic_agent = use_critic_agent,
             use_azure_cv_tool = use_azure_cv_tool,

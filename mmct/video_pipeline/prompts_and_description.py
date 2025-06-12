@@ -18,12 +18,19 @@ class VideoAgentResponse(BaseModel):
     """Pydantic model for producing structured responses from OpenAI API.
     
     This model ensures that responses have the correct structure
-    with a response, source details and token info. 
+    with a response (markdown formatted), source details and token info. 
     """
     model_config = ConfigDict(extra="forbid")
     response: str = Field(
         ..., 
-        description="final response to the user query"
+        description=(
+           "final response (markdown formatted) to the query. Use Markdown syntax (e.g., bullets, numbered lists, line breaks) to make the response easy to read and well-structured."
+        )
+    )
+    
+    answer_found: bool = Field(
+        ...,
+        description="a Boolean flag whether context provided the completed answer to the query. True if provided the complete answer to the query"
     )
     
     source: List[VideoSourceInfo] = Field(
@@ -74,11 +81,11 @@ You need to understand that a video has two time-coupled modalities which are he
 - you must not stuck in a never-ending loop (planner-critic-planner-critic-planner-...), you can only ask criticism 2 times in a planner-critic-planner loop, if required.
 
 - When giving Final Answer at the end, you must give the response in the following valid JSON format.
-
+- Answer key in Final Answer must be in Markdown format so that it is easy to read and well-structured.
 ## JSON 
 >>> 
 Final Answer: { 
-"Answer": <string placeholder for final answer>, 
+"Answer": <string containing the query's answer. Use Markdown syntax (e.g., bullets, numbered lists, line breaks) to make the answer easy to read and well-structured.>, 
 "Source": <a list which contains the source of final answer for example ["SUMMARY","TRANSCRIPT","VISUAL"] if there is no source or no answer of the query then provide empty list like []>, 
 "Timestamp": <a list of timestamp/timestamps where the information is fetched from the video whether from summary or transcript or visual. timestamp must be accurate if there is only one timestamp then only one timestamp should be in list, if there are more timestamps then more than one will be there in list for example [%H:%M:%S, %H:%M:%S]. If unable to find the answer of query then provide empty list like []> 
 }
@@ -127,7 +134,7 @@ You need to understand that a video has two time-coupled modalities which are he
 ## JSON 
 >>> 
 Final Answer: { 
-"Answer": <string placeholder for final answer>, 
+"Answer": <string containing the query's answer. Use Markdown syntax (e.g., bullets, numbered lists, line breaks) to make the answer easy to read and well-structured.>,
 "Source": <a list which contains the source of final answer for example ["SUMMARY","TRANSCRIPT","VISUAL"] if there is no source or no answer of the query then provide empty list like []>, 
 "Timestamp": <a list of timestamp/timestamps where the information is fetched from the video whether from summary or transcript or visual. timestamp must be accurate if there is only one timestamp then only one timestamp should be in list, if there are more timestamps then more than one will be there in list for example [%H:%M:%S, %H:%M:%S]. If unable to find the answer of query then provide empty list like []> 
 } 
@@ -283,6 +290,7 @@ You are a **Video Agent**. Your job is to answer the user's `query` related to v
 ## Output Policy
 - Do **not** hallucinate. Only use the given `context` to answer the query.
 - Be factual, relevant, and to the point.
+- Use Markdown syntax for formatting the response (e.g., bullets, numbered lists, line breaks) else will be fined 1000$.
 - Do **not** include internal thoughts or reasoning in the final output.
 - The `source` field must include **only those video_ids** from the context that were actually used to generate the response.
 - Use the metadata to retrieve the correct URLs for each video ID.

@@ -2,6 +2,11 @@
 import asyncio
 import os
 import sys
+from loguru import logger
+from dotenv import load_dotenv
+
+load_dotenv(override=True)
+
 import ast
 from enum import Enum
 from typing import Annotated
@@ -30,15 +35,6 @@ from mmct.video_pipeline.prompts_and_description import (
 )
 from mmct.video_pipeline.utils.helper import load_required_files
 from mmct.llm_client import LLMClient
-from loguru import logger
-from dotenv import load_dotenv
-
-load_dotenv(override=True)
-
-# Setting global encoding to utf-8
-# sys.stdin.reconfigure(encoding="utf-8")
-# sys.stdout.reconfigure(encoding="utf-8")
-
 
 class VideoQnaTools(Enum):
     """
@@ -271,7 +267,7 @@ async def video_qna(
     
 if __name__=="__main__":
     query = "Describe the video and tell me what kind of talk is happening in the video."
-    video_id = "d678544d517a57050f6a6881b0eb26496536053c45711ac624104cd2fccc00dc"
+    video_id = "09702a0409f395e3ede3ab098fb3954955947da30f2b6649ac0fa572363c892e"
     use_azure_cv_tool = False
     use_critic_agent = True
     stream = False

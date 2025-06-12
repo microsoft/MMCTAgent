@@ -163,7 +163,7 @@ class VideoSearch:
                 vector_filter_mode=VectorFilterMode.PRE_FILTER,
                 top=50,
                 filter=filter_query,
-                select=["species", "variety", "blob_video_url", "hash_video_id"]
+                select=["species", "variety", "blob_video_url", "hash_video_id", "youtube_url"]
             )
             
 
@@ -211,7 +211,7 @@ class VideoSearch:
             )
             for results in result:
                 if results:
-                    response_url.append(results["blob_video_url"])
+                    response_url.append({"BLOB":results["blob_video_url"], "YT_URL":results['youtube_url']})
                     scores.append(results["@search.score"])
                     url_ids.append(results["hash_video_id"])
             if not response_url:
@@ -220,7 +220,7 @@ class VideoSearch:
                     query, index_name, top_n, min_threshold=min_threshold
                 )
                 for results in result:
-                    response_url.append(results["blob_video_url"])
+                    response_url.append({"BLOB":results["blob_video_url"], "YT_URL":results['youtube_url']})
                     scores.append(results["@search.score"])
                     url_ids.append(results["hash_video_id"])
             return response_url, scores, url_ids
@@ -253,8 +253,8 @@ async def video_search(
 
 
 if __name__ == "__main__":
-    query = "master sito"
-    index_name = "telangana-video-index-latest-test"
-    top_n = 1
+    query = "What is the recommended timeframe for the first weeding after sowing the Virat species of mung?"
+    index_name = "jharkhand-video-index"
+    top_n = 3
     res = asyncio.run(video_search(query=query, index_name=index_name, top_n=top_n))
     print(res)
