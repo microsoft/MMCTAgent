@@ -1,0 +1,38 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "aiSearchServiceName": {
+            "type": "String"
+        }
+    },
+    "variables": {},
+    "resources": [
+        {
+            "type": "Microsoft.Search/searchServices",
+            "apiVersion": "2025-02-01-preview",
+            "name": "[parameters('aiSearchServiceName')]",
+            "location": "Central India",
+            "sku": {
+                "name": "standard"
+            },
+            "properties": {
+                "replicaCount": 1,
+                "partitionCount": 1,
+                "endpoint": "[concat('https://', parameters('aiSearchServiceName'), '.search.windows.net')]",
+                "hostingMode": "default",
+                "publicNetworkAccess": "Enabled",
+                "networkRuleSet": {
+                    "ipRules": [],
+                    "bypass": "None"
+                },
+                "encryptionWithCmk": {
+                    "enforcement": "Unspecified"
+                },
+                "disableLocalAuth": true,
+                "disabledDataExfiltrationOptions": [],
+                "semanticSearch": "free"
+            }
+        }
+    ]
+}

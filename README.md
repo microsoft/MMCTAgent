@@ -73,7 +73,7 @@ Published on **arXiv** – [arxiv.org/abs/2405.18358](https://arxiv.org/abs/2405
 
 - [Getting Started](#getting-started)
 - [Installation](#installation)
-- [Prerequisites](#Prerequisites)
+- [Prerequisites](#prerequisites)
 - [Usage](#usage)
 - [Project Structure](#project-structure)
 
@@ -89,14 +89,17 @@ To get started with this repository:
    git clone --branch <branch-name> <repository-url>
    cd <project-directory>
     ```
+
 2. **FFMPEG Installation**
     - For Linux Environment:
+
     ```bash
     apt-get update && apt-get install ffmpeg libsm6 libxext6  -y
     ```
+
     - For Windows:
-        - Download FFmpeg from: https://ffmpeg.org/download.html 
-        - Choose the Windows build (e.g., from https://www.gyan.dev/ffmpeg/builds/ )
+        - Download FFmpeg from: <https://ffmpeg.org/download.html>
+        - Choose the Windows build (e.g., from <https://www.gyan.dev/ffmpeg/builds/> )
         - Extract the files and add the bin folder to the system PATH variable so you can use ffmpeg from the command line.
 
     LibSM6 & libXext6 (Linux X11 Libraries): These libraries are mainly used for graphical applications on Linux and are not typically required on Windows.
@@ -116,15 +119,17 @@ To get started with this repository:
         ```
 
     - **Using venv (Python standard)**
-    
+
         ```bash
         python -m venv <env-name>
         source <env-name>/bin/activate    # on Linux/Mac
         <env-name>\Scripts\activate.bat   # on Windows
         ```
+
 5. **Install dependencies and set up the project**
 
     Ensure you have pip >= 21.3 to support pyproject.toml installations.
+
     ```bash
     pip install --upgrade pip
     pip install -r requirements.txt
@@ -132,7 +137,7 @@ To get started with this repository:
 
 ## **Prerequisites**
 
-Below are the Azure Resources that are required to execute this repository.
+Below are the Azure Resources that are required to execute this repository. You can checkout the `infra` folder and utilize the `INFRA_DEPLOYMENT_GUIDE` to not only deploy the resources through ARM Templates but also build the containers and directly deploy the script to Azure App Services and Azure Container Apps.
 
 | Resource Name                 | Documentation Article | Microsoft Intra-Identity Role |
 |--------------------------------|----------------------|------------------------------------|
@@ -152,6 +157,7 @@ Below are the Azure Resources that are required to execute this repository.
 You can refer to the `examples` directory to understand the usage of this repository. Below are the sample scripts you can refer to get started:
 
 > MMCT Image Agent
+
 ```python
 from mmct.image_pipeline import ImageAgent, ImageQnaTools
 import asyncio
@@ -210,7 +216,10 @@ print(response)
 Below is the project structure highlighting the key entry-point scripts for running the three main pipelines— `Image QNA`, `Video Ingestion` and `Video Agent`.
 
 ```sh
-autogen_ext
+MMCTAgent
+| 
+├── infra
+|   └── INFRA_DEPLOYMENT_GUIDE.md    # Guide for deployment of Azure Infrastructure 
 ├── mmct
 │   ├── .
 │   ├── image_pipeline

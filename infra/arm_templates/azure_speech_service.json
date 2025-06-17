@@ -1,0 +1,38 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "azureSpeechServiceName": {
+            "type": "String"
+        },
+        "azureSpeechServiceRegion": {
+            "type":"string"
+        }
+    },
+    "variables": {},
+    "resources": [
+        {
+            "type": "Microsoft.CognitiveServices/accounts",
+            "apiVersion": "2025-04-01-preview",
+            "name": "[parameters('azureSpeechServiceName')]",
+            "location": "[parameters('azureSpeechServiceRegion')]",
+            "sku": {
+                "name": "S0"
+            },
+            "kind": "SpeechServices",
+            "identity": {
+                "type": "None"
+            },
+            "properties": {
+                "customSubDomainName": "[parameters('azureSpeechServiceName')]",
+                "networkAcls": {
+                    "defaultAction": "Allow",
+                    "virtualNetworkRules": [],
+                    "ipRules": []
+                },
+                "publicNetworkAccess": "Enabled",
+                "disableLocalAuth": true
+            }
+        }
+    ]
+}
