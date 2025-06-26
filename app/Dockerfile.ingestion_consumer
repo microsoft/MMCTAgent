@@ -1,0 +1,12 @@
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+
+WORKDIR /app
+
+# Copy only what's needed for the main service
+COPY . .
+# If there are more submodules, add them here
+
+ENV PYTHONUNBUFFERED=1
+
+CMD ["python", "ingestion_consumer.py"]

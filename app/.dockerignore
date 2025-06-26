@@ -1,0 +1,5 @@
+.git/
+infra/
+**/__pycache__/
+*.pyc
+.env
