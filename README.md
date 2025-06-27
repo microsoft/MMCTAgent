@@ -49,13 +49,16 @@ It supports a configurable set of tools via the `ImageQnaTools` enum:
 ---
 
 #### VideoAgent
-![](https://github.com/microsoft/MMCTAgent/blob/mmct_autogen/docs/Images%26icons/videoAgent.png)
+
 Optimized for deep video understanding through a structured two-stage pipeline:
 
 1. **Video Retrieval**  
    Uses an Azure AI Search index to fetch videos relevant to a user query.
 
 2. **Video Question Answering**  
+
+![](https://github.com/microsoft/MMCTAgent/blob/mmct_autogen/docs/Images%26icons/videoAgent.png)
+
    Applies a fixed toolchain orchestrated by the Planner:
 
    - `GET_SUMMARY_TRANSCRIPT` – Extracts transcript and visual summary.
