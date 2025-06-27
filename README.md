@@ -5,11 +5,13 @@
 
 </div>
 
-# **MMCT Agent**
+# [**MMCT Agent**](https://arxiv.org/pdf/2405.18358)
 
 ## **Overview**
 
 This repository implements **MMCTAgent**, a novel **multi-modal critical thinking agent** designed to push the boundaries of visual reasoning and deep understanding across **images** and **videos**. Built upon our [research paper](https://arxiv.org/pdf/2405.18358), MMCTAgent combines planning, self-critique, and tool-based reasoning to enhance decision-making in complex multi-modal tasks.
+
+[![](https://github.com/microsoft/MMCTAgent/blob/mmct_autogen/docs/Images%26icons/VideoPipeline.png)](https://arxiv.org/pdf/2405.18358)
 
 ## **Key Features**
 
