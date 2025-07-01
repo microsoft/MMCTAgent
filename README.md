@@ -5,13 +5,13 @@
 
 </div>
 
-# [**MMCT Agent**](https://arxiv.org/pdf/2405.18358) | [***Demo Video***](https://github.com/microsoft/MMCTAgent/blob/mmct_autogen/docs/Media/videos/Demo_MMCT.mp4)
+# [**MMCT Agent**](https://arxiv.org/pdf/2405.18358) | [***Demo Video***](https://github.com/microsoft/MMCTAgent/blob/mmct_autogen/docs/multimedia/videos/Demo_MMCT.mp4)
 
 ## **Overview**
 
 This repository implements **MMCTAgent**, a novel **multi-modal critical thinking agent** designed to push the boundaries of visual reasoning and deep understanding across **images** and **videos**. Built upon our [research paper](https://arxiv.org/pdf/2405.18358), MMCTAgent combines planning, self-critique, and tool-based reasoning to enhance decision-making in complex multi-modal tasks.
 
-[![](https://github.com/microsoft/MMCTAgent/blob/mmct_autogen/docs/Media/VideoPipeline.jpeg)](https://arxiv.org/pdf/2405.18358)
+[![](https://github.com/microsoft/MMCTAgent/blob/mmct_autogen/docs/multimedia/VideoPipeline.jpeg)](https://arxiv.org/pdf/2405.18358)
 
 ## **Key Features**
 
@@ -34,7 +34,7 @@ MMCTAgent includes two specialized agents:
 
 #### ImageAgent
 
-![](https://github.com/microsoft/MMCTAgent/blob/mmct_autogen/docs/Media/imageAgent.jpeg)
+![](https://github.com/microsoft/MMCTAgent/blob/mmct_autogen/docs/multimedia/imageAgent.jpeg)
 
 A reasoning engine tailored for static image understanding.  
 It supports a configurable set of tools via the `ImageQnaTools` enum:
@@ -57,7 +57,7 @@ Optimized for deep video understanding through a structured two-stage pipeline:
 
 2. **Video Question Answering**  
 
-![](https://github.com/microsoft/MMCTAgent/blob/mmct_autogen/docs/Media/videoAgent.jpeg)
+![](https://github.com/microsoft/MMCTAgent/blob/mmct_autogen/docs/multimedia/videoAgent.jpeg)
 
    Applies a fixed toolchain orchestrated by the Planner:
 
