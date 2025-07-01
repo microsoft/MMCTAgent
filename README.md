@@ -34,7 +34,7 @@ MMCTAgent includes two specialized agents:
 
 #### ImageAgent
 
-![](https://github.com/microsoft/MMCTAgent/blob/mmct_autogen/docs/multimedia/imageAgent.jpeg)
+![](docs/multimedia/imageAgent.jpeg)
 
 A reasoning engine tailored for static image understanding.  
 It supports a configurable set of tools via the `ImageQnaTools` enum:
