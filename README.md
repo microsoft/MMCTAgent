@@ -5,7 +5,7 @@
 
 </div>
 
-# [**MMCT Agent**](https://arxiv.org/pdf/2405.18358) | [***Demo Video***][![Watch the video](docs/multimedia/videos/Demo_MMCT.mp4)
+# [**MMCT Agent**](https://arxiv.org/pdf/2405.18358) | [***Demo Video***][![Watch the video](https://img.shields.io/badge/Task-Code_Related-blue)(docs/multimedia/videos/Demo_MMCT.mp4)
 ![](docs/multimedia/videoPipeline.jpeg)
 
 ## **Overview**
