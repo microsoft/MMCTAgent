@@ -6,6 +6,7 @@
 </div>
 
 # [**MMCT Agent**](https://arxiv.org/pdf/2405.18358) | [***Demo Video***](docs/multimedia/videos/Demo_MMCT.mp4)
+[![](docs/multimedia/videoPipeline.jpeg)]
 
 ## **Overview**
 
