@@ -1,5 +1,5 @@
 # **MMCT - Video Pipeline**
-
+[![](/docs/multimedia/videoPipeline.webp)](https://arxiv.org/pdf/2405.18358)
 ## **Overview**
 
 Video Pipeline consists of two components:
@@ -10,7 +10,7 @@ Video Pipeline consists of two components:
 You can first ingest your specific video using the Video Ingestion pipeline, which processes and prepares the video content for downstream tasks. Once ingested, the **Video Agent** can be used to perform Question Answering over the video. It leverages multiple tools to accurately extract relevant information and optionally uses a **Critic Agent** (if enabled) to enhance the quality and precision of the response.
 
 ## **1. Video Ingestion**
-
+[![](/docs/multimedia/ingestionpipeline.png)](https://arxiv.org/pdf/2405.18358)
 The **IngestionPipeline** performs comprehensive processing of video file to extract transcript, frames, chapters, ai search index creation for downstream applications like `VideoAgent`. It includes the following steps:
 
 1. **Audio Extraction** – Extracts the audio from the input video.
@@ -42,7 +42,11 @@ The **IngestionPipeline** performs comprehensive processing of video file to ext
 
 1. **Video Retrieval** – Given a user query, the agent retrieves relevant videos from a pre-ingested **Azure AI Search index**. This search ensures that only contextually relevant videos are passed on for deep analysis.
 
-2. **Video Question Answering (QA)** – After retrieval, the agent uses the **Multi-Modal Critical Thinking (MMCT)** framework ([arxiv.org/abs/2405.18358](https://arxiv.org/abs/2405.18358)) to generate a high-quality answer. MMCT involves two agents:
+2. **Video Question Answering (QA)** 
+
+[![](/docs/multimedia/videoAgent.webp)](https://arxiv.org/pdf/2405.18358)
+
+After retrieval, the agent uses the **Multi-Modal Critical Thinking (MMCT)** framework ([arxiv.org/abs/2405.18358](https://arxiv.org/abs/2405.18358)) to generate a high-quality answer. MMCT involves two agents:
 
    - **Planner**: Drives the reasoning process using a structured toolchain, generating an initial response.
    - **Critic (optional)**: Analyzes the planner’s output and, if needed, provides feedback that prompts an improved final answer.

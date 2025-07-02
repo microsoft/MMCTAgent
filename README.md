@@ -47,7 +47,7 @@ MMCTAgent includes two specialized agents:
 
 #### ImageAgent
 
-![](docs/multimedia/imageAgent.webp)
+[![](docs/multimedia/imageAgent.webp)](https://arxiv.org/pdf/2405.18358)
 
 A reasoning engine tailored for static image understanding.  
 It supports a configurable set of tools via the `ImageQnaTools` enum:
@@ -71,7 +71,7 @@ Optimized for deep video understanding through a structured two-stage pipeline:
 
 2. **Video Question Answering**  
 
-![](docs/multimedia/videoAgent.webp)
+[![](docs/multimedia/videoAgent.webp)](https://arxiv.org/pdf/2405.18358)
 
    Applies a fixed toolchain orchestrated by the Planner:
 
