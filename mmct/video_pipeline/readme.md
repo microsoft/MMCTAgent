@@ -1,6 +1,6 @@
 # **MMCT - Video Pipeline**
 
-[![](/docs/multimedia/videoPipeline.webp)](https://arxiv.org/pdf/2405.18358)
+[![](/docs/multimedia/VideoPipeline.webp)](https://arxiv.org/pdf/2405.18358)
 
 ## **Overview**
 
