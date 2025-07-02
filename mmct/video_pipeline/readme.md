@@ -1,5 +1,7 @@
 # **MMCT - Video Pipeline**
+
 [![](/docs/multimedia/videoPipeline.webp)](https://arxiv.org/pdf/2405.18358)
+
 ## **Overview**
 
 Video Pipeline consists of two components:
