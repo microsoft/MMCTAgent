@@ -52,9 +52,9 @@ class ChapterGeneration:
 
             response = await self.llm_client.beta.chat.completions.parse(
                 model=os.getenv(
-                    "AZURE_OPENAI_MODEL"
+                    "LLM_MODEL_NAME"
                     if os.getenv("LLM_PROVIDER") == "azure"
-                    else "OPENAI_MODEL"
+                    else "OPENAI_MODEL_NAME"
                 ),
                 messages=prompt,
                 temperature=0,
@@ -184,7 +184,7 @@ class ChapterGeneration:
 
                     try:
                         batch_response = await self.llm_client.beta.chat.completions.parse(
-                            model=os.getenv("AZURE_OPENAI_MODEL" if os.getenv("LLM_PROVIDER")=="azure" else "OPENAI_MODEL"),
+                            model=os.getenv("LLM_MODEL_NAME" if os.getenv("LLM_PROVIDER")=="azure" else "OPENAI_MODEL_NAME"),
                             messages=batch_prompt,
                             temperature=0,
                             response_format=ChapterCreationResponse,
@@ -228,7 +228,7 @@ class ChapterGeneration:
                     ]
 
                     combined_response = await self.llm_client.beta.chat.completions.parse(
-                        model=os.getenv("AZURE_OPENAI_MODEL" if os.getenv("LLM_PROVIDER")=="azure" else "OPENAI_MODEL"),
+                        model=os.getenv("LLM_MODEL_NAME" if os.getenv("LLM_PROVIDER")=="azure" else "OPENAI_MODEL_NAME"),
                         messages=summary_prompt,
                         temperature=0,
                         response_format=ChapterCreationResponse,
@@ -262,7 +262,7 @@ class ChapterGeneration:
                         }]
 
             response = await self.llm_client.beta.chat.completions.parse(
-                    model=os.getenv("AZURE_OPENAI_MODEL" if os.getenv("LLM_PROVIDER")=="azure" else "OPENAI_MODEL"),
+                    model=os.getenv("LLM_MODEL_NAME" if os.getenv("LLM_PROVIDER")=="azure" else "OPENAI_MODEL_NAME"),
                     messages=prompt,
                     temperature=0,
                     response_format=ChapterCreationResponse

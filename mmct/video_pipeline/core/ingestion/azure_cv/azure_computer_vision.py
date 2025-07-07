@@ -9,7 +9,7 @@ load_dotenv(find_dotenv(), override=True)
 
 class AzureComputerVision:
     def __init__(self, video_id):
-        self.AZURECV_ENDPOINT = os.getenv("AZURECV_ENDPOINT", None)
+        self.AZURECV_ENDPOINT = os.getenv("COMPUTER_VISION_ENDPOINT", None)
         self.video_id  = video_id
         if self.AZURECV_ENDPOINT is None:
             raise Exception("AzureCV endpoint is missing!")
@@ -18,12 +18,12 @@ class AzureComputerVision:
         if self.AZURECV_API_VERSION is None:
             raise Exception("AzureCV API version is missing!")
 
-        if os.environ.get("AZURE_OPENAI_MANAGED_IDENTITY", None) is None:
+        if os.environ.get("MANAGED_IDENTITY", None) is None:
             raise Exception(
-                "AZURE_OPENAI_MANAGED_IDENTITY requires boolean value for selecting authorization either with Managed Identity or API Key"
+                "MANAGED_IDENTITY requires boolean value for selecting authorization either with Managed Identity or API Key"
             )
         self.azure_managed_identity = os.environ.get(
-            "AZURE_OPENAI_MANAGED_IDENTITY", ""
+            "MANAGED_IDENTITY", ""
         ).upper()
         if self.azure_managed_identity == "TRUE":
             token_provider = DefaultAzureCredential()
@@ -31,7 +31,7 @@ class AzureComputerVision:
                 "https://cognitiveservices.azure.com/.default"
             ).token
         else:
-            token = os.getenv("AZURE_CV_KEY")
+            token = os.getenv("COMPUTER_VISION_KEY")
 
         self.headers = {
             "Authorization": "Bearer " + token,

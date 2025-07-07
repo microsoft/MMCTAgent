@@ -83,9 +83,9 @@ class VideoAgent:
                 service_provider=service_provider, isAsync=True
             ).get_client()
             self.model_name = os.getenv(
-                "AZURE_OPENAI_VISION_MODEL"
+                "LLM_VISION_MODEL_NAME"
                 if service_provider == "azure"
-                else "OPENAI_VISION_MODEL"
+                else "OPENAI_VISION_MODEL_NAME"
             )
             self.logger.info("Initialized the llm model client")
             self.session_results = []
@@ -95,25 +95,25 @@ class VideoAgent:
         
     async def fetch_metadata_ai_index(self, index_name, hash_video_id):
         try:
-            AZURE_MANAGED_IDENTITY = os.environ.get("AZURE_OPENAI_MANAGED_IDENTITY", None)
-            azure_search_endpoint = os.getenv("AZURE_AI_SEARCH_ENDPOINT", None)
+            AZURE_MANAGED_IDENTITY = os.environ.get("MANAGED_IDENTITY", None)
+            azure_search_endpoint = os.getenv("SEARCH_SERVICE_ENDPOINT", None)
 
             if azure_search_endpoint is None:
                 raise Exception("Azure search endpoint is missing in env!")
 
             if AZURE_MANAGED_IDENTITY is None:
                 raise Exception(
-                    "AZURE_OPENAI_MANAGED_IDENTITY requires boolean value for selecting authorization either with Managed Identity or API Key"
+                    "MANAGED_IDENTITY requires boolean value for selecting authorization either with Managed Identity or API Key"
                 )
 
             # Setup credentials
             if AZURE_MANAGED_IDENTITY.upper() == "TRUE":
                 credential = DefaultAzureCredential()
             else:
-                azure_search_key = os.environ.get("AZURE_SEARCH_KEY", None)
-                if azure_search_key is None:
+                SEARCH_SERVICE_KEY = os.environ.get("SEARCH_SERVICE_KEY", None)
+                if SEARCH_SERVICE_KEY is None:
                     raise Exception("Azure Search Key is missing!")
-                credential = AzureKeyCredential(azure_search_key)
+                credential = AzureKeyCredential(SEARCH_SERVICE_KEY)
 
             # Create async search client
             search_client = SearchClient(

@@ -46,10 +46,10 @@ class AzureTranscription(Transcription):
                 "https://cognitiveservices.azure.com/.default"
             )
             token = token.token
-            resource_id = os.getenv("AZURE_SPEECH_SERVICE_RESOURCE_ID")
+            resource_id = os.getenv("SPEECH_SERVICE_RESOURCE_ID")
             token = "aad#" + resource_id + "#" + token
             speech_config = speechsdk.SpeechConfig(
-                region=os.getenv("AZURE_SPEECH_SERVICE_REGION"), auth_token=token
+                region=os.getenv("SPEECH_SERVICE_REGION"), auth_token=token
             )
             audio_config = speechsdk.audio.AudioConfig(filename=self.audio_path)
             lang = None
@@ -92,10 +92,10 @@ class AzureTranscription(Transcription):
                     "https://cognitiveservices.azure.com/.default"
                 )
             token = token.token
-            resource_id = os.getenv("AZURE_SPEECH_SERVICE_RESOURCE_ID")
+            resource_id = os.getenv("SPEECH_SERVICE_RESOURCE_ID")
             auth_token = f"aad#{resource_id}#{token}"
             speech_config = speechsdk.SpeechConfig(
-                region=os.getenv("AZURE_SPEECH_SERVICE_REGION"), auth_token=auth_token
+                region=os.getenv("SPEECH_SERVICE_REGION"), auth_token=auth_token
             )
             logger.info("Speech Config initialized")
             if self.source_language == None:
@@ -228,9 +228,9 @@ class AzureTranscription(Transcription):
 
         response = await self.llm_client.beta.chat.completions.parse(
             model=os.getenv(
-                "AZURE_OPENAI_MODEL"
+                "LLM_MODEL_NAME"
                 if os.getenv("LLM_PROVIDER") == "azure"
-                else "OPENAI_MODEL"
+                else "OPENAI_MODEL_NAME"
             ),
             messages=messages,
             temperature=0,

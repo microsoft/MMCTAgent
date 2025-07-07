@@ -160,9 +160,9 @@ async def query_summary_n_transcript(
         embeddings = await get_embeddings_batch(
             texts,
             model=os.getenv(
-                "AZURE_EMBEDDING_MODEL"
+                "EMBEDDING_SERVICE_MODEL_NAME"
                 if os.getenv("LLM_PROVIDER") == "azure"
-                else "OPENAI_EMBEDDING_MODEL"
+                else "OPENAI_EMBEDDING_MODEL_NAME"
             ),
         )
         # Assign embeddings to data
@@ -175,9 +175,9 @@ async def query_summary_n_transcript(
                 await client_embed.embeddings.create(
                     input=[summary_query],
                     model=os.getenv(
-                        "AZURE_EMBEDDING_MODEL"
+                        "EMBEDDING_SERVICE_MODEL_NAME"
                         if os.getenv("LLM_PROVIDER") == "azure"
-                        else "OPENAI_EMBEDDING_MODEL"
+                        else "OPENAI_EMBEDDING_MODEL_NAME"
                     ),
                 )
             )

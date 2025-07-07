@@ -37,9 +37,9 @@ class WhisperTranscription(Transcription):
         """Extracts audio from a video file and transcribes it using Azure OpenAI Whisper."""
         try:
             model = os.getenv(
-                "AZURE_OPENAI_STT_MODEL"
+                "SPEECH_SERVICE_MODEL_NAME"
                 if os.getenv("LLM_PROVIDER") == "azure"
-                else "OPENAI_STT_MODEL"
+                else "OPENAI_SPEECH_SERVICE_MODEL_NAME"
             )
             logger.info("Performing translation using openai whisper endpoint")
             with open(self.audio_path, "rb") as file:

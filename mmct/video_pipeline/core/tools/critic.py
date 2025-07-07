@@ -167,9 +167,9 @@ async def critic_tool(
             try:
                 response = await openai_client.chat.completions.create(
                     model=os.getenv(
-                        "AZURE_OPENAI_VISION_MODEL"
+                        "LLM_VISION_MODEL_NAME"
                         if os.getenv("LLM_PROVIDER") == "azure"
-                        else "OPENAI_VISION_MODEL"
+                        else "OPENAI_VISION_MODEL_NAME"
                     ),
                     temperature=payload["temperature"],
                     messages=payload["messages"],

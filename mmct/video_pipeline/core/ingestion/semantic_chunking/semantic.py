@@ -26,19 +26,19 @@ load_dotenv(find_dotenv(),override=True)
 
 class SemanticChunking:
     def __init__(self, hash_id:str, index_name:str, transcript:str,blob_urls,base64Frames)->None:
-        if os.environ.get("AZURE_OPENAI_MANAGED_IDENTITY", None) is None:
+        if os.environ.get("MANAGED_IDENTITY", None) is None:
             raise Exception(
-                "AZURE_OPENAI_MANAGED_IDENTITY requires boolean value for selecting authorization either with Managed Identity or API Key"
+                "MANAGED_IDENTITY requires boolean value for selecting authorization either with Managed Identity or API Key"
             )
         self.azure_managed_identity = os.environ.get(
-            "AZURE_OPENAI_MANAGED_IDENTITY", ""
+            "MANAGED_IDENTITY", ""
         ).upper()
         if self.azure_managed_identity == "TRUE":
             logger.info("auth via managed indentity!")
             self.token_provider = DefaultAzureCredential()
 
         else:
-            key = os.getenv("AZURE_AI_SEARCH_KEY",None)
+            key = os.getenv("SEARCH_SERVICE_KEY",None)
             if key is None:
                 raise Exception("Key is missing for Azure AI Search!")
             self.token_provider = AzureKeyCredential(key)
@@ -54,12 +54,12 @@ class SemanticChunking:
         self.chapter_generator = ChapterGeneration()
         self.embed_client = LLMClient(service_provider=os.getenv("LLM_PROVIDER", "azure"), isAsync=True, embedding=True).get_client()
         self.index_client = AISearchClient(
-            endpoint=os.getenv("AZURE_AI_SEARCH_ENDPOINT"),
+            endpoint=os.getenv("SEARCH_SERVICE_ENDPOINT"),
             index_name=self.index_name,
             credential=self.token_provider
         )
         self.blob_urls = blob_urls
-        #self.index_client = SearchClient(endpoint=os.getenv("AZURE_AI_SEARCH_ENDPOINT"), index_name=self.index_name, credential=self.token_provider)
+        #self.index_client = SearchClient(endpoint=os.getenv("SEARCH_SERVICE_ENDPOINT"), index_name=self.index_name, credential=self.token_provider)
     async def _create_search_index(self):
         created = await self.index_client.check_and_create_index()
         if created:
@@ -71,7 +71,7 @@ class SemanticChunking:
         try:
             response = await self.embed_client.embeddings.create(
                 input=[text], 
-                model= os.getenv("AZURE_EMBEDDING_MODEL" if os.getenv("LLM_PROVIDER")=="azure" else "OPENAI_EMBEDDING_MODEL")
+                model= os.getenv("EMBEDDING_SERVICE_MODEL_NAME" if os.getenv("LLM_PROVIDER")=="azure" else "OPENAI_EMBEDDING_MODEL_NAME")
             )
             return response.data[0].embedding
         except Exception as e:

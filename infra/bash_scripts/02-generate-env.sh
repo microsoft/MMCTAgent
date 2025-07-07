@@ -49,22 +49,22 @@ fi
 
 # ---------------- Azure Speech Service ----------------
 write_comment_in_env "Azure Speech Service Configuration"
-write_env "AZURE_SPEECH_SERVICE_REGION" "$azureSpeechServiceRegion"
+write_env "SPEECH_SERVICE_REGION" "$azureSpeechServiceRegion"
 if resource_exists "$azureSpeechServiceName" "Microsoft.CognitiveServices/accounts"; then
     speech_resource_id=$(az resource show \
         --resource-group "$resourceGroup" \
         --name "$azureSpeechServiceName" \
         --resource-type "Microsoft.CognitiveServices/accounts" \
         --query "id" -o tsv)
-    write_env "AZURE_SPEECH_SERVICE_RESOURCE_ID" "$speech_resource_id"
+    write_env "SPEECH_SERVICE_RESOURCE_ID" "$speech_resource_id"
 fi
 
 # ---------------- Azure CV ----------------
 write_comment_in_env "Azure Computer Vision Configuration"
-write_env "AZURECV_ENDPOINT" ""
-write_env "AZURECV_API_VERSION" ""
-write_env "AZURECV_MANAGED_IDENTITY" "True"
-write_env "AZURECV_KEY" ""
+write_env "COMPUTER_VISION_ENDPOINT" ""
+write_env "COMPUTER_VISION_API_VERSION" ""
+write_env "MANAGED_IDENTITY" "True"
+write_env "COMPUTER_VISION_KEY" ""
 
 # ---------------- LLM Provider ----------------
 write_comment_in_env "LLM Config"
@@ -74,66 +74,57 @@ write_env "LLM_PROVIDER" "azure"
 write_comment_in_env "Azure OpenAI Configuration"
 if resource_exists "$azureOpenAIName" "Microsoft.CognitiveServices/accounts"; then
     openai_base_url="https://${azureOpenAIName}.openai.azure.com/"
-    write_env "AZURE_OPENAI_ENDPOINT" "$openai_base_url"
-    write_env "AZURE_OPENAI_DEPLOYMENT" "gpt-4o"
-    write_env "AZURE_OPENAI_MODEL" "gpt-4o"
-    write_env "AZURE_OPENAI_API_VERSION" "2024-08-01-preview"
+    write_env "LLM_ENDPOINT" "$openai_base_url"
+    write_env "LLM_DEPLOYMENT_NAME" "gpt-4o"
+    write_env "LLM_MODEL_NAME" "gpt-4o"
+    write_env "LLM_API_VERSION" "2024-08-01-preview"
+    write_env "LLM_API_KEY" ""
 
-    write_env "AZURE_OPENAI_VISION_DEPLOYMENT" "gpt-4o"
-    write_env "AZURE_OPENAI_VISION_MODEL" "gpt-4o"
-    write_env "AZURE_OPENAI_VISION_API_VERSION" "2024-08-01-preview"
+    write_env "LLM_VISION_DEPLOYMENT_NAME" "gpt-4o"
+    write_env "LLM_VISION_MODEL_NAME" "gpt-4o"
+    write_env "LLM_VISION_API_VERSION" "2024-08-01-preview"
 
-    write_env "AZURE_OPENAI_EMBEDDING_ENDPOINT" "$openai_base_url"
-    write_env "AZURE_EMBEDDING_DEPLOYMENT" "text-embedding-ada-002"
-    write_env "AZURE_EMBEDDING_API_VERSION" "2023-05-15"
-    write_env "AZURE_EMBEDDING_MODEL" "text-embedding-ada-002"
+    write_env "EMBEDDING_SERVICE_ENDPOINT" "$openai_base_url"
+    write_env "EMBEDDING_SERVICE_DEPLOYMENT_NAME" "text-embedding-ada-002"
+    write_env "EMBEDDING_SERVICE_API_VERSION" "2023-05-15"
+    write_env "EMBEDDING_SERVICE_MODEL_NAME" "text-embedding-ada-002"
+    write_env "EMBEDDING_SERVICE_API_KEY" ""
 
-    write_env "AZURE_OPENAI_STT_ENDPOINT" "$openai_base_url"
-    write_env "AZURE_OPENAI_STT_DEPLOYMENT" "whisper"
-    write_env "AZURE_OPENAI_STT_MODEL" "whisper"
-    write_env "AZURE_OPENAI_STT_API_VERSION" "2024-06-01"
-
-    write_env "AZURE_OPENAI_WHISPER_ENDPOINT" "${openai_base_url}openai/deployments/whisper/audio/translations?api-version=2024-06-01"
-    write_env "WHISPER_DEPLOYMENT" "whisper"
-    write_env "AZURE_OPENAI_MANAGED_IDENTITY" "True"
+    write_env "SPEECH_SERVICE_ENDPOINT" "$openai_base_url"
+    write_env "SPEECH_SERVICE_DEPLOYMENT_NAME" "whisper"
+    write_env "SPEECH_SERVICE_MODEL_NAME" "whisper"
+    write_env "SPEECH_SERVICE_API_VERSION" "2024-06-01"
+    write_env "SPEECH_SERVICE_KEY" ""
 else
-    write_env "AZURE_OPENAI_MANAGED_IDENTITY" "False"
+    write_env "MANAGED_IDENTITY" "False"
 fi
 
 # ---------------- OpenAI Config ----------------
 write_comment_in_env "OPENAI Config"
-write_env "OPENAI_MODEL" "gpt-4o"
-write_env "OPENAI_VISION_MODEL" "gpt-4o-mini"
+write_env "OPENAI_MODEL_NAME" "gpt-4o"
+write_env "OPENAI_VISION_MODEL_NAME" "gpt-4o-mini"
 write_env "OPENAI_API_VERSION" "2024-08-01-preview"
 write_env "OPENAI_VISION_API_VISION" "2024-08-01-preview"
 
-write_env "OPENAI_EMBEDDING_MODEL" "text-embedding-ada-002"
+write_env "OPENAI_EMBEDDING_MODEL_NAME" "text-embedding-ada-002"
 write_env "OPENAI_EMBEDDING_API_VERSION" "2023-05-15"
-write_env "OPENAI_STT_MODEL" "whisper"
-write_env "OPENAI_STT_API_VERSION" "2024-06-01"
-
-write_env "AZURE_OPENAI_KEY" ""
-write_env "AZURE_OPENAI_EMBEDDING_KEY" ""
-write_env "AZURE_OPENAI_STT_KEY" ""
-write_env "AZURE_CV_KEY" ""
-write_env "AZURE_AI_SEARCH_KEY" ""
+write_env "OPENAI_SPEECH_SERVICE_MODEL_NAME" "whisper"
+write_env "OPENAI_SPEECH_SERVICE_API_VERSION" "2024-06-01"
 
 write_env "OPENAI_API_KEY" ""
-write_env "OPENAI_STT_KEY" ""
+write_env "OPENAI_SPEECH_SERVICE_KEY" ""
 write_env "OPENAI_EMBEDDING_KEY" ""
 
 # ---------------- Azure AI Search ----------------
 write_comment_in_env "Azure AI Search"
 if resource_exists "$aiSearchServiceName" "Microsoft.Search/searchServices"; then
     ai_search_url="https://${aiSearchServiceName}.search.windows.net"
-    write_env "AZURE_AI_SEARCH_ENDPOINT" "$ai_search_url"
+    write_env "SEARCH_SERVICE_ENDPOINT" "$ai_search_url"
 else
-    write_env "AZURE_AI_SEARCH_ENDPOINT" ""
+    write_env "SEARCH_SERVICE_ENDPOINT" ""
 fi
 
-write_env "AZURE_OPENAI_MODEL_VERSION" "2024-08-06"
-write_env "AZURE_OPENAI_EMBED_MODEL" "text-embedding-ada-002"
-write_env "AZURE_SEARCH_KEY" ""
+write_env "SEARCH_SERVICE_KEY" ""
 
 # ---------------- Event Hub ----------------
 write_comment_in_env "Event Hub Configuration"

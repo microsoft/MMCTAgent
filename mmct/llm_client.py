@@ -26,19 +26,19 @@ class LLMClient:
             
     def  _initialize_openai_stt_client(self):
         if self.service_provider == "azure":
-            if os.environ.get("AZURE_OPENAI_MANAGED_IDENTITY", None) is None:
+            if os.environ.get("MANAGED_IDENTITY", None) is None:
                 raise Exception(
-                    "AZURE_OPENAI_MANAGED_IDENTITY requires boolean value for selecting authorization either with Managed Identity or API Key"
+                    "MANAGED_IDENTITY requires boolean value for selecting authorization either with Managed Identity or API Key"
                 )
                 
-            azure_endpoint=os.environ.get("AZURE_OPENAI_STT_ENDPOINT", None)
-            api_version=os.environ.get("AZURE_OPENAI_STT_API_VERSION",None)
-            deployment_name = os.environ.get("AZURE_OPENAI_STT_DEPLOYMENT",None)
+            azure_endpoint=os.environ.get("SPEECH_SERVICE_ENDPOINT", None)
+            api_version=os.environ.get("SPEECH_SERVICE_API_VERSION",None)
+            deployment_name = os.environ.get("SPEECH_SERVICE_DEPLOYMENT_NAME",None)
             if None in [azure_endpoint, deployment_name, api_version]:
                 raise Exception("Required Azure OpenAI credentials are missing for azure openai stt client!")
             
             self.azure_managed_identity = os.environ.get(
-                "AZURE_OPENAI_MANAGED_IDENTITY", ""
+                "MANAGED_IDENTITY", ""
             ).upper()
             
             if self.azure_managed_identity == "TRUE":
@@ -56,8 +56,8 @@ class LLMClient:
                                 azure_ad_token_provider=azure_ad_token_provider)
                     
             else:
-                AZURE_OPENAI_STT_KEY = os.environ.get("AZURE_OPENAI_STT_KEY", None)
-                if AZURE_OPENAI_STT_KEY is None:
+                SPEECH_SERVICE_KEY = os.environ.get("SPEECH_SERVICE_KEY", None)
+                if SPEECH_SERVICE_KEY is None:
                     raise Exception(
                         "Required Azure OpenAI API Key for initializing OpenAI STT client!"
                     )
@@ -66,16 +66,16 @@ class LLMClient:
                                 azure_endpoint=azure_endpoint,
                                 api_version=api_version,
                                 azure_deployment = deployment_name,
-                                api_key=AZURE_OPENAI_STT_KEY)
+                                api_key=SPEECH_SERVICE_KEY)
                 else:
                     return AzureOpenAI(
                                 azure_endpoint=azure_endpoint,
                                 api_version=api_version,
                                 azure_deployment = deployment_name,
-                                api_key=AZURE_OPENAI_STT_KEY)
+                                api_key=SPEECH_SERVICE_KEY)
                     
         else:
-            api_key = os.environ.get("OPENAI_STT_KEY")
+            api_key = os.environ.get("OPENAI_SPEECH_SERVICE_KEY")
             if api_key is None:
                     raise Exception(
                         "Required OpenAI API Key for initializing OpenAI STT client!"
@@ -92,18 +92,18 @@ class LLMClient:
 
     def _initialize_embedding_client(self):
         if self.service_provider == "azure":
-            if os.environ.get("AZURE_OPENAI_MANAGED_IDENTITY", None) is None:
+            if os.environ.get("MANAGED_IDENTITY", None) is None:
                 raise Exception(
-                    "AZURE_OPENAI_MANAGED_IDENTITY requires boolean value for selecting authorization either with Managed Identity or API Key"
+                    "MANAGED_IDENTITY requires boolean value for selecting authorization either with Managed Identity or API Key"
                 )
                 
-            azure_endpoint=os.environ.get("AZURE_OPENAI_EMBEDDING_ENDPOINT", None)
-            api_version=os.environ.get("AZURE_EMBEDDING_API_VERSION",None)
-            deployment_name = os.environ.get("AZURE_EMBEDDING_DEPLOYMENT",None)
+            azure_endpoint=os.environ.get("EMBEDDING_SERVICE_ENDPOINT", None)
+            api_version=os.environ.get("EMBEDDING_SERVICE_API_VERSION",None)
+            deployment_name = os.environ.get("EMBEDDING_SERVICE_DEPLOYMENT_NAME",None)
             if None in [azure_endpoint, deployment_name, api_version]:
                 raise Exception("Required Azure OpenAI credentials are missing for embedding client!")
             self.azure_managed_identity = os.environ.get(
-                "AZURE_OPENAI_MANAGED_IDENTITY", ""
+                "MANAGED_IDENTITY", ""
             ).upper()
             if self.azure_managed_identity == "TRUE":
                 azure_ad_token_provider=get_bearer_token_provider(self.credential, "https://cognitiveservices.azure.com/.default")
@@ -122,7 +122,7 @@ class LLMClient:
                                 azure_deployment = deployment_name,
                                 timeout=200)
             else:
-                AZURE_OPENAI_EMBEDDING_KEY = os.environ.get("AZURE_OPENAI_EMBEDDING_KEY", None)
+                AZURE_OPENAI_EMBEDDING_KEY = os.environ.get("EMBEDDING_SERVICE_API_KEY", None)
                 if AZURE_OPENAI_EMBEDDING_KEY is None:
                     raise Exception(
                         "Required Azure OpenAI API Key for initializing OpenAI Embedding client!"
@@ -162,9 +162,9 @@ class LLMClient:
     def _initialize_client(self):
         """Initializes either an Azure OpenAI client or an OpenAI client based on environment variables."""
         if self.service_provider == "azure":
-            if os.environ.get("AZURE_OPENAI_MANAGED_IDENTITY", None) is None:
+            if os.environ.get("MANAGED_IDENTITY", None) is None:
                 raise Exception(
-                    "AZURE_OPENAI_MANAGED_IDENTITY requires boolean value for selecting authorization either with Managed Identity or API Key"
+                    "MANAGED_IDENTITY requires boolean value for selecting authorization either with Managed Identity or API Key"
                 )
             return self._initialize_azure_client()
         else:
@@ -173,13 +173,13 @@ class LLMClient:
 
     def _initialize_azure_client(self):
         """Initializes an Azure OpenAI client."""
-        azure_endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT", None)
-        deployment_name = os.environ.get("AZURE_OPENAI_VISION_DEPLOYMENT", None)
-        api_version = os.environ.get("AZURE_OPENAI_VISION_API_VERSION", None)
+        azure_endpoint = os.environ.get("LLM_ENDPOINT", None)
+        deployment_name = os.environ.get("LLM_VISION_DEPLOYMENT_NAME", None)
+        api_version = os.environ.get("LLM_VISION_API_VERSION", None)
         if None in [azure_endpoint, deployment_name, api_version]:
             raise Exception("Required Azure OpenAI credentials are missing")
         self.azure_managed_identity = os.environ.get(
-                "AZURE_OPENAI_MANAGED_IDENTITY", ""
+                "MANAGED_IDENTITY", ""
             ).upper()
         if self.azure_managed_identity == "TRUE":
             token_provider = get_bearer_token_provider(
@@ -202,7 +202,7 @@ class LLMClient:
                     timeout=200
                 )
         else:
-            AZURE_OPENAI_GPT4V_KEY = os.environ.get("AZURE_OPENAI_KEY", None)
+            AZURE_OPENAI_GPT4V_KEY = os.environ.get("LLM_API_KEY", None)
             if AZURE_OPENAI_GPT4V_KEY is None:
                 raise Exception(
                     "Required Azure OpenAI API Key for initializing OpenAI client!"
@@ -239,18 +239,18 @@ class LLMClient:
     def _initialize_autogen_client(self):
         """Initializes an AutoGen-compatible client."""
         if self.service_provider == "azure":
-            if os.environ.get("AZURE_OPENAI_MANAGED_IDENTITY", None) is None:
+            if os.environ.get("MANAGED_IDENTITY", None) is None:
                 raise Exception(
-                    "AZURE_OPENAI_MANAGED_IDENTITY requires boolean value for selecting authorization either with Managed Identity or API Key"
+                    "MANAGED_IDENTITY requires boolean value for selecting authorization either with Managed Identity or API Key"
                 )
-            azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT", None)
-            deployment_name = os.getenv("AZURE_OPENAI_DEPLOYMENT", None)
-            model = os.getenv("AZURE_OPENAI_MODEL",None)
-            api_version = os.getenv("AZURE_OPENAI_API_VERSION", None)
+            azure_endpoint = os.getenv("LLM_ENDPOINT", None)
+            deployment_name = os.getenv("LLM_DEPLOYMENT_NAME", None)
+            model = os.getenv("LLM_MODEL_NAME",None)
+            api_version = os.getenv("LLM_API_VERSION", None)
             if None in [azure_endpoint, deployment_name, api_version, model]:
                 raise Exception("Required Azure OpenAI credentials are missing")
             self.azure_managed_identity = os.environ.get(
-                "AZURE_OPENAI_MANAGED_IDENTITY", ""
+                "MANAGED_IDENTITY", ""
             ).upper()
             if self.azure_managed_identity == "TRUE":
 
@@ -268,7 +268,7 @@ class LLMClient:
                     temperature=0
                 )
             else:
-                AZURE_OPENAI_GPT4V_KEY = os.environ.get("AZURE_OPENAI_KEY", None)
+                AZURE_OPENAI_GPT4V_KEY = os.environ.get("LLM_API_KEY", None)
                 return AzureOpenAIChatCompletionClient(
                     azure_deployment=deployment_name,
                     model=deployment_name,

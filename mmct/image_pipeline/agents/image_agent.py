@@ -124,9 +124,9 @@ class ImageAgent:
             ).get_client()
             
             self.model_name = os.getenv(
-                "AZURE_OPENAI_VISION_MODEL"
+                "LLM_VISION_MODEL_NAME"
                 if service_provider == "azure"
-                else "OPENAI_VISION_MODEL"
+                else "OPENAI_VISION_MODEL_NAME"
             )
             self.logger.info("Initialized the llm model client")
             self.tools_list = []

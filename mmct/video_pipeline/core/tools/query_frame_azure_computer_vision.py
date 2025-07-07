@@ -13,26 +13,26 @@ from datetime import datetime
 
 async def query_frames_azure_computer_vision(frames_query:Annotated[str,"search query over the frames"], video_id:Annotated[str,'video id'])->str:
         # Getting requred environment variables
-        AZURECV_ENDPOINT = os.environ.get("AZURECV_ENDPOINT")
+        AZURECV_ENDPOINT = os.environ.get("COMPUTER_VISION_ENDPOINT")
         BLOB_MANAGED_IDENTITY = os.environ.get("BLOB_MANAGED_IDENTITY") == "True"
-        AZURECV_MANAGED_IDENTITY = os.environ.get("AZURECV_MANAGED_IDENTITY") == "True"
-        AZURE_OPENAI_MANAGED_IDENTITY = os.environ.get("AZURE_OPENAI_MANAGED_IDENTITY") == "True"
+        MANAGED_IDENTITY = os.environ.get("MANAGED_IDENTITY") == "True"
+        AZURE_OPENAI_MANAGED_IDENTITY = os.environ.get("MANAGED_IDENTITY") == "True"
         AZURE_MODERATION_MANAGED_IDENTITY = os.environ.get("AZURE_MODERATION_MANAGED_IDENTITY") == "True"
         AZURECV_API_VERSION = os.environ.get("AZURECV_API_VERSION")
 
 
-        if BLOB_MANAGED_IDENTITY or AZURECV_MANAGED_IDENTITY or AZURE_OPENAI_MANAGED_IDENTITY or AZURE_MODERATION_MANAGED_IDENTITY:
+        if BLOB_MANAGED_IDENTITY or MANAGED_IDENTITY or AZURE_OPENAI_MANAGED_IDENTITY or AZURE_MODERATION_MANAGED_IDENTITY:
             credential = DefaultAzureCredential()
             token = credential.get_token("https://cognitiveservices.azure.com/.default")
-        if AZURECV_MANAGED_IDENTITY:
+        if MANAGED_IDENTITY:
             azurecv_headers = {
                 "Authorization": "Bearer "+token.token,
                 "Content-Type": "application/json"
             }
         else:
-            azurecv_key = os.environ.get("AZURECV_KEY")
+            COMPUTER_VISION_KEY = os.environ.get("COMPUTER_VISION_KEY")
             azurecv_headers = {
-                "Ocp-Apim-Subscription-Key": azurecv_key,
+                "Ocp-Apim-Subscription-Key": COMPUTER_VISION_KEY,
                 "Content-Type": "application/json"
             }
         search_url = f"{AZURECV_ENDPOINT}/computervision/retrieval/indexes/{video_id.replace('-','').replace('_','')}:queryByText?api-version={AZURECV_API_VERSION}"

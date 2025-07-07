@@ -38,9 +38,9 @@ class VideoSearch:
             response = await self.openai_client.embeddings.create(
                 input=[text],
                 model=os.getenv(
-                    "AZURE_EMBEDDING_MODEL"
+                    "EMBEDDING_SERVICE_MODEL_NAME"
                     if os.getenv("LLM_PROVIDER") == "azure"
-                    else "OPENAI_EMBEDDING_MODEL"
+                    else "OPENAI_EMBEDDING_MODEL_NAME"
                 ),
             )
             return response.data[0].embedding
@@ -85,9 +85,9 @@ class VideoSearch:
 
             response = await self.openai_client.beta.chat.completions.parse(
                 model=os.getenv(
-                    "AZURE_OPENAI_MODEL"
+                    "LLM_MODEL_NAME"
                     if os.getenv("LLM_PROVIDER") == "azure"
-                    else "OPENAI_MODEL"
+                    else "OPENAI_MODEL_NAME"
                 ),
                 messages=prompt,
                 temperature=0,
@@ -115,15 +115,15 @@ class VideoSearch:
             min_threshold = min_threshold / 100
             # setting up the environment variables and required azure clients
             AZURE_MANAGED_IDENTITY = os.environ.get(
-                "AZURE_OPENAI_MANAGED_IDENTITY", None
+                "MANAGED_IDENTITY", None
             )
-            azure_search_endpoint = os.getenv("AZURE_AI_SEARCH_ENDPOINT", None)
+            azure_search_endpoint = os.getenv("SEARCH_SERVICE_ENDPOINT", None)
             if azure_search_endpoint is None:
                 raise Exception("Azure search endpoint is missing in env!")
 
             if AZURE_MANAGED_IDENTITY is None:
                 raise Exception(
-                    "AZURE_OPENAI_MANAGED_IDENTITY requires boolean value for selecting authorization either with Managed Identity or API Key"
+                    "MANAGED_IDENTITY requires boolean value for selecting authorization either with Managed Identity or API Key"
                 )
 
             if AZURE_MANAGED_IDENTITY.upper() == "TRUE":
@@ -133,13 +133,13 @@ class VideoSearch:
                     credential=DefaultAzureCredential(),
                 )
             else:
-                azure_search_key = os.environ.get("AZURE_SEARCH_KEY", None)
-                if azure_search_key is None:
+                SEARCH_SERVICE_KEY = os.environ.get("SEARCH_SERVICE_KEY", None)
+                if SEARCH_SERVICE_KEY is None:
                     raise Exception("Azure Search Key is missing!")
                 index_client = SearchClient(
                     endpoint=azure_search_endpoint,
                     index_name=index_name,
-                    credential=AzureKeyCredential(key=azure_search_key),
+                    credential=AzureKeyCredential(key=SEARCH_SERVICE_KEY),
                 )
             query_embds = await self.generate_embeddings(text=query)
             vector_query = VectorizedQuery(vector=query_embds, fields="embeddings")

@@ -21,9 +21,9 @@ load_dotenv(find_dotenv(), override=True)
 class GPT4V:
     def __init__(self):
         self.model_name = os.getenv(
-            "AZURE_OPENAI_MODEL"
+            "LLM_MODEL_NAME"
             if os.getenv("LLM_PROVIDER") == "azure"
-            else "OPENAI_MODEL"
+            else "OPENAI_MODEL_NAME"
         )
         service_provider = os.getenv("LLM_PROVIDER", "azure")
         self.client = LLMClient(service_provider=service_provider, isAsync=True).get_client()
