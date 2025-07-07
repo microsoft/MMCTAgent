@@ -1,5 +1,5 @@
 # **MMCT - Image Pipeline**
-
+[![](/docs/multimedia/imageAgent.webp)](https://arxiv.org/pdf/2405.18358)
 ## **Overview**
 
 Image Pipeline consists of Image Agent which is is built on top of the **Multi-Modal Critical Thinking (MMCT)** ([arxiv.org/abs/2405.18358](https://arxiv.org/abs/2405.18358)) architecture, which leverages two collaborative agents:
