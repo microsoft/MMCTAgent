@@ -1,6 +1,5 @@
 # importing the required files
 import asyncio
-import os
 from enum import Enum
 from typing_extensions import Annotated, List
 from autogen_agentchat.agents import AssistantAgent
@@ -16,9 +15,13 @@ from mmct.image_pipeline.prompts import (
     get_planner_system_prompt,
     get_critic_system_prompt,
 )
-from mmct.llm_client import LLMClient
+from mmct.providers.factory import provider_factory
+from mmct.config.settings import MMCTConfig
+from mmct.exceptions import ProviderException, ConfigurationException
+from mmct.utils.logging_config import LoggingConfig
+from mmct.utils.error_handler import handle_exceptions
 from mmct.image_pipeline.prompts import IMAGE_AGENT_SYSTEM_PROMPT, ImageAgentResponse
-from mmct.custom_logger import log_manager
+from loguru import logger
 from dotenv import load_dotenv, find_dotenv
 load_dotenv(find_dotenv(),override=True)
 
@@ -102,19 +105,46 @@ class ImageAgent:
         disable_console_log: Annotated[bool, "boolean flag to disable console logs"] = False
     ):
         try:
+            # Initialize configuration
+            self.config = MMCTConfig()
+            
+            # Setup logging
+            LoggingConfig.setup_logging(
+                level=self.config.logging.level,
+                log_file=self.config.logging.log_file if self.config.logging.enable_file_logging else None,
+                enable_json=self.config.logging.enable_json
+            )
+            
+            # Initialize logger for this instance
+            self.logger = logger
+            
+            # Initialize providers
+            self.llm_provider = provider_factory.create_llm_provider(
+                self.config.llm.provider,
+                self.config.llm.model_dump()
+            )
+            self.vision_provider = provider_factory.create_vision_provider(
+                self.config.llm.provider,  # Use same provider as LLM for vision
+                self.config.llm.model_dump()
+            )
+            
+            # Set instance attributes
             self.image_path = image_path
             self.query = query
             self.use_critic_agent = use_critic_agent
             self.stream = stream
             self.tools_enum = tools
             self.disable_console_log = disable_console_log
-            if disable_console_log==False:
-                log_manager.enable_console()
-            else:
-                log_manager.disable_console()
-            self.logger = log_manager.get_logger()
             
-            service_provider = os.getenv("LLM_PROVIDER", "azure")
+            # Configure console logging
+            if not disable_console_log:
+                logger.enable("mmct")
+            else:
+                logger.disable("mmct")
+            
+            # Initialize client components for autogen compatibility
+            from mmct.llm_client import LLMClient
+            service_provider = self.config.llm.provider
             self.model_client = LLMClient(
                 autogen=True, service_provider=service_provider
             ).get_client()
@@ -123,33 +153,45 @@ class ImageAgent:
                 service_provider=service_provider, isAsync=True
             ).get_client()
             
-            self.model_name = os.getenv(
-                "LLM_VISION_MODEL_NAME"
-                if service_provider == "azure"
-                else "OPENAI_VISION_MODEL_NAME"
-            )
-            self.logger.info("Initialized the llm model client")
+            self.model_name = self.config.llm.model_name
+            logger.info("Initialized ImageAgent with provider system")
+            
             self.tools_list = []
             self.planner_agent = None
             self.critic_agent = None
             self.team = None
+            
         except Exception as e:
-            self.logger.exception(f"Exception occured while constructing the Image Agent: {e}")
-            raise
+            logger.exception(f"Exception occurred while constructing the Image Agent: {e}")
+            raise ConfigurationException(f"Failed to initialize ImageAgent: {e}")
 
+    @handle_exceptions(retries=2)
     async def _initialize_tools(self):
+        """
+        Initialize the tools for Image Agent.
+        
+        Raises:
+            ProviderException: If tool initialization fails
+        """
         try:
-            self.logger.info("Initializing the tools for Image Agent")
+            logger.info("Initializing the tools for Image Agent")
             self.tools = [tool.value[0] for tool in self.tools_enum]
             self.tools_str = [tool.name for tool in self.tools_enum]
-            self.logger.info("Successfully initialized tools for Image Agent")
+            logger.info("Successfully initialized tools for Image Agent")
         except Exception as e:
-            self.logger.exception(f"Exception occured while initializing the tools for Image Agent: {e}")
-            raise
+            logger.exception(f"Exception occurred while initializing the tools for Image Agent: {e}")
+            raise ProviderException(f"Tool initialization failed: {e}", "TOOL_INIT_FAILED")
 
+    @handle_exceptions(retries=2)
     async def _initialize_agents(self):
+        """
+        Initialize the agents for Image Agent.
+        
+        Raises:
+            ProviderException: If agent initialization fails
+        """
         try:
-            self.logger.info("Retrieving the Planner Agent's system prompt")
+            logger.info("Retrieving the Planner Agent's system prompt")
             planner_prompt = await get_planner_system_prompt(
                 tools_string=self.tools_str,
                 criticFlag=self.use_critic_agent,
@@ -163,14 +205,14 @@ class ImageAgent:
                 tools=self.tools,
                 reflect_on_tool_use=True,
             )
-            self.logger.info("Initialized the Planner Agent")
+            logger.info("Initialized the Planner Agent")
 
             termination = TextMentionTermination("TERMINATE") | MaxMessageTermination(
                 20
             )  # Termination condition
 
             if self.use_critic_agent:
-                self.logger.info("Retrieving the Critic Agent's System Prompt")
+                logger.info("Retrieving the Critic Agent's System Prompt")
                 critic_prompt = await get_critic_system_prompt(includeMetaGuidelines=True)
 
                 self.critic_agent = AssistantAgent(
@@ -181,7 +223,7 @@ class ImageAgent:
                     tools=[criticTool],
                     reflect_on_tool_use=False,
                 )
-                self.logger.info("Initialized the Critic Agent")
+                logger.info("Initialized the Critic Agent")
 
                 selector_prompt = """Select an agent to perform task.
 
@@ -202,24 +244,31 @@ class ImageAgent:
                     allow_repeated_speaker=True,
                     selector_prompt=selector_prompt,
                 )
-                self.logger.info("Initialized the both Planner and Critic Agent under SelectorGroupChat")
+                logger.info("Initialized the both Planner and Critic Agent under SelectorGroupChat")
             else:
                 self.team = RoundRobinGroupChat(
                     participants=[self.planner_agent], termination_condition=termination
                 )
-                self.logger.info("Initialized the Planner Agent under RoundRobinGroupChat")
+                logger.info("Initialized the Planner Agent under RoundRobinGroupChat")
         except Exception as e:
-            self.logger.exception("Exception occured while initializing the Agents for Image Agent.")
-            raise
+            logger.exception("Exception occurred while initializing the Agents for Image Agent.")
+            raise ProviderException(f"Agent initialization failed: {e}", "AGENT_INIT_FAILED")
 
+    @handle_exceptions(retries=2)
     async def setup(self):
+        """
+        Setup the ImageAgent by initializing tools and agents.
+        
+        Raises:
+            ProviderException: If setup fails
+        """
         try:
             await self._initialize_tools()
             await self._initialize_agents()
-            self.logger.info("Setup Successfully Completed!")
+            logger.info("Setup Successfully Completed!")
         except Exception as e:
-            self.logger.exception(f"Exception occured while performing setup")
-            raise
+            logger.exception(f"Exception occurred while performing setup")
+            raise ProviderException(f"Setup failed: {e}", "SETUP_FAILED")
 
     async def calculate_total_tokens(self, messages) -> dict:
         """
@@ -247,11 +296,21 @@ class ImageAgent:
             self.logger.exception(f"Exception occured while computing the total token count: {e}")
             raise
 
+    @handle_exceptions(retries=2)
     async def run(self):
+        """
+        Execute the ImageAgent workflow.
+        
+        Returns:
+            Dictionary containing result and token usage
+            
+        Raises:
+            ProviderException: If execution fails
+        """
         try:
             await self.setup()
             task = f"query:{self.query}, image path:{self.image_path}."
-            self.logger.info("Initializing the MMCT Image Agentic Flow")
+            logger.info("Initializing the MMCT Image Agentic Flow")
             if self.use_critic_agent:
                 task += "\nAlways criticize the final response if planner asks for review and provide feedback."
                 result = await self.team.run(task=task)
@@ -259,29 +318,49 @@ class ImageAgent:
                 result = await self.team.run(task=task)
 
             tokens = await self.calculate_total_tokens(result.messages)
-            self.logger.info(f"Accumulated the response from the Image Agent:\n{result.messages[-1]}")
+            logger.info(f"Accumulated the response from the Image Agent: {result.messages[-1]}")
             return {"result": result.messages[-1].content, "tokens": tokens}
         except Exception as e:
-            self.logger.exception(f"Error occured while executing the MMCT Image Agentic Flow: {e}")
-            raise
+            logger.exception(f"Error occurred while executing the MMCT Image Agentic Flow: {e}")
+            raise ProviderException(f"ImageAgent execution failed: {e}", "AGENT_EXECUTION_FAILED")
 
+    @handle_exceptions(retries=2)
     async def run_stream(self):
+        """
+        Execute the ImageAgent workflow in streaming mode.
+        
+        Returns:
+            Async generator for streaming responses
+            
+        Raises:
+            ProviderException: If execution fails
+        """
         try:
             await self.setup()
             task = f"query:{self.query}, image path:{self.image_path}."
-            self.logger.info("Initializing the MMCT Image Agentic Flow")
+            logger.info("Initializing the MMCT Image Agentic Flow")
             if self.use_critic_agent:
                 task += "\nAlways criticize the final response if planner asks for review and provide feedback."
                 return self.team.run_stream(task=task)
             else:
                 return self.team.run_stream(task=task)
         except Exception as e:
-            self.logger.exception(f"Exception occured while streaming the MMCT Image Agentic Flow: {e}")
-            raise
+            logger.exception(f"Exception occurred while streaming the MMCT Image Agentic Flow: {e}")
+            raise ProviderException(f"ImageAgent streaming failed: {e}", "AGENT_STREAMING_FAILED")
     
+    @handle_exceptions(retries=2)
     async def _format_output(self):
+        """
+        Format the output using the LLM provider.
+        
+        Returns:
+            Formatted ImageAgentResponse
+            
+        Raises:
+            ProviderException: If output formatting fails
+        """
         try:    
-            self.logger.info("Structuring the AutoGen Output")
+            logger.info("Structuring the AutoGen Output")
             messages = [
                 {"role": "system", "content": IMAGE_AGENT_SYSTEM_PROMPT},
                 {
@@ -293,20 +372,29 @@ class ImageAgent:
                 },
             ]
 
-            response = await self.openai_client.beta.chat.completions.parse(
-                model=self.model_name,
-                temperature=0,
+            # Use the provider system for LLM completion
+            response = await self.llm_provider.chat_completion(
                 messages=messages,
-                response_format=ImageAgentResponse,
+                temperature=self.config.llm.temperature,
+                response_format=ImageAgentResponse
             )
-            response_content: ImageAgentResponse = response.choices[0].message.parsed
 
-            return response_content
+            return response
         except Exception as e:
-            self.logger.exception(f"Exception occured while structuring the output: {e}")
-            raise 
+            logger.exception(f"Exception occurred while structuring the output: {e}")
+            raise ProviderException(f"Output formatting failed: {e}", "OUTPUT_FORMAT_FAILED") 
         
+    @handle_exceptions(retries=2)
     async def __call__(self):
+        """
+        Main execution method for the ImageAgent.
+        
+        Returns:
+            Formatted ImageAgentResponse
+            
+        Raises:
+            ProviderException: If execution fails
+        """
         try:
             if self.stream:
                 response_generator = await self.run_stream()
@@ -337,8 +425,8 @@ class ImageAgent:
                 self.result = result
             return await self._format_output()
         except Exception as e:
-            self.logger.exception(f"Exception occured while executing the MMCT Image Agentic Flow.")
-            raise
+            logger.exception(f"Exception occurred while executing the MMCT Image Agentic Flow.")
+            raise ProviderException(f"ImageAgent execution failed: {e}", "AGENT_CALL_FAILED")
 
 if __name__ == "__main__":
     image_path = r"C:\Users\v-amanpatkar\Downloads\menu.png"

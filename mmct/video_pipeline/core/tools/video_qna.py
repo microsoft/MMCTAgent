@@ -224,6 +224,8 @@ async def video_qna(
     ] = True,
     use_azure_cv_tool: Annotated[bool, "whether to use azure cv service or not"] = True,
     stream: Annotated[bool, "Set to True to return the response as a stream."] = False,
+    llm_provider=None,
+    vision_provider=None
 ):
     """
     Answers a user query based on the content of a specified video.

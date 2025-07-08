@@ -24,6 +24,18 @@ class VideoSearch:
         service_provider = os.getenv("LLM_PROVIDER", "azure")
         self.openai_client = LLMClient(service_provider=service_provider, isAsync=True).get_client()
 
+    def _get_credential(self):
+        """Get Azure credential, trying CLI first, then DefaultAzureCredential."""
+        try:
+            from azure.identity import AzureCliCredential
+            # Try Azure CLI credential first
+            cli_credential = AzureCliCredential()
+            # Test if CLI credential works by getting a token
+            cli_credential.get_token("https://search.azure.com/.default")
+            return cli_credential
+        except Exception:
+            return DefaultAzureCredential()
+
     async def generate_embeddings(self, text: str):
         """Function to generate embeddings for the given text
 
@@ -127,10 +139,13 @@ class VideoSearch:
                 )
 
             if AZURE_MANAGED_IDENTITY.upper() == "TRUE":
+                # Use Azure CLI credential if available, fallback to DefaultAzureCredential
+                credential = self._get_credential()
+                    
                 index_client = SearchClient(
                     endpoint=azure_search_endpoint,
                     index_name=index_name,
-                    credential=DefaultAzureCredential(),
+                    credential=credential,
                 )
             else:
                 SEARCH_SERVICE_KEY = os.environ.get("SEARCH_SERVICE_KEY", None)
@@ -244,6 +259,7 @@ async def video_search(
     query: Annotated[str, "query of which video id needs to fetch"],
     index_name: Annotated[str, "ai search index name"],
     top_n: Annotated[int, "n video_id retreivel"] = 1,
+    search_provider=None
 ):
     """
     This tool returns the video id of ingested video corresponds to the query

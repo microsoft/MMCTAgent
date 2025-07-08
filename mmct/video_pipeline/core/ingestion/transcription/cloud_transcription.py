@@ -42,7 +42,10 @@ class CloudTranscription(Transcription):
 
     async def detect_language(self):
         try:
-            token = await DefaultAzureCredential().get_token(
+            # Use Azure CLI credential first, then fallback to DefaultAzureCredential
+            credential = await self._get_credential()
+                
+            token = await credential.get_token(
                 "https://cognitiveservices.azure.com/.default"
             )
             token = token.token
@@ -84,10 +87,26 @@ class CloudTranscription(Transcription):
             logger.exception(f"Error while detection language, Error:{e}")
             raise
 
+    async def _get_credential(self):
+        """Get Azure credential, trying CLI first, then DefaultAzureCredential."""
+        try:
+            from azure.identity.aio import AzureCliCredential
+            # Try Azure CLI credential first
+            cli_credential = AzureCliCredential()
+            # Test if CLI credential works by getting a token
+            await cli_credential.get_token("https://cognitiveservices.azure.com/.default")
+            return cli_credential
+        except Exception:
+            from azure.identity.aio import DefaultAzureCredential
+            return DefaultAzureCredential()
+
     async def get_transcript(self):
         try:
             result = []
-            async with DefaultAzureCredential() as credential:
+            # Use Azure CLI credential first, then fallback to DefaultAzureCredential
+            credential = await self._get_credential()
+                
+            async with credential:
                 token = await credential.get_token(
                     "https://cognitiveservices.azure.com/.default"
                 )
@@ -97,7 +116,8 @@ class CloudTranscription(Transcription):
             speech_config = speechsdk.SpeechConfig(
                 region=os.getenv("SPEECH_SERVICE_REGION"), auth_token=auth_token
             )
-            logger.info("Speech Config initialized")
+            logger.info(f"Speech Config initialized with region: {os.getenv('SPEECH_SERVICE_REGION')}")
+            logger.info(f"Using resource ID: {resource_id}")
             if self.source_language == None:
                 lang = await self.detect_language()
                 self.source_language["lang-code"] = (
@@ -109,6 +129,13 @@ class CloudTranscription(Transcription):
             speech_config.speech_recognition_language = self.source_language[
                 "lang-code"
             ]
+            # Check if audio file exists
+            if not os.path.exists(self.audio_path):
+                raise FileNotFoundError(f"Audio file not found: {self.audio_path}")
+            
+            file_size = os.path.getsize(self.audio_path)
+            logger.info(f"Audio file path: {self.audio_path}, size: {file_size} bytes")
+            
             audio_config = speechsdk.audio.AudioConfig(filename=self.audio_path)
 
             transcriber = speechsdk.transcription.ConversationTranscriber(
@@ -176,6 +203,11 @@ class CloudTranscription(Transcription):
             # 9) Clean shutdown
             stop_future = transcriber.stop_transcribing_async()
             stop_future.get()
+            
+            logger.info(f"Transcription completed with {len(result)} segments")
+            if not result:
+                logger.warning("No transcription results obtained!")
+            
             return result
 
         except Exception as e:

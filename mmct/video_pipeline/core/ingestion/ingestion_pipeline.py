@@ -4,9 +4,7 @@ from typing import Optional, Annotated
 import os
 from loguru import logger
 import gc
-from MMCTAgent.mmct.video_pipeline.core.ingestion.transcription.cloud_transcription import (
-    CloudTranscription,
-)
+from .transcription.cloud_transcription import CloudTranscription
 from mmct.video_pipeline.core.ingestion.transcription.whisper_transcription import (
     WhisperTranscription,
 )

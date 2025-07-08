@@ -114,7 +114,7 @@ async def query_gpt4_vision(
             try:
                 logger.info("Initiating the call to query GPT 4 vision")
                 response =  await openai_client.chat.completions.create(
-                        model=os.getenv("LLM_VISION_MODEL_NAME" if os.getenv("LLM_PROVIDER")=="azure" else "OPENAI_VISION_MODEL_NAME"),
+                        model=os.getenv("LLM_VISION_DEPLOYMENT_NAME" if os.getenv("LLM_PROVIDER")=="azure" else "OPENAI_VISION_MODEL_NAME"),
                         temperature=payload["temperature"],
                         messages=payload['messages'],
                         top_p=payload['top_p'],

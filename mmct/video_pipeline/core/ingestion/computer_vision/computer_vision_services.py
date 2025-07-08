@@ -26,7 +26,9 @@ class ComputerVisionService:
             "MANAGED_IDENTITY", ""
         ).upper()
         if self.azure_managed_identity == "TRUE":
-            token_provider = DefaultAzureCredential()
+            # Use Azure CLI credential if available, fallback to DefaultAzureCredential
+            token_provider = self._get_credential()
+                
             token = token_provider.get_token(
                 "https://cognitiveservices.azure.com/.default"
             ).token
@@ -41,6 +43,19 @@ class ComputerVisionService:
         self.url =  (
             f"{self.AZURECV_ENDPOINT}/computervision/retrieval/indexes/{self.video_id[:16].replace('_','').replace('-','')}"
         )
+    
+    def _get_credential(self):
+        """Get Azure credential, trying CLI first, then DefaultAzureCredential."""
+        try:
+            from azure.identity import AzureCliCredential
+            # Try Azure CLI credential first
+            cli_credential = AzureCliCredential()
+            # Test if CLI credential works by getting a token
+            cli_credential.get_token("https://cognitiveservices.azure.com/.default")
+            return cli_credential
+        except Exception:
+            from azure.identity import DefaultAzureCredential
+            return DefaultAzureCredential()
         
     async def create_index(self):
         request_body = {

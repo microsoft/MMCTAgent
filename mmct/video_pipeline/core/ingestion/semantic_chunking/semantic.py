@@ -35,7 +35,8 @@ class SemanticChunking:
         ).upper()
         if self.azure_managed_identity == "TRUE":
             logger.info("auth via managed indentity!")
-            self.token_provider = DefaultAzureCredential()
+            # Use Azure CLI credential if available, fallback to DefaultAzureCredential
+            self.token_provider = self._get_credential()
 
         else:
             key = os.getenv("SEARCH_SERVICE_KEY",None)
@@ -46,6 +47,9 @@ class SemanticChunking:
         self.chapter_responses = []
         self.chapter_response_strings = []
         self.chapter_transcripts = []
+        self.clusters = []
+        self.frames_per_cluster = []
+        self.species_data = {'species': 'None', 'Variety_of_species': 'None'}
         self.upload_doc = []
         self.transcript = transcript
         self.base64Frames = base64Frames
@@ -67,6 +71,19 @@ class SemanticChunking:
         else:
             logger.info(f"Index {self.index_name} already exists.")
     
+    def _get_credential(self):
+        """Get Azure credential, trying CLI first, then DefaultAzureCredential."""
+        try:
+            from azure.identity import AzureCliCredential
+            # Try Azure CLI credential first
+            cli_credential = AzureCliCredential()
+            # Test if CLI credential works by getting a token
+            cli_credential.get_token("https://search.azure.com/.default")
+            return cli_credential
+        except Exception:
+            from azure.identity import DefaultAzureCredential
+            return DefaultAzureCredential()
+    
     async def _create_embedding_normal(self,text:str) -> List[float]:
         try:
             response = await self.embed_client.embeddings.create(
@@ -83,7 +100,9 @@ class SemanticChunking:
         if existing:
             return True
         
+        logger.info(f"Original transcript before processing: {self.transcript[:500]}...")
         self.transcript = await process_transcript(srt_text=self.transcript) #Parses an SRT transcript, removes redundant chunks (e.g., "Music" segments), and performs semantic chunking based on content similarity.
+        logger.info(f"Transcript after process_transcript: {self.transcript[:500]}...")
         self.transcript = await add_empty_intervals(transcript_text=self.transcript)
         
         titled_transcript = "\nVideo Transcript: " + self.transcript
@@ -92,6 +111,11 @@ class SemanticChunking:
         logger.info(f"Clusters:{self.clusters}")
         if not self.clusters:
             warnings.warn("Formatted Transcript is Empty.", RuntimeWarning)
+            logger.error("No clusters generated from transcript - this will result in no documents to index!")
+            # Initialize empty attributes to prevent AttributeError
+            self.frames_per_cluster = []
+            self.species_data = {'species': 'None', 'Variety_of_species': 'None'}
+            return False
         time_differences = await calculate_time_differences(self.clusters,1)
         
         self.frames_per_cluster = await fetch_frames_based_on_counts(time_differences, self.base64Frames, 1)
@@ -103,6 +127,10 @@ class SemanticChunking:
         
         
     async def _create_chapters(self):
+        if not self.clusters or not self.frames_per_cluster:
+            logger.warning("No clusters or frames available for chapter creation")
+            return
+            
         for idx, (seg, fr) in enumerate(zip(self.clusters, self.frames_per_cluster)):
             attempts = 0
             max_attempts = 3
@@ -150,6 +178,7 @@ class SemanticChunking:
         url_info = f'BLOB={video_blob_url}\nYT_URL={youtube_url}'
         doc_objects: List[AISearchDocument] = [] 
         current_time = datetime.now()
+        logger.info(f"Creating documents from {len(self.chapter_responses)} chapters")
         for chapter_response, chapter_transcript in zip(self.chapter_responses, self.chapter_transcripts):
             chapter_content_str = chapter_response.__str__(transcript=chapter_transcript)
             obj = AISearchDocument(
@@ -175,6 +204,11 @@ class SemanticChunking:
                 embeddings=await self._create_embedding_normal(chapter_content_str)
             )
             doc_objects.append(obj)
+            
+        logger.info(f"Generated {len(doc_objects)} documents to upload")
+        if not doc_objects:
+            logger.error("No documents created - cannot upload to search index!")
+            return
             
         await self.index_client.upload_documents(documents=[doc.model_dump() for doc in doc_objects])
         

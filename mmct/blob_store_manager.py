@@ -26,7 +26,9 @@ class BlobStorageManager:
     def __init__(self, account_url: str = None):
         # Initialize credential and transport with limited connection pool
         try:
-            self.credential = DefaultAzureCredential()
+            # Use Azure CLI credential if available, fallback to DefaultAzureCredential
+            self.credential = self._get_credential()
+                
             self.service_client = BlobServiceClient(
                 account_url or os.getenv("BLOB_ACCOUNT_URL"),
                 credential=self.credential,
@@ -35,6 +37,33 @@ class BlobStorageManager:
         except Exception as e:
             logger.exception(f"Exception occured while creating the blob service client: {e}")
             raise
+    
+    def _get_credential(self):
+        """Get Azure credential, trying CLI first, then DefaultAzureCredential."""
+        try:
+            from azure.identity.aio import AzureCliCredential
+            # Try Azure CLI credential first
+            credential = AzureCliCredential()
+            # Test if CLI credential works by getting a token
+            import asyncio
+            async def test_credential():
+                try:
+                    await credential.get_token("https://cognitiveservices.azure.com/.default")
+                    return True
+                except Exception:
+                    return False
+            
+            # Run the test synchronously 
+            if asyncio.run(test_credential()):
+                logger.info("Using Azure CLI credential for Blob Storage")
+                return credential
+            else:
+                raise Exception("Azure CLI credential test failed")
+        except Exception:
+            from azure.identity.aio import DefaultAzureCredential
+            credential = DefaultAzureCredential()
+            logger.info("Using DefaultAzureCredential for Blob Storage")
+            return credential
         
     def get_blob_url(self, container: str, blob_name: str) -> str:
         """

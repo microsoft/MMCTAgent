@@ -18,6 +18,19 @@ from dotenv import load_dotenv, find_dotenv
 load_dotenv(find_dotenv(), override=True)
 
 
+def _get_credential():
+    """Get Azure credential, trying CLI first, then DefaultAzureCredential."""
+    try:
+        from azure.identity import AzureCliCredential
+        # Try Azure CLI credential first
+        cli_credential = AzureCliCredential()
+        # Test if CLI credential works by getting a token
+        cli_credential.get_token("https://storage.azure.com/.default")
+        return cli_credential
+    except Exception:
+        return DefaultAzureCredential()
+
+
 async def load_images(
     file_paths, valid_extensions={".jpg", ".jpeg", ".png", ".bmp", ".gif"}
 ):
@@ -47,8 +60,12 @@ async def load_images(
 
 async def download_blobs(blob_names, output_dir):
     container_name = os.getenv("FRAMES_CONTAINER_NAME")
+    
+    # Use Azure CLI credential if available, fallback to DefaultAzureCredential
+    credential = _get_credential()
+        
     blob_service_client = AsyncBlobServiceClient(
-        os.getenv("BLOB_ACCOUNT_URL"), DefaultAzureCredential()
+        os.getenv("BLOB_ACCOUNT_URL"), credential
     )
     container_client = blob_service_client.get_container_client(container_name)
 
@@ -161,8 +178,11 @@ async def load_required_files(session_id):
         # frames_blob_name = f"frames_{session_id}.txt"
         summary_blob_name = f"{session_id}.json"
 
+        # Use Azure CLI credential if available, fallback to DefaultAzureCredential
+        credential = _get_credential()
+            
         blob_service_client = BlobServiceClient(
-            os.getenv("BLOB_ACCOUNT_URL"), DefaultAzureCredential()
+            os.getenv("BLOB_ACCOUNT_URL"), credential
         )
         # save_content(
         #     container_name=os.getenv("TRANSCRIPT_CONTAINER_NAME"),
@@ -214,8 +234,11 @@ async def file_upload_to_blob(
 ) -> str:
     """Asynchronously uploads a file to Azure Blob Storage."""
     try:
+        # Use Azure CLI credential if available, fallback to DefaultAzureCredential
+        credential = _get_credential()
+            
         blob_service_client = AsyncBlobServiceClient(
-            os.getenv("BLOB_ACCOUNT_URL"), credential=DefaultAzureCredential()
+            os.getenv("BLOB_ACCOUNT_URL"), credential=credential
         )
         blob_client = blob_service_client.get_blob_client(
             container=container_name, blob=blob_file_name
