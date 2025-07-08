@@ -92,11 +92,60 @@ Published on **arXiv** – [arxiv.org/abs/2405.18358](https://arxiv.org/abs/2405
 
 ## **Table of Contents**
 
+- [Provider System](#provider-system)
 - [Getting Started](#getting-started)
 - [Installation](#installation)
 - [Prerequisites](#prerequisites)
+- [Configuration](#configuration)
 - [Usage](#usage)
 - [Project Structure](#project-structure)
+
+---
+
+## **Provider System**
+
+### Multi-Cloud & Vendor-Agnostic Architecture
+
+MMCTAgent now features a **modular provider system** that allows you to seamlessly switch between different cloud providers and AI services without changing your application code. This makes the framework truly **vendor-agnostic** and suitable for various deployment scenarios.
+
+#### Supported Providers
+
+| Service Type | Supported Providers | Use Cases |
+|--------------|--------------------|-----------|
+| **LLM** | Azure OpenAI, OpenAI | Text generation, chat completion |
+| **Search** | Azure AI Search, Elasticsearch | Document search and retrieval |
+| **Vision** | Azure Computer Vision, OpenAI Vision | Image analysis, object detection |
+| **Transcription** | Azure Speech Services, OpenAI Whisper | Audio-to-text conversion |
+| **Storage** | Azure Blob Storage, Local Storage | File storage and management |
+
+#### Key Benefits
+
+- **🔄 Vendor Independence**: Switch between Azure, OpenAI, and other providers
+- **🛡️ Enhanced Security**: Built-in support for Managed Identity and Key Vault
+- **⚙️ Flexible Configuration**: Environment-based or programmatic configuration
+- **🔧 Easy Migration**: Backward compatibility with existing configurations
+- **📊 Centralized Management**: Single configuration point for all services
+
+#### Quick Provider Configuration
+
+```bash
+# Azure-first setup
+LLM_PROVIDER=azure
+SEARCH_PROVIDER=azure_ai_search
+VISION_PROVIDER=azure
+
+# OpenAI-first setup  
+LLM_PROVIDER=openai
+VISION_PROVIDER=openai
+TRANSCRIPTION_PROVIDER=openai
+
+# Hybrid setup
+LLM_PROVIDER=azure
+SEARCH_PROVIDER=elasticsearch
+VISION_PROVIDER=openai
+```
+
+For detailed configuration instructions, see our [Provider Configuration Guide](docs/PROVIDERS.md).
 
 ---
 
@@ -115,7 +164,8 @@ To get started with this repository:
     - For Linux Environment:
 
     ```bash
-    apt-get update && apt-get install ffmpeg libsm6 libxext6  -y
+    sudo apt-get update
+    sudo apt-get install ffmpeg libsm6 libxext6  -y
     ```
 
     - For Windows:
@@ -174,6 +224,104 @@ Below are the Azure Resources that are required to execute this repository. You 
 | Application Insights [Optional]          | [Document](https://learn.microsoft.com/en-us/azure/azure-monitor/app/app-insights-overview)        | N/A                                |
 
 > Note: If you want to utilize the Microsoft Azure Intra Id Access then you can assign the above corresponding roles for the each resource. Otherwise you can use the API Key or Connection String approach to utilize the resources.
+
+## **Configuration**
+
+### Environment Setup
+
+MMCTAgent uses a flexible configuration system that supports multiple cloud providers. Choose your configuration method:
+
+#### Quick Start - Copy Environment Template
+
+```bash
+# For development
+cp config/environments/development.env .env
+
+# For production
+cp config/environments/production.env .env
+```
+
+Then edit `.env` with your specific values.
+
+#### Provider Configuration Examples
+
+**Azure-First Setup:**
+```bash
+# LLM Configuration
+LLM_PROVIDER=azure
+LLM_ENDPOINT=https://your-resource.openai.azure.com/
+LLM_DEPLOYMENT_NAME=gpt-4o
+LLM_MODEL_NAME=gpt-4o
+LLM_USE_MANAGED_IDENTITY=true
+
+# Search Configuration
+SEARCH_PROVIDER=azure_ai_search
+SEARCH_ENDPOINT=https://your-search.search.windows.net
+SEARCH_USE_MANAGED_IDENTITY=true
+SEARCH_INDEX_NAME=your-index-name
+
+# Storage Configuration
+STORAGE_PROVIDER=azure_blob
+STORAGE_ACCOUNT_NAME=your-storage-account
+STORAGE_USE_MANAGED_IDENTITY=true
+```
+
+**OpenAI Setup:**
+```bash
+# LLM Configuration
+LLM_PROVIDER=openai
+LLM_ENDPOINT=https://api.openai.com
+LLM_MODEL_NAME=gpt-4o
+OPENAI_API_KEY=your-openai-api-key
+
+# Vision Configuration
+VISION_PROVIDER=openai
+OPENAI_VISION_MODEL=gpt-4o
+
+# Transcription Configuration
+TRANSCRIPTION_PROVIDER=openai
+OPENAI_WHISPER_MODEL=whisper-1
+```
+
+**Hybrid Setup:**
+```bash
+# Use Azure for LLM
+LLM_PROVIDER=azure
+LLM_ENDPOINT=https://your-resource.openai.azure.com/
+
+# Use OpenAI for vision
+VISION_PROVIDER=openai
+OPENAI_API_KEY=your-openai-key
+
+# Use Elasticsearch for search
+SEARCH_PROVIDER=elasticsearch
+ELASTICSEARCH_ENDPOINT=https://your-elasticsearch.com
+```
+
+### Security Configuration
+
+#### Managed Identity (Recommended for Azure)
+```bash
+LLM_USE_MANAGED_IDENTITY=true
+SEARCH_USE_MANAGED_IDENTITY=true
+STORAGE_USE_MANAGED_IDENTITY=true
+```
+
+#### Azure Key Vault (Production)
+```bash
+ENABLE_SECRETS_MANAGER=true
+KEYVAULT_URL=https://your-keyvault.vault.azure.net/
+```
+
+### Logging Configuration
+```bash
+LOG_LEVEL=INFO
+LOG_ENABLE_FILE=true
+LOG_ENABLE_JSON=false
+LOG_MAX_FILE_SIZE=10 MB
+```
+
+📖 **For comprehensive configuration options, see our [Provider Configuration Guide](docs/PROVIDERS.md)**
 
 ## **Usage**
 
