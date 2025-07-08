@@ -1,13 +1,16 @@
+operatingSystem:
+  windows: false
+
 deployInfra:
   enabled: false
-  storageAccount: false
+  storageAccount: true
   aiSearchService: true
-  azureSpeechService: false
-  containerRegistry: false
-  appServicePremiumPlan: false
-  appServiceBasicPlan: false
-  eventHubService: false
-  azureOpenAIService: false
+  azureSpeechService: true
+  containerRegistry: true
+  appServicePremiumPlan: true
+  appServiceBasicPlan: true
+  eventHubService: true
+  azureOpenAIService: true
 
 envCreation:
   enabled: false
@@ -16,12 +19,12 @@ midentityCreation:
   enabled: false
 
 buildAndPushImagesToACR:
-  enabled: false
-  buildMainApp: false
-  buildIngestionConsumer: false
+  enabled: true
+  buildMainApp: true
+  buildIngestionConsumer: true
 
 deployAppService:
   enabled: false
 
 deployContainerApps:
-  enabled: true
+  enabled: false

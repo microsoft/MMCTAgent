@@ -4,13 +4,6 @@ set -e
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_FILE="$(realpath "$script_dir/../infra_config.yaml")"
 
-if [[ ! -f "$CONFIG_FILE" ]]; then
-    echo "❌ Config file not found: $CONFIG_FILE"
-    exit 1
-else
-    echo "✅ Config file found!"
-fi
-
 get_yaml_value() {
     python -c "import yaml, sys; print(yaml.safe_load(sys.stdin.read())$1)" < "$CONFIG_FILE"
 }

@@ -63,7 +63,7 @@ else
 
     az deployment group create \
       --resource-group $resourceGroup \
-      --template-file "$mainAppTemplateFileWin" \
+      --template-file "$mainAppTemplateFile" \
       --parameters mainAppName=$mainAppServiceName \
       serverfarmsASPId=$serverfarmsASPId \
       mainAppImageandTag=$mainAppImageandTag \

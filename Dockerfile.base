@@ -8,13 +8,37 @@ RUN apt-get update && \
       libglib2.0-0 \
       libsm6 \
       libxext6 \
+      libxrender1 \
+      libfontconfig1 \
+      libice6 \
+      libxcb1 \
+      libxau6 \
+      libxdmcp6 \
       build-essential \
-      libxrender1 && \
+      git \
+      curl \
+      libgomp1 \
+      libjpeg-dev \
+      libpng-dev \
+      pkg-config && \
     rm -rf /var/lib/apt/lists/*
 
-COPY mmct/ mmct/
+# Set working directory
+WORKDIR /app
+
+# Copy project files for dependency resolution
 COPY pyproject.toml .
 COPY requirements.txt .
+COPY setup.py .
 
+# Copy core package and available directories
+COPY mmct/ mmct/
+COPY config/ config/
+COPY docs/ docs/
+
+# Install Python dependencies
 RUN pip install --upgrade pip>=24.3
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Create directories for runtime
+RUN mkdir -p /app/media /app/logs

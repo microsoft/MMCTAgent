@@ -1,15 +1,26 @@
-# app/Dockerfile.app
-ARG BASE_IMAGE
+# Main application Dockerfile
+ARG BASE_IMAGE=mmct-base:latest
 FROM ${BASE_IMAGE}
 
 WORKDIR /app
 
-# Copy only what's needed for the main service
-COPY . .
-# If there are more submodules, add them here
+# Copy application-specific files (build context is already in app/ directory)
+COPY . app/
 
+# Set environment variables
 ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONPATH=/app:/app/app
+
+# Create non-root user for security
+RUN groupadd -r appuser && useradd -r -g appuser appuser
+RUN chown -R appuser:appuser /app /app/media /app/logs
+USER appuser
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8000/docs || exit 1
 
 EXPOSE 8000
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

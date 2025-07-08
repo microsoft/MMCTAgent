@@ -45,8 +45,8 @@ clientId=$(az identity show --name "$identityName" --resource-group "$resourceGr
 declare -A yaml_to_config_map=(
   ["storageAccount"]="storageAccountName|Storage Blob Data Contributor|Microsoft.Storage/storageAccounts"
   ["azureOpenAIService"]="azureOpenAIName|Cognitive Services OpenAI User|Microsoft.CognitiveServices/accounts"
-  ["aiSearchService"]="aiSearchServiceName|Search Index Data Contributor|Microsoft.Search/searchServices"
-  ["aiSearchService"]="aiSearchServiceName|Search Service Contributor|Microsoft.Search/searchServices"
+  ["aiSearchService_data"]="aiSearchServiceName|Search Index Data Contributor|Microsoft.Search/searchServices"
+  ["aiSearchService_service"]="aiSearchServiceName|Search Service Contributor|Microsoft.Search/searchServices"
   ["azureSpeechService"]="azureSpeechServiceName|Cognitive Services Speech Contributor|Microsoft.CognitiveServices/accounts"
   ["containerRegistry"]="containerRegistryName|AcrPull|Microsoft.ContainerRegistry/registries"
   ["eventHubService"]="eventhubName|Azure Event Hubs Data Owner|Microsoft.EventHub/namespaces"
@@ -54,7 +54,14 @@ declare -A yaml_to_config_map=(
 
 # Assign roles only if enabled in YAML and variable is non-empty
 for yamlKey in "${!yaml_to_config_map[@]}"; do
-  isEnabled=$(get_yaml_value "['deployInfra']['$yamlKey']")
+  # Map AI Search service entries to the correct YAML key
+  if [[ "$yamlKey" == "aiSearchService_data" || "$yamlKey" == "aiSearchService_service" ]]; then
+    configKey="aiSearchService"
+  else
+    configKey="$yamlKey"
+  fi
+  
+  isEnabled=$(get_yaml_value "['deployInfra']['$configKey']")
   IFS='|' read -r varName role resourceType <<< "${yaml_to_config_map[$yamlKey]}"
   resourceName="${!varName}"
 
@@ -75,7 +82,23 @@ for yamlKey in "${!yaml_to_config_map[@]}"; do
 
       RESOURCE_SCOPE="/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/$resourceType/$resourceName"
       echo "🔐 Assigning role '$role' on scope '$RESOURCE_SCOPE'"
-      az role assignment create --assignee "$clientId" --role "$role" --scope "$RESOURCE_SCOPE"
+      
+      # Try standard assignment first
+      if ! az role assignment create --assignee "$clientId" --role "$role" --scope "$RESOURCE_SCOPE" 2>/dev/null; then
+        echo "⚠️ Standard assignment failed. Trying with --assignee-object-id..."
+        
+        # Get the managed identity object ID
+        objectId=$(az identity show --name "$identityName" --resource-group "$resourceGroup" --query principalId -o tsv)
+        
+        if ! az role assignment create --assignee-object-id "$objectId" --assignee-principal-type "ServicePrincipal" --role "$role" --scope "$RESOURCE_SCOPE" 2>/dev/null; then
+          echo "❌ Role assignment failed for $role on $resourceName"
+          echo "📝 Manual assignment needed: assign '$role' to managed identity '$identityName' on resource '$resourceName'"
+        else
+          echo "✅ Role assignment successful using object ID"
+        fi
+      else
+        echo "✅ Role assignment successful"
+      fi
     else
       echo "🚫 Resource '$resourceName' does not exist. Skipping role assignment."
     fi

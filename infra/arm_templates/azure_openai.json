@@ -1,106 +1,70 @@
 {
-    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
-    "contentVersion": "1.0.0.0",
-    "parameters": {
-        "azureOpenAIName": {
-            "type": "String"
-        },
-        "models": {
-            "type": "array",
-            "defaultValue": [
-                {
-                    "name": "gpt-4o",
-                    "version": "2024-08-06",
-                    "capacity": 200,
-                    "sku": "GlobalStandard",
-                    "upgradeOption": "OnceCurrentVersionExpired"
-                },
-                {
-                    "name": "gpt-4o-mini",
-                    "version": "2024-07-18",
-                    "capacity": 500,
-                    "sku": "GlobalStandard",
-                    "upgradeOption": "OnceNewDefaultVersionAvailable"
-                },
-                {
-                    "name": "text-embedding-ada-002",
-                    "version": "2",
-                    "capacity": 350,
-                    "sku": "Standard",
-                    "upgradeOption": "OnceCurrentVersionExpired"
-                },
-                {
-                    "name": "whisper",
-                    "version": "001",
-                    "capacity": 3,
-                    "sku": "Standard",
-                    "upgradeOption": "OnceCurrentVersionExpired"
-                }
-            ]
-        }
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "azureOpenAIName": { "type": "string" },
+    "models": {
+      "type": "array",
+      "defaultValue": [
+        { "name": "gpt-4o", "version": "2024-08-06", "capacity": 200, "sku": "GlobalStandard", "upgradeOption": "OnceCurrentVersionExpired" },
+        { "name": "gpt-4o-mini", "version": "2024-07-18", "capacity": 500, "sku": "GlobalStandard", "upgradeOption": "OnceNewDefaultVersionAvailable" },
+        { "name": "text-embedding-ada-002", "version": "2", "capacity": 350, "sku": "Standard", "upgradeOption": "OnceCurrentVersionExpired" },
+        { "name": "whisper", "version": "001", "capacity": 3, "sku": "Standard", "upgradeOption": "OnceCurrentVersionExpired" }
+      ]
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.CognitiveServices/accounts",
+      "apiVersion": "2025-04-01-preview",
+      "name": "[parameters('azureOpenAIName')]",
+      "location": "southindia",
+      "sku": { "name": "S0" },
+      "kind": "OpenAI",
+      "identity": { "type": "SystemAssigned" },
+      "properties": {
+        "apiProperties": {},
+        "customSubDomainName": "[parameters('azureOpenAIName')]",
+        "networkAcls": { "defaultAction": "Allow", "virtualNetworkRules": [], "ipRules": [] },
+        "publicNetworkAccess": "Enabled",
+        "disableLocalAuth": true
+      }
     },
-    "variables": {},
-    "resources": [
-        {
-            "type": "Microsoft.CognitiveServices/accounts",
-            "apiVersion": "2025-04-01-preview",
-            "name": "[parameters('azureOpenAIName')]",
-            "location": "southindia",
-            "sku": {
-                "name": "S0"
-            },
-            "kind": "OpenAI",
-            "identity": {
-                "type": "SystemAssigned"
-            },
-            "properties": {
-                "apiProperties": {},
-                "customSubDomainName": "[parameters('azureOpenAIName')]",
-                "networkAcls": {
-                    "defaultAction": "Allow",
-                    "virtualNetworkRules": [],
-                    "ipRules": []
-                },
-                "publicNetworkAccess": "Enabled",
-                "disableLocalAuth": true
-            }
+    {
+      "type": "Microsoft.CognitiveServices/accounts/defenderForAISettings",
+      "apiVersion": "2025-04-01-preview",
+      "name": "[concat(parameters('azureOpenAIName'), '/Default')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts', parameters('azureOpenAIName'))]"
+      ],
+      "properties": { "state": "Disabled" }
+    },
+    {
+      "type": "Microsoft.CognitiveServices/accounts/deployments",
+      "apiVersion": "2025-04-01-preview",
+      "copy": {
+        "name": "modelDeployments",
+        "count": "[length(parameters('models'))]",
+        "mode": "serial",
+        "batchSize": 1
+      },
+      "name": "[concat(parameters('azureOpenAIName'), '/', parameters('models')[copyIndex()].name)]",
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts', parameters('azureOpenAIName'))]"
+      ],
+      "sku": {
+        "name": "[parameters('models')[copyIndex()].sku]",
+        "capacity": "[parameters('models')[copyIndex()].capacity]"
+      },
+      "properties": {
+        "model": {
+          "format": "OpenAI",
+          "name": "[parameters('models')[copyIndex()].name]",
+          "version": "[parameters('models')[copyIndex()].version]"
         },
-        {
-            "type": "Microsoft.CognitiveServices/accounts/defenderForAISettings",
-            "apiVersion": "2025-04-01-preview",
-            "name": "[concat(parameters('azureOpenAIName'), '/Default')]",
-            "dependsOn": [
-                "[resourceId('Microsoft.CognitiveServices/accounts', parameters('azureOpenAIName'))]"
-            ],
-            "properties": {
-                "state": "Disabled"
-            }
-        },
-        {
-            "type": "Microsoft.CognitiveServices/accounts/deployments",
-            "apiVersion": "2025-04-01-preview",
-            "copy": {
-                "name": "modelDeployments",
-                "count": "[length(parameters('models'))]",
-                "mode": "serial"
-            },
-            "name": "[concat(parameters('azureOpenAIName'), '/', parameters('models')[copyIndex()].name)]",
-            "dependsOn": [
-                "[resourceId('Microsoft.CognitiveServices/accounts', parameters('azureOpenAIName'))]"
-            ],
-            "sku": {
-                "name": "[parameters('models')[copyIndex()].sku]",
-                "capacity": "[parameters('models')[copyIndex()].capacity]"
-            },
-            "properties": {
-                "model": {
-                    "format": "OpenAI",
-                    "name": "[parameters('models')[copyIndex()].name]",
-                    "version": "[parameters('models')[copyIndex()].version]"
-                },
-                "versionUpgradeOption": "[parameters('models')[copyIndex()].upgradeOption]",
-                "currentCapacity": "[parameters('models')[copyIndex()].capacity]"
-            }
-        }
-    ]
+        "versionUpgradeOption": "[parameters('models')[copyIndex()].upgradeOption]",
+        "currentCapacity": "[parameters('models')[copyIndex()].capacity]"
+      }
+    }
+  ]
 }
