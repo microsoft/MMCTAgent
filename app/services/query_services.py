@@ -23,8 +23,8 @@ async def process_image_query(file: UploadFile, body: dict):
         stream=body["stream"],
     )
     try:
-        resp = await agent()
-        return resp.response
+        response = await agent()
+        return response
     except Exception as e:
         logger.error(e)
         raise HTTPException(500, "Image processing failed")
