@@ -1,5 +1,5 @@
 from dotenv import load_dotenv, find_dotenv
-from azure.identity.aio import DefaultAzureCredential as AsyncDefaultAzureCredential
+from azure.identity.aio import DefaultAzureCredential as AsyncDefaultAzureCredential, AzureCliCredential as AsyncAzureCliCredential
 from azure.eventhub.aio import EventHubProducerClient, EventHubConsumerClient
 from azure.eventhub import EventData
 from loguru import logger
@@ -18,7 +18,9 @@ class EventHubHandler:
                     "Invalid event hub name. Event hub name cannot be empty!"
                 )
 
-            self.credential = AsyncDefaultAzureCredential()
+            # Use Azure CLI credential first, then fallback to DefaultAzureCredential
+            self.credential = self._get_credential()
+                
             self.host_name = os.getenv("EVENT_HUB_HOSTNAME")
             self.hub_name = hub_name
             if self.host_name is None or self.hub_name is None:
@@ -40,6 +42,31 @@ class EventHubHandler:
                 f"Exception occured while creating producer and consumer client: {e}"
             )
             raise
+
+    def _get_credential(self):
+        """Get Azure credential, trying CLI first, then DefaultAzureCredential."""
+        try:
+            # Try Azure CLI credential first
+            credential = AsyncAzureCliCredential()
+            # Test if CLI credential works by getting a token
+            import asyncio
+            async def test_credential():
+                try:
+                    await credential.get_token("https://cognitiveservices.azure.com/.default")
+                    return True
+                except Exception:
+                    return False
+            
+            # Run the test synchronously 
+            if asyncio.run(test_credential()):
+                logger.info("Using Azure CLI credential for Event Hub")
+                return credential
+            else:
+                raise Exception("Azure CLI credential test failed")
+        except Exception:
+            credential = AsyncDefaultAzureCredential()
+            logger.info("Using DefaultAzureCredential for Event Hub")
+            return credential
 
     async def produce_event(
         self,
