@@ -48,22 +48,11 @@ class EventHubHandler:
         try:
             # Try Azure CLI credential first
             credential = AsyncAzureCliCredential()
-            # Test if CLI credential works by getting a token
-            import asyncio
-            async def test_credential():
-                try:
-                    await credential.get_token("https://cognitiveservices.azure.com/.default")
-                    return True
-                except Exception:
-                    return False
-            
-            # Run the test synchronously 
-            if asyncio.run(test_credential()):
-                logger.info("Using Azure CLI credential for Event Hub")
-                return credential
-            else:
-                raise Exception("Azure CLI credential test failed")
-        except Exception:
+            logger.info("Using Azure CLI credential for Event Hub")
+            return credential
+        except Exception as e:
+            logger.warning(f"Azure CLI credential failed: {e}")
+            # Fall back to DefaultAzureCredential
             credential = AsyncDefaultAzureCredential()
             logger.info("Using DefaultAzureCredential for Event Hub")
             return credential
