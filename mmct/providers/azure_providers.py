@@ -156,7 +156,12 @@ class AzureSearchProvider(SearchProvider):
     
     def __init__(self, config: Dict[str, Any]):
         self.config = config
-        self.credential = DefaultAzureCredential()
+        try:
+            self.credential = AzureCliCredential()
+        except Exception as e:
+            logger.info(f"Azure CLI credential not available: {e}. Using DefaultAzureCredential")
+            # Fallback to DefaultAzureCredential if CLI credential is not available
+            self.credential = DefaultAzureCredential()
         self.client = self._initialize_client()
     
     def _initialize_client(self):
@@ -262,7 +267,12 @@ class AzureTranscriptionProvider(TranscriptionProvider):
     
     def __init__(self, config: Dict[str, Any]):
         self.config = config
-        self.credential = DefaultAzureCredential()
+        try:
+            self.credential = AzureCliCredential()
+        except Exception as e:
+            logger.info(f"Azure CLI credential not available: {e}. Using DefaultAzureCredential")
+            # Fallback to DefaultAzureCredential if CLI credential is not available
+            self.credential = DefaultAzureCredential()
         self.speech_config = self._initialize_speech_config()
     
     def _initialize_speech_config(self):
