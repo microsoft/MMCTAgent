@@ -19,12 +19,12 @@ midentityCreation:
   enabled: false
 
 buildAndPushImagesToACR:
-  enabled: true
+  enabled: false
   buildMainApp: true
   buildIngestionConsumer: true
 
 deployAppService:
-  enabled: false
+  enabled: true
 
 deployContainerApps:
-  enabled: false
+  enabled: true
