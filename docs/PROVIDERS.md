@@ -7,7 +7,8 @@ This document describes how to configure different providers for the MMCT Agent 
 The MMCT Agent framework supports multiple providers for different AI services:
 
 - **LLM Providers**: Azure OpenAI, OpenAI
-- **Search Providers**: Azure AI Search, Elasticsearch
+- **Embedding Providers**: Azure OpenAI, OpenAI (now separate from LLM providers)
+- **Search Providers**: Azure AI Search
 - **Vision Providers**: Azure Computer Vision, OpenAI Vision
 - **Transcription Providers**: Azure Speech Service, OpenAI Whisper
 
@@ -92,6 +93,41 @@ llm:
 - `LLM_PROVIDER=openai`
 - `OPENAI_API_KEY=your-api-key`
 - `OPENAI_MODEL=gpt-4o`
+
+### Embedding Providers
+
+#### Azure OpenAI Embeddings
+
+```yaml
+embedding:
+  provider: azure
+  endpoint: "https://your-resource.openai.azure.com/"
+  deployment_name: "text-embedding-3-small"
+  api_version: "2024-08-01-preview"
+  use_managed_identity: true
+  # api_key: "your-api-key"  # Only needed if use_managed_identity is false
+```
+
+**Environment Variables:**
+- `EMBEDDING_PROVIDER=azure`
+- `EMBEDDING_SERVICE_ENDPOINT=https://your-resource.openai.azure.com/`
+- `EMBEDDING_SERVICE_DEPLOYMENT_NAME=text-embedding-3-small`
+- `EMBEDDING_SERVICE_API_VERSION=2024-08-01-preview`
+- `EMBEDDING_USE_MANAGED_IDENTITY=true`
+- `EMBEDDING_SERVICE_API_KEY=your-api-key` (optional)
+
+#### OpenAI Embeddings
+
+```yaml
+embedding:
+  provider: openai
+  api_key: "your-api-key"
+  embedding_model: "text-embedding-3-small"
+```
+
+**Environment Variables:**
+- `EMBEDDING_PROVIDER=openai`
+- `OPENAI_API_KEY=your-api-key`
 - `OPENAI_EMBEDDING_MODEL=text-embedding-3-small`
 
 ### Search Providers
@@ -236,7 +272,44 @@ security:
 
 ## Usage Examples
 
-### Basic Usage
+### New Provider Pattern (Recommended)
+
+```python
+from mmct.providers.factory import provider_factory
+from mmct.config.settings import MMCTConfig
+
+# Initialize configuration
+config = MMCTConfig()
+
+# Create providers
+llm_provider = provider_factory.create_llm_provider(
+    config.llm.provider, 
+    config.llm.model_dump()
+)
+
+embedding_provider = provider_factory.create_embedding_provider(
+    config.embedding.provider,
+    config.embedding.model_dump()
+)
+
+search_provider = provider_factory.create_search_provider(
+    config.search.provider,
+    config.search.model_dump()
+)
+
+# Use the providers
+messages = [{"role": "user", "content": "Hello, how are you?"}]
+response = await llm_provider.chat_completion(messages)
+
+# Generate embeddings
+embedding = await embedding_provider.embedding("Hello world")
+batch_embeddings = await embedding_provider.batch_embedding(["Text 1", "Text 2"])
+
+# Search documents
+results = await search_provider.search("artificial intelligence", "my-index")
+```
+
+### Legacy Client Manager (Deprecated)
 
 ```python
 from mmct.client_manager import get_client_manager
@@ -273,6 +346,72 @@ config.llm.api_key = "your-openai-key"
 client_manager = ClientManager(config)
 ```
 
+## Extending and Customizing Providers
+
+### Creating Custom Providers
+
+You can create custom providers by extending the base classes:
+
+```python
+from mmct.providers.base import LLMProvider, EmbeddingProvider
+from mmct.providers.factory import provider_factory
+
+class CustomLLMProvider(LLMProvider):
+    def __init__(self, config):
+        self.config = config
+        # Initialize your custom provider
+    
+    async def chat_completion(self, messages, **kwargs):
+        # Implement your custom logic
+        return {
+            "content": "Response from custom provider",
+            "usage": {"prompt_tokens": 10, "completion_tokens": 20},
+            "model": "custom-model",
+            "finish_reason": "stop"
+        }
+
+# Register your custom provider
+provider_factory.register_llm_provider("custom", CustomLLMProvider)
+
+# Use it
+custom_provider = provider_factory.create_llm_provider("custom", config)
+```
+
+### Extending Existing Providers
+
+You can extend existing providers to add custom functionality:
+
+```python
+from mmct.providers.azure_providers import AzureLLMProvider
+
+class EnhancedAzureLLMProvider(AzureLLMProvider):
+    def __init__(self, config):
+        super().__init__(config)
+        self.request_counter = 0
+    
+    async def chat_completion(self, messages, **kwargs):
+        self.request_counter += 1
+        
+        # Add custom pre-processing
+        custom_system = {"role": "system", "content": "Enhanced AI assistant"}
+        messages = [custom_system] + messages
+        
+        # Call parent method
+        response = await super().chat_completion(messages, **kwargs)
+        
+        # Add custom metadata
+        response["request_id"] = self.request_counter
+        
+        return response
+
+# Register the enhanced provider
+provider_factory.register_llm_provider("enhanced_azure", EnhancedAzureLLMProvider)
+```
+
+For complete examples, see:
+- `examples/custom_provider_example.py` - Creating custom providers from scratch
+- `examples/extend_provider_example.py` - Extending existing providers
+
 ## Environment Templates
 
 The framework provides environment templates for different deployment scenarios:
@@ -296,19 +435,44 @@ If you're migrating from the legacy `LLMClient` configuration, here's the mappin
 | `AZURE_AI_SEARCH_ENDPOINT` | `SEARCH_ENDPOINT` | |
 | `AZURE_AI_SEARCH_KEY` | `SEARCH_API_KEY` | |
 | `MANAGED_IDENTITY` | `LLM_USE_MANAGED_IDENTITY` | Now per-service |
+| `EMBEDDING_SERVICE_ENDPOINT` | `EMBEDDING_SERVICE_ENDPOINT` | Now separate provider |
+| `EMBEDDING_SERVICE_DEPLOYMENT_NAME` | `EMBEDDING_SERVICE_DEPLOYMENT_NAME` | Now separate provider |
 
 ### Code Changes
 
 ```python
-# Legacy
+# Legacy (deprecated)
 from mmct.llm_client import LLMClient
 client = LLMClient(service_provider="azure")
 
-# New
-from mmct.client_manager import get_client_manager
-client_manager = get_client_manager()
-llm_provider = client_manager.get_llm_provider()
+# New Provider Pattern (recommended)
+from mmct.providers.factory import provider_factory
+from mmct.config.settings import MMCTConfig
+
+config = MMCTConfig()
+llm_provider = provider_factory.create_llm_provider(
+    config.llm.provider,
+    config.llm.model_dump()
+)
+
+# For embeddings (now separate)
+embedding_provider = provider_factory.create_embedding_provider(
+    config.embedding.provider,
+    config.embedding.model_dump()
+)
+
+# Legacy -> New method mapping
+# client.get_client().chat.completions.create() -> llm_provider.chat_completion()
+# client.get_client().embeddings.create() -> embedding_provider.embedding()
 ```
+
+### Breaking Changes
+
+1. **Separate Embedding Provider**: Embedding functionality is now separate from LLM providers
+2. **New Response Format**: Provider methods return standardized response dictionaries
+3. **Configuration Structure**: New configuration classes with validation
+4. **Factory Pattern**: Providers are created through factory methods
+5. **Deprecation Warnings**: `LLMClient` now shows deprecation warnings
 
 ## Troubleshooting
 

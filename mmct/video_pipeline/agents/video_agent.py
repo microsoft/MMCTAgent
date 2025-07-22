@@ -91,7 +91,7 @@ class VideoAgent:
             self.tools = [
                 VideoQnaTools.GET_VIDEO_DESCRIPTION,
                 VideoQnaTools.QUERY_VIDEO_DESCRIPTION,
-                VideoQnaTools.QUERY_GPT_VISION,
+                VideoQnaTools.QUERY_VISION_LLM,
             ]
             if self.use_computer_vision_tool:
                 self.tools.append(VideoQnaTools.QUERY_FRAMES_COMPUTER_VISION)
@@ -316,8 +316,9 @@ class VideoAgent:
 if __name__ == "__main__":
 
     async def main():
-        query = "What is the neemastram?"
-        index_name = "telugu-video-index"
+        # Example usage - replace with your actual values
+        query = "example question about the video"
+        index_name = "your-index-name"
         use_computer_vision_tool = False
         stream = False
         use_critic_agent = True

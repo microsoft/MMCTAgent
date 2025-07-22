@@ -71,6 +71,47 @@ pipeline = IngestionPipeline(
 await pipeline()
 ```
 
+### 4. **custom_provider_example.py**
+Demonstrates how to create custom providers and extend the provider system.
+
+**Features:**
+- Creating custom LLM and embedding providers
+- Registering custom providers with the factory
+- Using custom providers in the system
+- Provider configuration and error handling
+
+**Usage:**
+```python
+from examples.custom_provider_example import register_custom_providers
+
+# Register your custom providers
+register_custom_providers()
+
+# Use them through the factory
+from mmct.providers.factory import provider_factory
+custom_llm = provider_factory.create_llm_provider("custom_llm", config)
+```
+
+### 5. **extend_provider_example.py**
+Shows how to extend existing providers to add custom functionality.
+
+**Features:**
+- Extending AzureLLMProvider with custom features
+- Extending OpenAIEmbeddingProvider with normalization
+- Adding caching and custom processing
+- Preserving base provider functionality
+
+**Usage:**
+```python
+from examples.extend_provider_example import register_extended_providers
+
+# Register extended providers
+register_extended_providers()
+
+# Use extended providers
+extended_llm = provider_factory.create_llm_provider("extended_azure", config)
+```
+
 ## 🛠️ Setup Requirements
 
 Before running these examples:

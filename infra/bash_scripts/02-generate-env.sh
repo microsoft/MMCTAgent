@@ -187,12 +187,6 @@ write_env "LOG_ENABLE_FILE" "true"
 write_env "LOG_MAX_FILE_SIZE" "10 MB"
 write_env "LOG_RETENTION_DAYS" "30"
 
-# ---------------- Feature Flags ----------------
-write_comment_in_env "Feature Flags"
-write_env "ENABLE_CACHING" "true"
-write_env "ENABLE_METRICS" "true"
-write_env "ENABLE_TRACING" "true"
-write_env "ENABLE_RATE_LIMITING" "true"
 
 # ---------------- OpenAI Configuration (for hybrid setups) ----------------
 write_comment_in_env "OpenAI Configuration (for hybrid setups)"

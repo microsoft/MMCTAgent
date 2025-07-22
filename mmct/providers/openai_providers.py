@@ -2,7 +2,7 @@ from typing import Dict, Any, Optional, List
 from openai import AsyncOpenAI, OpenAI
 from loguru import logger
 
-from .base import LLMProvider, TranscriptionProvider, VisionProvider
+from .base import LLMProvider, EmbeddingProvider, TranscriptionProvider, VisionProvider
 from ..exceptions import ProviderException, ConfigurationException
 from ..utils.error_handler import handle_exceptions, convert_exceptions
 
@@ -87,6 +87,32 @@ class OpenAILLMProvider(LLMProvider):
         except Exception as e:
             logger.error(f"OpenAI chat completion failed: {e}")
             raise ProviderException(f"OpenAI chat completion failed: {e}")
+
+
+class OpenAIEmbeddingProvider(EmbeddingProvider):
+    """OpenAI embedding provider implementation."""
+    
+    def __init__(self, config: Dict[str, Any]):
+        self.config = config
+        self.client = self._initialize_client()
+    
+    def _initialize_client(self):
+        """Initialize OpenAI client."""
+        try:
+            api_key = self.config.get("api_key")
+            if not api_key:
+                raise ConfigurationException("OpenAI API key is required")
+            
+            timeout = self.config.get("timeout", 200)
+            max_retries = self.config.get("max_retries", 2)
+            
+            return AsyncOpenAI(
+                api_key=api_key,
+                timeout=timeout,
+                max_retries=max_retries
+            )
+        except Exception as e:
+            raise ProviderException(f"Failed to initialize OpenAI client: {e}")
     
     @handle_exceptions(retries=3, exceptions=(Exception,))
     @convert_exceptions({Exception: ProviderException})
@@ -105,6 +131,24 @@ class OpenAILLMProvider(LLMProvider):
         except Exception as e:
             logger.error(f"OpenAI embedding failed: {e}")
             raise ProviderException(f"OpenAI embedding failed: {e}")
+    
+    @handle_exceptions(retries=3, exceptions=(Exception,))
+    @convert_exceptions({Exception: ProviderException})
+    async def batch_embedding(self, texts: List[str], **kwargs) -> List[List[float]]:
+        """Generate embeddings for multiple texts using OpenAI."""
+        try:
+            model = self.config.get("embedding_model", "text-embedding-3-small")
+            
+            response = await self.client.embeddings.create(
+                model=model,
+                input=texts,
+                **kwargs
+            )
+            
+            return [item.embedding for item in response.data]
+        except Exception as e:
+            logger.error(f"OpenAI batch embedding failed: {e}")
+            raise ProviderException(f"OpenAI batch embedding failed: {e}")
 
 
 class OpenAITranscriptionProvider(TranscriptionProvider):

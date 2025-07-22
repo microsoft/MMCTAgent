@@ -194,9 +194,10 @@ async def critic_tool(
 
 
 if __name__ == "__main__":
-    timestamps_predicted = "00:00:11|00:00:15|00:00:22|00:00:27|00:00:35|00:00:47"
-    video_id = "009d738d0b4bb8374830a7894c7f3cd4134c6c89a440bfd656cea819c9bf4565"
-    logs = "query: what type of content in the video, response:this video contain only the text overlay"
+    # Example usage - replace with your actual values
+    timestamps_predicted = "00:00:10|00:00:30|00:01:00|00:01:30|00:02:00|00:02:30"
+    video_id = "example_video_id_hash"
+    logs = "query: example question about the video, response: example response about the video content"
     use_computer_vision_tool = True
     res = asyncio.run(
         critic_tool(

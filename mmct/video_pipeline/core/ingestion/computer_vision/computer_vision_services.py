@@ -107,7 +107,8 @@ class ComputerVisionService:
                         return None
 
 if __name__=="__main__":
-    blob_url = ""
-    azurecv = ComputerVisionService(video_id="")
+    # Example usage - replace with your actual values
+    blob_url = "https://example.blob.core.windows.net/container/video.mp4"
+    azurecv = ComputerVisionService(video_id="example_video_id")
     resp = asyncio.run(azurecv.add_video_to_index(blob_url=blob_url))
     print(resp)

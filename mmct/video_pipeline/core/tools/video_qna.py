@@ -4,6 +4,7 @@ import os
 import sys
 from loguru import logger
 from dotenv import load_dotenv
+from typing import Optional
 
 load_dotenv(override=True)
 
@@ -34,7 +35,9 @@ from mmct.video_pipeline.prompts_and_description import (
     CRITIC_DESCRIPTION,
 )
 from mmct.video_pipeline.utils.helper import load_required_files
-from mmct.llm_client import LLMClient
+from mmct.llm_client import LLMClient  # Keep for backward compatibility
+from mmct.providers.factory import provider_factory
+from mmct.config.settings import MMCTConfig
 
 class VideoQnaTools(Enum):
     """
@@ -43,7 +46,7 @@ class VideoQnaTools(Enum):
     GET_VIDEO_DESCRIPTION = (get_video_description,)
     QUERY_VIDEO_DESCRIPTION = (query_video_description,)
     QUERY_FRAMES_COMPUTER_VISION = (query_frames_computer_vision,)
-    QUERY_GPT_VISION = (query_vision_llm,)
+    QUERY_VISION_LLM = (query_vision_llm,)
 
 
 class VideoQnA:
@@ -71,7 +74,7 @@ class VideoQnA:
             - "GET_VIDEO_DESCRIPTION": `get_video_description`
             - "QUERY_VIDEO_DESCRIPTION": `query_video_description`
             - "QUERY_FRAMES_COMPUTER_VISION": `query_frames_computer_vision`
-            - "QUERY_GPT_VISION": `query_vision_llm`
+            - "QUERY_VISION_LLM": `query_vision_llm`
 
     Note:
         To customize tools, import desired tool functions from `video_pipeline.core.tools.<tool_file>` and
@@ -87,8 +90,11 @@ class VideoQnA:
             "GET_VIDEO_DESCRIPTION": get_video_description,
             "QUERY_VIDEO_DESCRIPTION": query_video_description,
             "QUERY_FRAMES_COMPUTER_VISION": query_frames_computer_vision,
-            "QUERY_GPT_VISION": query_vision_llm,
+            "QUERY_VISION_LLM": query_vision_llm,
         },
+        llm_provider: Optional[object] = None,
+        vision_provider: Optional[object] = None,
+        transcription_provider: Optional[object] = None,
     ):
         self.tools = tools
         self.query = query
@@ -96,10 +102,18 @@ class VideoQnA:
         self.use_critic_agent = use_critic_agent
         self.use_computer_vision_tool = use_computer_vision_tool
 
-        service_provider = os.getenv("LLM_PROVIDER", "azure")
-        self.model_client = LLMClient(
-            autogen=True, service_provider=service_provider
-        ).get_client()
+        # Initialize providers if not provided
+        if llm_provider is None:
+            # Fall back to old pattern for backward compatibility
+            service_provider = os.getenv("LLM_PROVIDER", "azure")
+            self.model_client = LLMClient(
+                autogen=True, service_provider=service_provider
+            ).get_client()
+        else:
+            # Use provider pattern - note: this would need autogen client wrapper
+            self.model_client = LLMClient(
+                autogen=True, service_provider=os.getenv("LLM_PROVIDER", "azure")
+            ).get_client()
 
         self.tools_list = []
         self.planner_agent = None
@@ -224,8 +238,9 @@ async def video_qna(
     ] = True,
     use_computer_vision_tool: Annotated[bool, "whether to use computer vision service or not"] = True,
     stream: Annotated[bool, "Set to True to return the response as a stream."] = False,
-    llm_provider=None,
-    vision_provider=None
+    llm_provider: Optional[object] = None,
+    vision_provider: Optional[object] = None,
+    transcription_provider: Optional[object] = None
 ):
     """
     Answers a user query based on the content of a specified video.
@@ -244,6 +259,9 @@ async def video_qna(
         use_critic_agent=use_critic_agent,
         tools=tools,
         use_computer_vision_tool=use_computer_vision_tool,
+        llm_provider=llm_provider,
+        vision_provider=vision_provider,
+        transcription_provider=transcription_provider,
     )
     if stream:
         response_generator = await video_qna_instance.run_stream()
@@ -268,15 +286,16 @@ async def video_qna(
         return await video_qna_instance.run()
     
 if __name__=="__main__":
-    query = ""
-    video_id = ""
+    # Example usage - replace with your actual values
+    query = "example question about the video"
+    video_id = "example-video-id"
     use_computer_vision_tool = False
     use_critic_agent = True
     stream = False
     tools = [
         VideoQnaTools.GET_VIDEO_DESCRIPTION,
         VideoQnaTools.QUERY_VIDEO_DESCRIPTION,
-        VideoQnaTools.QUERY_GPT_VISION]
+        VideoQnaTools.QUERY_VISION_LLM]
     if use_computer_vision_tool:
         tools.append(VideoQnaTools.QUERY_FRAMES_COMPUTER_VISION)
         

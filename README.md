@@ -5,7 +5,7 @@
 
 </div>
 
-# [**MMCT Agent**](https://arxiv.org/pdf/2405.18358)
+# [**MMCT Agent**](https://arxiv.org/abs/2405.18358)
 <p align='center'>
     <a href="docs/multimedia/videos/Demo_MMCT.mp4" style="text-decoration: None;">| Demo Video |</a>
 </p>
@@ -17,16 +17,16 @@
 
 ## **Overview**
 
-This repository implements **MMCTAgent**, a novel **multi-modal critical thinking agent** designed to push the boundaries of visual reasoning and deep understanding across **images** and **videos**. Built upon our [research paper](https://arxiv.org/pdf/2405.18358), MMCTAgent combines planning, self-critique, and tool-based reasoning to enhance decision-making in complex multi-modal tasks.
+This repository implements **MMCTAgent**, a novel **multi-modal critical thinking agent** designed to push the boundaries of visual reasoning and deep understanding across **images** and **videos**. Built upon our [research paper](https://arxiv.org/abs/2405.18358), MMCTAgent combines planning, self-critique, and tool-based reasoning to enhance decision-making in complex multi-modal tasks.
 
 <p align="center">
-  <a href="https://arxiv.org/pdf/2405.18358">
+  <a href="https://arxiv.org/abs/2405.18358">
     <img src="docs/multimedia/VideoPipeline.webp" alt="Video Pipeline - Main Architecture" width="80%" />
   </a>
 </p>
 
 <p align="center">
-  <a href="https://arxiv.org/pdf/2405.18358">
+  <a href="https://arxiv.org/abs/2405.18358">
     <img src="docs/multimedia/mmct-model.png" alt="mmct-model", width="45%" />
     <img src="docs/multimedia/agent2.png" alt="mmct-workflow", width="45%" />
   </a>
@@ -53,7 +53,7 @@ MMCTAgent includes two specialized agents:
 
 #### ImageAgent
 
-[![](docs/multimedia/imageAgent.webp)](https://arxiv.org/pdf/2405.18358)
+[![](docs/multimedia/imageAgent.webp)](https://arxiv.org/abs/2405.18358)
 
 A reasoning engine tailored for static image understanding.  
 It supports a configurable set of tools via the `ImageQnaTools` enum:
@@ -68,7 +68,7 @@ It supports a configurable set of tools via the `ImageQnaTools` enum:
 ---
 
 #### VideoAgent
-[![](docs/multimedia/videoPipeline.webp)](https://arxiv.org/pdf/2405.18358)
+[![](docs/multimedia/videoPipeline.webp)](https://arxiv.org/abs/2405.18358)
 
 Optimized for deep video understanding through a structured two-stage pipeline:
 
@@ -77,7 +77,7 @@ Optimized for deep video understanding through a structured two-stage pipeline:
 
 2. **Video Question Answering**  
 
-[![](docs/multimedia/videoAgent.webp)](https://arxiv.org/pdf/2405.18358)
+[![](docs/multimedia/videoAgent.webp)](https://arxiv.org/abs/2405.18358)
 
    Applies a fixed toolchain orchestrated by the Planner:
 
@@ -93,6 +93,19 @@ For more details, refer to the full research article:
 **[MMCTAgent: Multi-modal Critical Thinking Agent
  Framework for Complex Visual Reasoning](https://arxiv.org/abs/2405.18358)**  
 Published on **arXiv** – [arxiv.org/abs/2405.18358](https://arxiv.org/abs/2405.18358)
+
+## **Citation**
+
+If you find this repository helpful, please consider citing our paper:
+
+```bibtex
+@article{MMCT Agent,
+  title={MMCTAgent: MMCTAgent is a novel multi-modal critical thinking agent framework designed to address the inherent limitations of current Multimodal LLMs in complex visual reasoning tasks. MMCTAgent iteratively analyzes multi-modal information, decomposes queries, plans strategies, and dynamically evolves its reasoning. Additionally, MMCTAgent incorporates critical thinking elements such as verification of final answers and self-reflection through a novel approach that defines a vision-based critic and identifies task-specific evaluation criteria, thereby enhancing its decision-making abilities.},
+  author={Somnath Kumar, Yash Gadhia, Tanuja Ganu, Akshay Nambi},
+  journal={arXiv preprint arXiv:2405.18358v1},
+  year={2024}
+}
+```
 
 ---
 
@@ -119,7 +132,7 @@ MMCTAgent now features a **modular provider system** that allows you to seamless
 | Service Type | Supported Providers | Use Cases |
 |--------------|--------------------|-----------|
 | **LLM** | Azure OpenAI, OpenAI | Text generation, chat completion |
-| **Search** | Azure AI Search, Elasticsearch | Document search and retrieval |
+| **Search** | Azure AI Search | Document search and retrieval |
 | **Vision** | Azure Computer Vision, OpenAI Vision | Image analysis, object detection |
 | **Transcription** | Azure Speech Services, OpenAI Whisper | Audio-to-text conversion |
 | **Storage** | Azure Blob Storage, Local Storage | File storage and management |
@@ -224,10 +237,10 @@ Below are the Azure Resources that are required to execute this repository. You 
 | Azure AI Search                | [Document](https://learn.microsoft.com/en-us/azure/search/)        | *Search Index Data Contributor*       |
 | Azure AI Search                | [Document](https://learn.microsoft.com/en-us/azure/search/)        | *Search Service Contributor*       |
 | Azure Speech Service           | [Document](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/)        | *Cognitive Services Speech Contributor* or *Cognitive Services Speech User* role.          |
-| Azure App Service [Optional] | [Document](https://learn.microsoft.com/en-us/azure/app-service/)        | NA             |
+| Azure App Service [Optional] | [Document](https://learn.microsoft.com/en-us/azure/app-service/)        | *NA*             |
 | Azure Event Hub [Optional] | [Document](https://learn.microsoft.com/en-us/azure/app-service/)        | *Azure Event Hubs Data Owner* |
 | Azure Container Registry [Optional] | [Document](https://learn.microsoft.com/en-us/azure/container-registry/) | *Reader or Contributor* |
-| Application Insights [Optional]          | [Document](https://learn.microsoft.com/en-us/azure/azure-monitor/app/app-insights-overview)        | N/A                                |
+| Application Insights [Optional]          | [Document](https://learn.microsoft.com/en-us/azure/azure-monitor/app/app-insights-overview)        | *NA*                                |
 
 > Note: If you want to utilize the Microsoft Azure Intra Id Access then you can assign the above corresponding roles for the each resource. Otherwise you can use the API Key or Connection String approach to utilize the resources.
 

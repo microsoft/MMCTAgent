@@ -65,7 +65,7 @@ identityName="osmidentity"
 
 imageTag="1.0"
 baseImage="${containerRegistryName}.azurecr.io/osbase:${imageTag}"
-mainAppServiceName="osmainapp"
+mainAppServiceName="osmainappservice"
 mainAppTemplateFile="$(convert_path_if_windows "$base_dir/main_app_service.json")"
 mainAppImageandTag="${containerRegistryName}.azurecr.io/main-app:${imageTag}"
 

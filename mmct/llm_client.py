@@ -1,4 +1,5 @@
 import os
+import warnings
 from autogen_ext.models.openai import (
     AzureOpenAIChatCompletionClient,
     OpenAIChatCompletionClient,
@@ -12,6 +13,16 @@ load_dotenv(find_dotenv(),override=True)
 
 class LLMClient:
     def __init__(self, autogen=False, service_provider="azure", embedding=False, stt=False, isAsync = False):
+        # Deprecation warning
+        warnings.warn(
+            "LLMClient is deprecated and will be removed in a future version. "
+            "Use the provider pattern instead: "
+            "from mmct.providers.factory import provider_factory; "
+            "provider = provider_factory.create_llm_provider(provider_name, config)",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        
         # Use Azure CLI credential if available, fallback to DefaultAzureCredential
         self.credential = self._get_credential()
         self.service_provider = service_provider

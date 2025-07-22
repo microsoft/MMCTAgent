@@ -1,9 +1,9 @@
 from typing import Dict, Type, Any
 from loguru import logger
 
-from .base import LLMProvider, SearchProvider, VisionProvider, TranscriptionProvider
-from .azure_providers import AzureLLMProvider, AzureSearchProvider, AzureVisionProvider, AzureTranscriptionProvider
-from .openai_providers import OpenAILLMProvider, OpenAIVisionProvider, OpenAITranscriptionProvider
+from .base import LLMProvider, EmbeddingProvider, SearchProvider, VisionProvider, TranscriptionProvider
+from .azure_providers import AzureLLMProvider, AzureEmbeddingProvider, AzureSearchProvider, AzureVisionProvider, AzureTranscriptionProvider
+from .openai_providers import OpenAILLMProvider, OpenAIEmbeddingProvider, OpenAIVisionProvider, OpenAITranscriptionProvider
 from ..exceptions import ConfigurationException
 
 
@@ -13,6 +13,11 @@ class ProviderFactory:
     _llm_providers: Dict[str, Type[LLMProvider]] = {
         'azure': AzureLLMProvider,
         'openai': OpenAILLMProvider,
+    }
+    
+    _embedding_providers: Dict[str, Type[EmbeddingProvider]] = {
+        'azure': AzureEmbeddingProvider,
+        'openai': OpenAIEmbeddingProvider,
     }
     
     _search_providers: Dict[str, Type[SearchProvider]] = {
@@ -53,6 +58,31 @@ class ProviderFactory:
         
         provider_class = cls._llm_providers[provider_name]
         logger.info(f"Creating LLM provider: {provider_name}")
+        return provider_class(config)
+    
+    @classmethod
+    def create_embedding_provider(cls, provider_name: str, config: Dict[str, Any]) -> EmbeddingProvider:
+        """
+        Create embedding provider instance.
+        
+        Args:
+            provider_name: Name of the provider
+            config: Provider configuration
+            
+        Returns:
+            EmbeddingProvider instance
+            
+        Raises:
+            ConfigurationException: If provider is not supported
+        """
+        if provider_name not in cls._embedding_providers:
+            raise ConfigurationException(
+                f"Unknown embedding provider: {provider_name}. "
+                f"Supported providers: {list(cls._embedding_providers.keys())}"
+            )
+        
+        provider_class = cls._embedding_providers[provider_name]
+        logger.info(f"Creating embedding provider: {provider_name}")
         return provider_class(config)
     
     @classmethod
@@ -135,6 +165,7 @@ class ProviderFactory:
         """Get list of supported providers by type."""
         return {
             "llm": list(cls._llm_providers.keys()),
+            "embedding": list(cls._embedding_providers.keys()),
             "search": list(cls._search_providers.keys()),
             "vision": list(cls._vision_providers.keys()),
             "transcription": list(cls._transcription_providers.keys())
@@ -145,6 +176,12 @@ class ProviderFactory:
         """Register a new LLM provider."""
         cls._llm_providers[name] = provider_class
         logger.info(f"Registered LLM provider: {name}")
+    
+    @classmethod
+    def register_embedding_provider(cls, name: str, provider_class: Type[EmbeddingProvider]):
+        """Register a new embedding provider."""
+        cls._embedding_providers[name] = provider_class
+        logger.info(f"Registered embedding provider: {name}")
     
     @classmethod
     def register_search_provider(cls, name: str, provider_class: Type[SearchProvider]):

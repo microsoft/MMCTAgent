@@ -13,6 +13,7 @@ class LLMConfig(BaseSettings):
     model_name: str = Field(..., env="LLM_MODEL_NAME")
     use_managed_identity: bool = Field(default=True, env="LLM_USE_MANAGED_IDENTITY")
     api_key: Optional[str] = Field(default=None, env="LLM_API_KEY")
+    embedding_deployment_name: Optional[str] = Field(default=None, env="EMBEDDING_SERVICE_DEPLOYMENT_NAME")
     vision_deployment_name: Optional[str] = Field(default=None, env="LLM_VISION_DEPLOYMENT_NAME")
     vision_api_version: Optional[str] = Field(default=None, env="LLM_VISION_API_VERSION")
     timeout: int = Field(default=200, env="LLM_TIMEOUT")
@@ -53,6 +54,7 @@ class LLMConfig(BaseSettings):
                 'api_version': os.getenv("LLM_API_VERSION", "2024-08-01-preview"),
                 'use_managed_identity': os.getenv("LLM_USE_MANAGED_IDENTITY", "true").lower() == "true",
                 'api_key': os.getenv("LLM_API_KEY"),
+                'embedding_deployment_name': os.getenv("EMBEDDING_SERVICE_DEPLOYMENT_NAME"),
                 'vision_deployment_name': os.getenv("LLM_VISION_DEPLOYMENT_NAME"),
                 'vision_api_version': os.getenv("LLM_VISION_API_VERSION"),
                 'timeout': int(os.getenv("LLM_TIMEOUT", "200")),
@@ -69,7 +71,7 @@ class SearchConfig(BaseSettings):
     """Search provider configuration."""
     
     provider: str = Field(default="azure_ai_search", env="SEARCH_PROVIDER")
-    endpoint: str = Field(..., env="SEARCH_ENDPOINT")
+    endpoint: Optional[str] = Field(default=None, env="SEARCH_ENDPOINT")
     api_key: Optional[str] = Field(default=None, env="SEARCH_API_KEY")
     use_managed_identity: bool = Field(default=True, env="SEARCH_USE_MANAGED_IDENTITY")
     index_name: str = Field(default="default", env="SEARCH_INDEX_NAME")
@@ -133,6 +135,44 @@ class EmbeddingConfig(BaseSettings):
         extra="ignore",
         case_sensitive=False
     )
+    
+    def __init__(self, **kwargs):
+        # Force load environment variables before validation
+        from dotenv import load_dotenv, find_dotenv
+        import os
+        
+        # Try to find and load .env file
+        env_file = find_dotenv()
+        if env_file:
+            load_dotenv(env_file, override=True)
+        else:
+            # If find_dotenv fails, try relative paths
+            for path in [".env", "../.env", "../../.env"]:
+                if os.path.exists(path):
+                    load_dotenv(path, override=True)
+                    break
+        
+        # If no explicit values provided, use environment variables with fallbacks to LLM config
+        if not kwargs:
+            kwargs = {
+                'provider': os.getenv("EMBEDDING_PROVIDER", os.getenv("LLM_PROVIDER", "azure")),
+                'endpoint': os.getenv("EMBEDDING_SERVICE_ENDPOINT") or os.getenv("LLM_ENDPOINT"),
+                'deployment_name': os.getenv("EMBEDDING_SERVICE_DEPLOYMENT_NAME") or os.getenv("LLM_DEPLOYMENT_NAME"),
+                'api_version': os.getenv("EMBEDDING_SERVICE_API_VERSION", os.getenv("LLM_API_VERSION", "2024-08-01-preview")),
+                'api_key': os.getenv("EMBEDDING_SERVICE_API_KEY", os.getenv("LLM_API_KEY")),
+                'use_managed_identity': os.getenv("EMBEDDING_USE_MANAGED_IDENTITY", os.getenv("LLM_USE_MANAGED_IDENTITY", "true")).lower() == "true",
+                'timeout': int(os.getenv("EMBEDDING_TIMEOUT", "200")),
+            }
+            # Remove None values but ensure required fields are provided
+            kwargs = {k: v for k, v in kwargs.items() if v is not None}
+            
+            # Validate required fields and provide fallbacks
+            if not kwargs.get('endpoint'):
+                raise ValueError("EMBEDDING_SERVICE_ENDPOINT or LLM_ENDPOINT must be provided")
+            if not kwargs.get('deployment_name'):
+                raise ValueError("EMBEDDING_SERVICE_DEPLOYMENT_NAME or LLM_DEPLOYMENT_NAME must be provided")
+        
+        super().__init__(**kwargs)
 
 
 class TranscriptionConfig(BaseSettings):

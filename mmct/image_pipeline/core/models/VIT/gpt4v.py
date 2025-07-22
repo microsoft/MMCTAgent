@@ -1,13 +1,9 @@
 import torch
 from PIL import Image
 import requests
-from openai import AzureOpenAI
-from azure.identity import (
-    AzureCliCredential,
-    get_bearer_token_provider,
-    DefaultAzureCredential,
-)
-from mmct.llm_client import LLMClient
+from mmct.providers.factory import provider_factory
+from mmct.config.settings import MMCTConfig
+from mmct.llm_client import LLMClient  # Keep for backward compatibility
 import os
 import io
 import base64
@@ -19,14 +15,26 @@ load_dotenv(find_dotenv(), override=True)
 
 
 class GPT4V:
-    def __init__(self):
-        self.model_name = os.getenv(
-            "LLM_MODEL_NAME"
-            if os.getenv("LLM_PROVIDER") == "azure"
-            else "OPENAI_MODEL_NAME"
-        )
-        service_provider = os.getenv("LLM_PROVIDER", "azure")
-        self.client = LLMClient(service_provider=service_provider, isAsync=True).get_client()
+    def __init__(self, llm_provider=None, vision_provider=None):
+        # Initialize configuration
+        self.config = MMCTConfig()
+        
+        # Initialize providers
+        if llm_provider is None:
+            # Fall back to old pattern for backward compatibility
+            service_provider = os.getenv("LLM_PROVIDER", "azure")
+            self.client = LLMClient(service_provider=service_provider, isAsync=True).get_client()
+            self.model_name = os.getenv(
+                "LLM_MODEL_NAME"
+                if os.getenv("LLM_PROVIDER") == "azure"
+                else "OPENAI_MODEL_NAME"
+            )
+        else:
+            # Use provider pattern
+            self.llm_provider = llm_provider
+            self.vision_provider = vision_provider or llm_provider
+            self.model_name = self.config.llm.model_name
+            self.client = LLMClient(service_provider=self.config.llm.provider, isAsync=True).get_client()
 
     def convert_image(self, img_pil):
         # Convert the image to base64

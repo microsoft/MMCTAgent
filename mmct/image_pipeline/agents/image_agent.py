@@ -429,9 +429,9 @@ class ImageAgent:
             raise ProviderException(f"ImageAgent execution failed: {e}", "AGENT_CALL_FAILED")
 
 if __name__ == "__main__":
-    image_path = r"C:\Users\v-amanpatkar\Downloads\menu.png"
-    query = """I want to order House Special & Crab Curry. What will be the order amount?
-    In this same order amount what are the options that I can consider."""
+    # Example usage - replace with your actual values
+    image_path = "path/to/your/image.png"
+    query = "example question about the image"
     tools = [
         # ImageQnaTools.OBJECT_DETECTION,
         # ImageQnaTools.OCR,

@@ -1,15 +1,12 @@
 # Importing modules
-from openai import AzureOpenAI
-from openai import ContentFilterFinishReasonError, RateLimitError, APITimeoutError
-from azure.search.documents.aio import SearchClient
 from azure.search.documents.models import VectorizedQuery, VectorFilterMode
 from azure.identity import DefaultAzureCredential
-from azure.core.credentials import AzureKeyCredential
 from loguru import logger
-from mmct.llm_client import LLMClient
+from mmct.providers.factory import provider_factory
+from mmct.config.settings import MMCTConfig
 from mmct.video_pipeline.core.ingestion.models import SpeciesVarietyResponse
 from typing_extensions import Annotated
-import os
+from typing import Optional
 import asyncio
 from dotenv import load_dotenv, find_dotenv
 
@@ -21,8 +18,46 @@ class VideoSearch:
         self.top_n = top_n
         self.index_name = index_name
         self.min_threshold = min_threshold
-        service_provider = os.getenv("LLM_PROVIDER", "azure")
-        self.openai_client = LLMClient(service_provider=service_provider, isAsync=True).get_client()
+        
+        # Initialize configuration
+        self.config = MMCTConfig()
+        
+        # Initialize providers
+        self.llm_provider = provider_factory.create_llm_provider(
+            self.config.llm.provider,
+            self.config.llm.model_dump()
+        )
+        
+        # Try to create embedding provider, fallback to LLM config if embedding config is incomplete
+        try:
+            self.embedding_provider = provider_factory.create_embedding_provider(
+                self.config.embedding.provider,
+                self.config.embedding.model_dump()
+            )
+        except Exception as e:
+            logger.warning(f"Failed to create embedding provider: {e}. Using LLM provider for embeddings.")
+            # Use LLM config for embedding provider as fallback
+            llm_config = self.config.llm.model_dump()
+            # Add embedding-specific deployment name if available
+            if hasattr(self.config.llm, 'embedding_deployment_name') and self.config.llm.embedding_deployment_name:
+                llm_config['deployment_name'] = self.config.llm.embedding_deployment_name
+            elif hasattr(self.config.llm, 'deployment_name') and self.config.llm.deployment_name:
+                llm_config['deployment_name'] = self.config.llm.deployment_name
+            
+            self.embedding_provider = provider_factory.create_embedding_provider(
+                self.config.llm.provider,
+                llm_config
+            )
+        
+        # Try to create search provider, but handle missing configuration gracefully
+        try:
+            self.search_provider = provider_factory.create_search_provider(
+                self.config.search.provider,
+                self.config.search.model_dump()
+            )
+        except Exception as e:
+            logger.warning(f"Failed to create search provider: {e}. Search functionality may be limited.")
+            self.search_provider = None
 
     def _get_credential(self):
         """Get Azure credential, trying CLI first, then DefaultAzureCredential."""
@@ -42,20 +77,11 @@ class VideoSearch:
         Args:
             text (str): input string
 
-
         Returns:
             [list]: OpenAI Embeddings
         """
         try:
-            response = await self.openai_client.embeddings.create(
-                input=[text],
-                model=os.getenv(
-                    "EMBEDDING_SERVICE_MODEL_NAME"
-                    if os.getenv("LLM_PROVIDER") == "azure"
-                    else "OPENAI_EMBEDDING_MODEL_NAME"
-                ),
-            )
-            return response.data[0].embedding
+            return await self.embedding_provider.embedding(text)
         except Exception as e:
             raise Exception(f"Exception occured while creating embeddings: {e}")
 
@@ -71,7 +97,7 @@ class VideoSearch:
         """
         try:
             system_prompt = f"""
-            You are a TranscriptAnalyzerGPT. Your job is to find all the details from the transcripts of every 2 seconds and from the audio.
+            You are a TranscriptAnalyzer. Your job is to find all the details from the transcripts of every 2 seconds and from the audio.
             Mention only the English name or the text into the response. If the text mentioned in the video is in Hindi or any other language, then convert it into English.
             If any text from transcript is in Hindi or any other language, translate it into English and include it in the response.
             Topics to include in the response:
@@ -95,18 +121,13 @@ class VideoSearch:
                 },
             ]
 
-            response = await self.openai_client.beta.chat.completions.parse(
-                model=os.getenv(
-                    "LLM_MODEL_NAME"
-                    if os.getenv("LLM_PROVIDER") == "azure"
-                    else "OPENAI_MODEL_NAME"
-                ),
+            response = await self.llm_provider.chat_completion(
                 messages=prompt,
                 temperature=0,
                 response_format=SpeciesVarietyResponse,
             )
             # Get the parsed Pydantic model from the response
-            parsed_response: SpeciesVarietyResponse = response.choices[0].message.parsed
+            parsed_response: SpeciesVarietyResponse = response["content"]
             # Return the model as JSON string
             return parsed_response.model_dump_json()
         except Exception as e:
@@ -125,42 +146,12 @@ class VideoSearch:
     ):
         try:
             min_threshold = min_threshold / 100
-            # setting up the environment variables and required azure clients
-            AZURE_MANAGED_IDENTITY = os.environ.get(
-                "MANAGED_IDENTITY", None
-            )
-            azure_search_endpoint = os.getenv("SEARCH_SERVICE_ENDPOINT", None)
-            if azure_search_endpoint is None:
-                raise Exception("Azure search endpoint is missing in env!")
-
-            if AZURE_MANAGED_IDENTITY is None:
-                raise Exception(
-                    "MANAGED_IDENTITY requires boolean value for selecting authorization either with Managed Identity or API Key"
-                )
-
-            if AZURE_MANAGED_IDENTITY.upper() == "TRUE":
-                # Use Azure CLI credential if available, fallback to DefaultAzureCredential
-                credential = self._get_credential()
-                    
-                index_client = SearchClient(
-                    endpoint=azure_search_endpoint,
-                    index_name=index_name,
-                    credential=credential,
-                )
-            else:
-                SEARCH_SERVICE_KEY = os.environ.get("SEARCH_SERVICE_KEY", None)
-                if SEARCH_SERVICE_KEY is None:
-                    raise Exception("Azure Search Key is missing!")
-                index_client = SearchClient(
-                    endpoint=azure_search_endpoint,
-                    index_name=index_name,
-                    credential=AzureKeyCredential(key=SEARCH_SERVICE_KEY),
-                )
+            
+            # Generate embeddings for the query
             query_embds = await self.generate_embeddings(text=query)
-            vector_query = VectorizedQuery(vector=query_embds, fields="embeddings")
-
+            
+            # Build filter expression
             filter_expression = []
-
             if species:
                 filter_expression.append(f"species eq '{species}'")
             if variety:
@@ -168,26 +159,74 @@ class VideoSearch:
                     logger.info(f"setting filter for variety: {variety}")
                     filter_expression.append(f"variety eq '{variety}'")
 
-            if filter_expression:
-                filter_query = " and ".join(filter_expression)
-            else:
-                filter_query = None
-                
-            results = await index_client.search(
-                search_text=None,
-                vector_queries=[vector_query],
-                vector_filter_mode=VectorFilterMode.PRE_FILTER,
-                top=50,
-                filter=filter_query,
-                select=["species", "variety", "blob_video_url", "hash_video_id", "youtube_url"]
-            )
+            filter_query = " and ".join(filter_expression) if filter_expression else None
             
-
+            # Use the search provider or fallback to direct Azure Search
+            if self.search_provider:
+                search_results = await self.search_provider.search(
+                    query=query,
+                    index_name=index_name,
+                    search_text=None,
+                    vector_queries=[VectorizedQuery(vector=query_embds, fields="embeddings")],
+                    vector_filter_mode=VectorFilterMode.PRE_FILTER,
+                    top=50,
+                    filter=filter_query,
+                    select=["species", "variety", "blob_video_url", "hash_video_id", "youtube_url"]
+                )
+            else:
+                # Fallback to direct Azure Search implementation
+                from azure.search.documents.aio import SearchClient
+                from azure.core.credentials import AzureKeyCredential
+                import os
+                
+                # Get search configuration from environment
+                AZURE_MANAGED_IDENTITY = os.environ.get("MANAGED_IDENTITY", None)
+                azure_search_endpoint = os.getenv("SEARCH_SERVICE_ENDPOINT", None)
+                
+                if not azure_search_endpoint:
+                    raise Exception("Azure search endpoint is missing in env!")
+                
+                if AZURE_MANAGED_IDENTITY is None:
+                    raise Exception("MANAGED_IDENTITY requires boolean value")
+                
+                if AZURE_MANAGED_IDENTITY.upper() == "TRUE":
+                    credential = self._get_credential()
+                    index_client = SearchClient(
+                        endpoint=azure_search_endpoint,
+                        index_name=index_name,
+                        credential=credential,
+                    )
+                else:
+                    SEARCH_SERVICE_KEY = os.environ.get("SEARCH_SERVICE_KEY", None)
+                    if SEARCH_SERVICE_KEY is None:
+                        raise Exception("Azure Search Key is missing!")
+                    index_client = SearchClient(
+                        endpoint=azure_search_endpoint,
+                        index_name=index_name,
+                        credential=AzureKeyCredential(key=SEARCH_SERVICE_KEY),
+                    )
+                
+                try:
+                    vector_query = VectorizedQuery(vector=query_embds, fields="embeddings")
+                    results = await index_client.search(
+                        search_text=None,
+                        vector_queries=[vector_query],
+                        vector_filter_mode=VectorFilterMode.PRE_FILTER,
+                        top=50,
+                        filter=filter_query,
+                        select=["species", "variety", "blob_video_url", "hash_video_id", "youtube_url"]
+                    )
+                    search_results = [dict(result) async for result in results]
+                finally:
+                    await index_client.close()
+            
+            # Filter results by minimum threshold
             filtered_results = []
-            async for result in results:
-                if min_threshold <= result["@search.score"]:
+            for result in search_results:
+                if min_threshold <= result.get("@search.score", 0):
                     filtered_results.append(result)
 
+            # Get top N unique results
             top_n_results = []
             seen_urls = set()
             for result in filtered_results:
@@ -199,9 +238,6 @@ class VideoSearch:
             return top_n_results
         except Exception as e:
             raise Exception(f"Error while doing AI search: {e}")
-        finally:
-            if index_client:
-                await index_client.close()
 
     async def query_search(self, query, index_name, top_n, min_threshold):
         try:
@@ -259,7 +295,9 @@ async def video_search(
     query: Annotated[str, "query of which video id needs to fetch"],
     index_name: Annotated[str, "ai search index name"],
     top_n: Annotated[int, "n video_id retreivel"] = 1,
-    search_provider=None
+    llm_provider: Optional[object] = None,
+    embedding_provider: Optional[object] = None,
+    search_provider: Optional[object] = None
 ):
     """
     This tool returns the video id of ingested video corresponds to the query
@@ -270,8 +308,9 @@ async def video_search(
 
 
 if __name__ == "__main__":
-    query = "What is the recommended timeframe for the first weeding after sowing the Virat species of mung?"
-    index_name = "jharkhand-video-index"
+    # Example usage - replace with your actual values
+    query = "example query"
+    index_name = "your-index-name"
     top_n = 3
     res = asyncio.run(video_search(query=query, index_name=index_name, top_n=top_n))
     print(res)
