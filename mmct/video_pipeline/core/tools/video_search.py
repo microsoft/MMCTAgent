@@ -31,7 +31,7 @@ class VideoSearch:
             # Try Azure CLI credential first
             cli_credential = AzureCliCredential()
             # Test if CLI credential works by getting a token
-            cli_credential.get_token("https://search.azure.com/.default")
+            # cli_credential.get_token("https://search.azure.com/.default")
             return cli_credential
         except Exception:
             return DefaultAzureCredential()

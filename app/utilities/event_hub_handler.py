@@ -1,5 +1,5 @@
 from dotenv import load_dotenv, find_dotenv
-from azure.identity.aio import DefaultAzureCredential as AsyncDefaultAzureCredential, AzureCliCredential as AsyncAzureCliCredential
+from azure.identity.aio import DefaultAzureCredential, AzureCliCredential
 from azure.eventhub.aio import EventHubProducerClient, EventHubConsumerClient
 from azure.eventhub import EventData
 from loguru import logger
@@ -47,13 +47,13 @@ class EventHubHandler:
         """Get Azure credential, trying CLI first, then DefaultAzureCredential."""
         try:
             # Try Azure CLI credential first
-            credential = AsyncAzureCliCredential()
+            credential = AzureCliCredential()
             logger.info("Using Azure CLI credential for Event Hub")
             return credential
         except Exception as e:
             logger.warning(f"Azure CLI credential failed: {e}")
             # Fall back to DefaultAzureCredential
-            credential = AsyncDefaultAzureCredential()
+            credential = DefaultAzureCredential()
             logger.info("Using DefaultAzureCredential for Event Hub")
             return credential
 

@@ -19,7 +19,7 @@ from pathlib import Path
 import aiofiles
 from urllib.parse import urlparse, unquote
 from azure.storage.blob.aio import BlobServiceClient
-from azure.identity.aio import DefaultAzureCredential
+from azure.identity.aio import DefaultAzureCredential, AzureCliCredential
 from loguru import logger
  
 class BlobStorageManager:
@@ -39,7 +39,6 @@ class BlobStorageManager:
     def _get_credential(self):
         """Get Azure credential, trying CLI first, then DefaultAzureCredential."""
         try:
-            from azure.identity.aio import AzureCliCredential
             # Try Azure CLI credential first
             credential = AzureCliCredential()
             logger.info("Using Azure CLI credential for Blob Storage")
@@ -47,7 +46,6 @@ class BlobStorageManager:
         except Exception as e:
             logger.warning(f"Azure CLI credential failed: {e}")
             # Fall back to DefaultAzureCredential
-            from azure.identity.aio import DefaultAzureCredential
             credential = DefaultAzureCredential()
             logger.info("Using DefaultAzureCredential for Blob Storage")
             return credential
