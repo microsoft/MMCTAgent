@@ -1,34 +1,42 @@
 <div align="center">
 
-![](https://img.shields.io/badge/Task-Code_Related-blue)
-![](https://img.shields.io/badge/Code_License-MIT-green)
+[![arXiv](https://img.shields.io/badge/arXiv-2405.18358-b31b1b.svg)](https://arxiv.org/abs/2405.18358)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 
 </div>
 
-# [**MMCT Agent**](https://arxiv.org/abs/2405.18358)
-<p align='center'>
-    <a href="docs/multimedia/videos/Demo_MMCT.mp4" style="text-decoration: None;">| Demo Video |</a>
-</p>
+# [**MMCTAgent**](https://arxiv.org/abs/2405.18358)
+
+<div align="center">
+  <strong>Multi-Modal Critical Thinking Agent Framework for Complex Visual Reasoning</strong>
+  <br><br>
+  <a href="https://youtu.be/Lxt1b_U-a68">🎥 Demo Video</a> • 
+  <a href="https://arxiv.org/abs/2405.18358">📄 Research Paper</a> • 
+  <a href="#getting-started">🚀 Quick Start</a>
+</div>
+
+<br>
 <video width="100%" controls>
   <source src="docs/multimedia/videos/Demo_MMCT.mp4" type="video/mp4">
   Your browser does not support the video tag.
 </video>
 
 
-## **Overview**
+## Overview
 
-This repository implements **MMCTAgent**, a novel **multi-modal critical thinking agent** designed to push the boundaries of visual reasoning and deep understanding across **images** and **videos**. Built upon our [research paper](https://arxiv.org/abs/2405.18358), MMCTAgent combines planning, self-critique, and tool-based reasoning to enhance decision-making in complex multi-modal tasks.
+MMCTAgent is a state-of-the-art multi-modal AI framework that brings human-like critical thinking to visual reasoning tasks. it combines advanced planning, self-critique, and tool-based reasoning to deliver superior performance in complex image and video understanding applications.
+
+### Why MMCTAgent?
+
+- **🧠 Human-like Reasoning**: Implements structured critical thinking with planning and critique phases
+- **🎯 Superior Performance**: Outperforms traditional approaches on complex visual reasoning benchmarks  
+- **🔧 Production Ready**: Enterprise-grade architecture with multi-cloud support and security features
+- **🚀 Easy Integration**: Modular design allows seamless integration into existing workflows
 
 <p align="center">
   <a href="https://arxiv.org/abs/2405.18358">
     <img src="docs/multimedia/VideoPipeline.webp" alt="Video Pipeline - Main Architecture" width="80%" />
-  </a>
-</p>
-
-<p align="center">
-  <a href="https://arxiv.org/abs/2405.18358">
-    <img src="docs/multimedia/mmct-model.png" alt="mmct-model", width="45%" />
-    <img src="docs/multimedia/agent2.png" alt="mmct-workflow", width="45%" />
   </a>
 </p>
 
@@ -94,16 +102,17 @@ For more details, refer to the full research article:
  Framework for Complex Visual Reasoning](https://arxiv.org/abs/2405.18358)**  
 Published on **arXiv** – [arxiv.org/abs/2405.18358](https://arxiv.org/abs/2405.18358)
 
-## **Citation**
+## Citation
 
-If you find this repository helpful, please consider citing our paper:
+If you find MMCTAgent useful in your research, please cite our paper:
 
 ```bibtex
-@article{MMCT Agent,
-  title={MMCTAgent: MMCTAgent is a novel multi-modal critical thinking agent framework designed to address the inherent limitations of current Multimodal LLMs in complex visual reasoning tasks. MMCTAgent iteratively analyzes multi-modal information, decomposes queries, plans strategies, and dynamically evolves its reasoning. Additionally, MMCTAgent incorporates critical thinking elements such as verification of final answers and self-reflection through a novel approach that defines a vision-based critic and identifies task-specific evaluation criteria, thereby enhancing its decision-making abilities.},
-  author={Somnath Kumar, Yash Gadhia, Tanuja Ganu, Akshay Nambi},
-  journal={arXiv preprint arXiv:2405.18358v1},
-  year={2024}
+@article{kumar2024mmctagent,
+  title={MMCTAgent: Multi-modal Critical Thinking Agent Framework for Complex Visual Reasoning},
+  author={Kumar, Somnath and Gadhia, Yash and Ganu, Tanuja and Nambi, Akshay},
+  journal={arXiv preprint arXiv:2405.18358},
+  year={2024},
+  url={https://arxiv.org/abs/2405.18358}
 }
 ```
 
@@ -168,62 +177,56 @@ For detailed configuration instructions, see our [Provider Configuration Guide](
 
 ---
 
-## **Getting Started**
+## Getting Started
 
-To get started with this repository:
+### Quick Installation
 
-1. **Clone the repository**
+1. **Clone the Repository**
+   ```bash
+   git clone https://github.com/microsoft/MMCTAgent.git
+   cd MMCTAgent
+   ```
 
-   ```sh
-   git clone --branch <branch-name> <repository-url>
-   cd <project-directory>
-    ```
+2. **System Dependencies**
+   
+   **Linux/Ubuntu:**
+   ```bash
+   sudo apt-get update
+   sudo apt-get install ffmpeg libsm6 libxext6 -y
+   ```
+   
+   **Windows:**
+   - Download FFmpeg from [ffmpeg.org](https://ffmpeg.org/download.html)
+   - Add the `bin` folder to your system PATH
 
-2. **FFMPEG Installation**
-    - For Linux Environment:
+3. **Python Environment Setup**
 
-    ```bash
-    sudo apt-get update
-    sudo apt-get install ffmpeg libsm6 libxext6  -y
-    ```
+   **Option A: Using Conda (Recommended)**
+   ```bash
+   conda create -n mmct-agent python=3.11
+   conda activate mmct-agent
+   ```
 
-    - For Windows:
-        - Download FFmpeg from: <https://ffmpeg.org/download.html>
-        - Choose the Windows build (e.g., from <https://www.gyan.dev/ffmpeg/builds/> )
-        - Extract the files and add the bin folder to the system PATH variable so you can use ffmpeg from the command line.
+   **Option B: Using venv**
+   ```bash
+   python -m venv mmct-agent
+   # Linux/Mac
+   source mmct-agent/bin/activate
+   # Windows
+   mmct-agent\Scripts\activate.bat
+   ```
 
-    LibSM6 & libXext6 (Linux X11 Libraries): These libraries are mainly used for graphical applications on Linux and are not typically required on Windows.
+4. **Install Dependencies**
+   ```bash
+   pip install --upgrade pip
+   pip install -r requirements.txt
+   ```
 
-3. **Install MiniConda [If Conda Environment is preferred]**
-
-    You can refer to this [link](https://www.anaconda.com/docs/getting-started/miniconda/install)  for installation of Miniconda, according to your device configuration.
-
-4. **Create the environment**
-
-    You can use conda or venv.
-    - **Installation Using Conda**
-
-        ```bash
-        conda create -n <env-name> python=3.11.11
-        conda activate <env-name>
-        ```
-
-    - **Using venv (Python standard)**
-
-        ```bash
-        python -m venv <env-name>
-        source <env-name>/bin/activate    # on Linux/Mac
-        <env-name>\Scripts\activate.bat   # on Windows
-        ```
-
-5. **Install dependencies and set up the project**
-
-    Ensure you have pip >= 21.3 to support pyproject.toml installations.
-
-    ```bash
-    pip install --upgrade pip
-    pip install -r requirements.txt
-    ```
+### Verify Installation
+```python
+from mmct.image_pipeline import ImageAgent
+print("✅ MMCTAgent installed successfully!")
+```
 
 ## **Prerequisites**
 
@@ -342,64 +345,52 @@ LOG_MAX_FILE_SIZE=10 MB
 
 📖 **For comprehensive configuration options, see our [Provider Configuration Guide](docs/PROVIDERS.md)**
 
-## **Usage**
+## Usage
 
-You can refer to the `examples` directory to understand the usage of this repository. Below are the sample scripts you can refer to get started:
+### Quick Start Examples
 
-> MMCT Image Agent
+#### Image Analysis with MMCTAgent
 
 ```python
 from mmct.image_pipeline import ImageAgent, ImageQnaTools
 import asyncio
-import ast
 
-# user query
-query = "" 
-# define the tools, you can refer to the Enum definition of Tools to get the idea for available tools
-tools = [ImageQnaTools.OBJECT_DETECTION, ImageQnaTools.VIT]
-# flag variable whether you want to initialize Critic Agent or not.
-use_critic_agent = True
-# flag variable whether you have to stream or not.
-stream = False
-# initialize the Image Agent.
-mmct_agent = ImageAgent(
-    query=query,
-    image_path=image_path,
-    tools=tools,
-    use_critic_agent=use_critic_agent,
-    stream=stream,
+# Initialize the Image Agent with desired tools
+image_agent = ImageAgent(
+    query="What objects are visible in this image and what text can you read?",
+    image_path="path/to/your/image.jpg",
+    tools=[ImageQnaTools.OBJECT_DETECTION, ImageQnaTools.OCR, ImageQnaTools.VIT],
+    use_critic_agent=True,  # Enable critical thinking
+    stream=False
 )
 
-response = asyncio.run(mmct_agent())
-print(response.response)
+# Run the analysis
+response = asyncio.run(image_agent())
+print(f"Analysis Result: {response.response}")
 ```
 
-> MMCT Video Agent
+#### Video Understanding with MMCTAgent
 
 ```python
-import asyncio
-import ast
 from mmct.video_pipeline import VideoAgent
+import asyncio
 
-query = ""
-index_name = ""  # Azure AI Search index name
-top_n = 3  # Number of top results (video ids for MMCT VQnA) to return from the index
-use_computer_vision_tool = False   # flag for selection of Azure Computer Vision Tool
-use_critic_agent = True     # flag to utilize Critic Agent.
-stream = True               # flag to stream the logs of the Agentic Flow.
-
+# Configure the Video Agent
 video_agent = VideoAgent(
-    query=query,
-    index_name=index_name,
-    top_n=top_n,
-    use_computer_vision_tool=use_computer_vision_tool,
-    use_critic_agent=use_critic_agent,
-    stream=stream,
+    query="Explain the main events in this video",
+    index_name="your-search-index",  # Azure AI Search index
+    top_n=3,  # Number of relevant videos to analyze
+    use_computer_vision_tool=True,   # Enable visual analysis
+    use_critic_agent=True,           # Enable critical review
+    stream=True                      # Stream progress logs
 )
 
+# Execute video analysis
 response = asyncio.run(video_agent())
-print(response)
+print(f"Video Analysis: {response}")
 ```
+
+For more comprehensive examples, see the [`examples/`](examples/) directory.
 
 ## **Project Structure**
 
@@ -425,5 +416,62 @@ MMCTAgent
 │       │           └── ingestion_pipeline.py   # Entry point for the Video Ingestion Workflow
 │       └── README.md                # Guide for Video Pipeline  
 ├── requirements.txt
-└──README.md  
+└── README.md  
 ```
+
+## Contributing
+
+We welcome contributions from the community! MMCTAgent is an open-source project and we encourage you to help make it better.
+
+### How to Contribute
+
+1. **Fork the Repository**: Click the "Fork" button on GitHub
+2. **Create a Feature Branch**: `git checkout -b feature/your-feature-name`
+3. **Make Changes**: Implement your improvements
+4. **Add Tests**: Ensure your changes are well-tested
+5. **Submit a Pull Request**: Describe your changes and submit for review
+
+### Development Setup
+
+```bash
+# Clone your fork
+git clone https://github.com/your-username/MMCTAgent.git
+cd MMCTAgent
+
+# Install development dependencies
+pip install -r requirements-dev.txt
+
+# Run tests
+python -m pytest tests/
+```
+
+### Reporting Issues
+
+- Use GitHub Issues to report bugs or request features
+- Provide clear, detailed descriptions with reproducible examples
+- Check existing issues to avoid duplicates
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Acknowledgments
+
+- Built with support from Microsoft Research
+- Thanks to all contributors and the open-source community
+- Special recognition to the authors of the foundational research
+
+## Support
+
+- 📖 [Documentation](docs/)
+- 🐛 [Report Issues](https://github.com/microsoft/MMCTAgent/issues)
+- 💬 [Discussions](https://github.com/microsoft/MMCTAgent/discussions)
+- 📧 Contact: [Research Team](mailto:mmctagent@microsoft.com)
+
+---
+
+<div align="center">
+  <strong>Made with ❤️ by the MMCTAgent Team</strong>
+  <br>
+  <a href="https://github.com/microsoft/MMCTAgent">⭐ Star us on GitHub</a>
+</div>
