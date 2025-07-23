@@ -19,13 +19,12 @@
 <br>
 
 <div align="center">
-  
-[![Demo Video](https://img.youtube.com/vi/Lxt1b_U-a68/maxresdefault.jpg)](https://youtu.be/Lxt1b_U-a68)
+
+![Demo GIF](docs/multimedia/gif/Demo_MMCT.gif)
 
 **▶️ [Watch Demo Video](https://youtu.be/Lxt1b_U-a68)**
 
 </div>
-
 
 ## Overview
 
