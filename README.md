@@ -17,10 +17,14 @@
 </div>
 
 <br>
-<video width="100%" controls>
-  <source src="docs/multimedia/videos/Demo_MMCT.mp4" type="video/mp4">
-  Your browser does not support the video tag.
-</video>
+
+<div align="center">
+  
+[![Demo Video](https://img.youtube.com/vi/Lxt1b_U-a68/maxresdefault.jpg)](https://youtu.be/Lxt1b_U-a68)
+
+**▶️ [Watch Demo Video](https://youtu.be/Lxt1b_U-a68)**
+
+</div>
 
 
 ## Overview
