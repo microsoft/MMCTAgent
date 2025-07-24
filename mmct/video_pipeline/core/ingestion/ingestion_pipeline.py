@@ -16,6 +16,7 @@ from mmct.video_pipeline.utils.helper import (
     encode_frames_to_base64,
     chunked,
     remove_file,
+    check_video_already_ingested,
 )
 
 from mmct.video_pipeline.core.ingestion.languages import Languages
@@ -168,9 +169,9 @@ class IngestionPipeline:
 
     async def get_transcription(self):
         try:
-            self.hash_id = await get_file_hash(file_path=self.video_path)
+            # Hash ID is already generated in __call__ method, no need to regenerate
             self.logger.info(
-                f"Successfully generated the file hash for the video path: {self.video_path}\nHash Id: {self.hash_id}"
+                f"Using existing hash ID for video path: {self.video_path}\nHash Id: {self.hash_id}"
             )
             
             # Rename video file to hash_id.extension
@@ -415,6 +416,22 @@ class IngestionPipeline:
         try:
             await self._check_and_compress_video()  # Check file size and compress if needed
             self.logger.info("Video compression check completed!")
+            
+            # Generate hash ID early to check for duplicates
+            self.hash_id = await get_file_hash(file_path=self.video_path)
+            self.logger.info(f"Generated hash ID: {self.hash_id}")
+            
+            # Check if video already exists in the index (early duplicate check)
+            is_already_ingested = await check_video_already_ingested(
+                hash_id=self.hash_id, 
+                index_name=self.index_name
+            )
+            
+            if is_already_ingested:
+                self.logger.info(f"Video with hash_id {self.hash_id} already exists in index {self.index_name}. Skipping ingestion.")
+                return
+            
+            self.logger.info("Video not found in index. Proceeding with ingestion...")
             await self.get_transcription()  # transcribing the audio from video
             self.logger.info("Transcript Generated!")
             await self._get_frames_timestamps()  # extact, encoding & saving the frames
