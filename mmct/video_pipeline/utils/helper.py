@@ -9,11 +9,12 @@ import os
 import cv2
 import subprocess
 from io import BytesIO
-from azure.storage.blob import BlobServiceClient, ContentSettings
+from azure.storage.blob import BlobServiceClient
 from azure.storage.blob.aio import BlobServiceClient as AsyncBlobServiceClient
 from azure.identity import get_bearer_token_provider, DefaultAzureCredential
-from azure.core.credentials import AzureKeyCredential
+from mmct.video_pipeline.utils.ai_search_client import AISearchClient
 from dotenv import load_dotenv, find_dotenv
+
 
 load_dotenv(find_dotenv(), override=True)
 
@@ -483,3 +484,50 @@ async def remove_file(video_id):
         
     except Exception as e:
         raise Exception(e)
+
+
+async def check_video_already_ingested(hash_id: str, index_name: str) -> bool:
+    """
+    Check if a video with the given hash_id already exists in the search index.
+    
+    Args:
+        hash_id (str): The hash ID of the video to check
+        index_name (str): The name of the search index to check
+        
+    Returns:
+        bool: True if video already exists, False otherwise
+    """
+    try:
+        # Get credentials based on environment configuration
+        if os.environ.get("MANAGED_IDENTITY", "FALSE").upper() == "TRUE":
+            from azure.identity import AzureCliCredential, DefaultAzureCredential
+            try:
+                cli_credential = AzureCliCredential()
+                cli_credential.get_token("https://search.azure.com/.default")
+                credential = cli_credential
+            except Exception:
+                credential = DefaultAzureCredential()
+        else:
+            from azure.core.credentials import AzureKeyCredential
+            key = os.getenv("SEARCH_SERVICE_KEY")
+            if key is None:
+                raise Exception("SEARCH_SERVICE_KEY is missing for Azure AI Search!")
+            credential = AzureKeyCredential(key)
+        
+        # Create AI Search client
+        index_client = AISearchClient(
+            endpoint=os.getenv("SEARCH_SERVICE_ENDPOINT"),
+            index_name=index_name,
+            credential=credential
+        )
+        
+        # Check if document exists
+        exists = await index_client.check_if_exists(hash_id=hash_id)
+        await index_client.close()
+        
+        return exists
+        
+    except Exception as e:
+        logger.error(f"Error checking if video already ingested: {e}")
+        # In case of error, return False to proceed with ingestion
+        return False
