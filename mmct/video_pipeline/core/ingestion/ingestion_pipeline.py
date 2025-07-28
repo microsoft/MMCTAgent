@@ -119,8 +119,14 @@ class IngestionPipeline:
         self.local_resources = []
         self.pending_upload_tasks = []
         self.blob_urls = {}
-        self.blob_manager = BlobStorageManager()
+        self.blob_manager = None  # Will be initialized async when first needed
         self.original_video_path = video_path
+
+    async def _get_blob_manager(self):
+        """Initialize blob manager if not already initialized."""
+        if self.blob_manager is None:
+            self.blob_manager = await BlobStorageManager.create()
+        return self.blob_manager
 
     async def _check_and_compress_video(self):
         """
@@ -199,7 +205,8 @@ class IngestionPipeline:
                 if self.transcription_service == TranscriptionServices.AZURE_STT
                 else ".mp3"
             )
-            self.blob_urls["audio_blob_url"] = self.blob_manager.get_blob_url(
+            blob_manager = await self._get_blob_manager()
+            self.blob_urls["audio_blob_url"] = blob_manager.get_blob_url(
                 container=self.audio_container,
                 blob_name=f"{self.hash_id}" + audio_extension,
             )
@@ -207,7 +214,7 @@ class IngestionPipeline:
             self.transcript, local_paths = await transcriber()
             self.logger.info("Successfully generated the transcript for the video.")
             self.pending_upload_tasks.append(
-                self.blob_manager.upload_file(
+                blob_manager.upload_file(
                     container=self.audio_container,
                     blob_name=f"{self.hash_id}" + audio_extension,
                     file_path=os.path.join(
@@ -219,7 +226,7 @@ class IngestionPipeline:
             self.logger.info("Added Audio File to pending upload tasks list")
 
             self.pending_upload_tasks.append(
-                self.blob_manager.upload_file(
+                blob_manager.upload_file(
                     container=self.transcript_container,
                     blob_name=f"transcript_{self.hash_id}.srt",
                     file_path=os.path.join(
@@ -230,7 +237,7 @@ class IngestionPipeline:
             )
             self.logger.info("Added Transcript File to pending upload tasks list")
 
-            self.blob_urls["transcript_blob_url"] = self.blob_manager.get_blob_url(
+            self.blob_urls["transcript_blob_url"] = blob_manager.get_blob_url(
                 container=self.transcript_container,
                 blob_name=f"transcript_{self.hash_id}.srt",
             )
@@ -239,7 +246,7 @@ class IngestionPipeline:
             )
 
             self.blob_urls["transcript_and_summary_file_url"] = (
-                self.blob_manager.get_blob_url(
+                blob_manager.get_blob_url(
                     container=self.video_description_container_name,
                     blob_name=f"{self.hash_id}.json",
                 )
@@ -279,6 +286,8 @@ class IngestionPipeline:
         This method merge summaries from chapters and transcript.
         """
         try:
+            blob_manager = await self._get_blob_manager()
+            
             self.logger.info(
                 "Creating an instance of class MergeVisualSummaryWithTranscript"
             )
@@ -292,7 +301,7 @@ class IngestionPipeline:
             await merge_summary_transcript()
             self.logger.info("Successfully merged the visual summary and transcript")
             self.pending_upload_tasks.append(
-                self.blob_manager.upload_file(
+                blob_manager.upload_file(
                     container=self.video_description_container_name,
                     blob_name=f"{self.hash_id}.json",
                     file_path=os.path.join(
@@ -335,6 +344,8 @@ class IngestionPipeline:
 
     async def _get_frames_timestamps(self):
         try:
+            blob_manager = await self._get_blob_manager()
+            
             self.logger.info("Extracting frames and timestamps from the video...")
             self.frames, self.timestamps = await extract_frames(
                 video_path=self.video_path
@@ -357,7 +368,7 @@ class IngestionPipeline:
 
             for i, png_path in enumerate(png_paths):
                 self.pending_upload_tasks.append(
-                    self.blob_manager.upload_file(
+                    blob_manager.upload_file(
                         container=self.frames_container,
                         blob_name=f"frames/{self.hash_id}/frame_{i}.png",
                         file_path=png_path,
@@ -379,7 +390,7 @@ class IngestionPipeline:
             )
 
             self.pending_upload_tasks.append(
-                self.blob_manager.upload_file(
+                blob_manager.upload_file(
                     container=self.timestamps_container,
                     blob_name=f"timestamps_{self.hash_id}.txt",
                     file_path=os.path.join(
@@ -389,13 +400,13 @@ class IngestionPipeline:
             )
             self.logger.info("Logged the timestamps file to pending upload tasks list")
 
-            self.blob_urls["frames_blob_folder_url"] = self.blob_manager.get_blob_url(
+            self.blob_urls["frames_blob_folder_url"] = blob_manager.get_blob_url(
                 container=self.frames_container, blob_name=f"frames/{self.hash_id}"
             )
             self.logger.info(
                 "Successfully loggeed the frames blob folder path url to the blob urls mapping dictionary!"
             )
-            self.blob_urls["timestamps_blob_url"] = self.blob_manager.get_blob_url(
+            self.blob_urls["timestamps_blob_url"] = blob_manager.get_blob_url(
                 container=self.timestamps_container,
                 blob_name=f"timestamps_{self.hash_id}.txt",
             )
@@ -457,7 +468,8 @@ class IngestionPipeline:
                 "Successfully uploaded the files to blob present in the pending upload tasks list!"
             )
 
-            await self.blob_manager.close()
+            blob_manager = await self._get_blob_manager()
+            await blob_manager.close()
             
             # Clean up local files after successful ingestion
             await remove_file(self.hash_id)

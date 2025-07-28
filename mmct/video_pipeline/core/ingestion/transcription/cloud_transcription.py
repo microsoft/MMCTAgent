@@ -45,7 +45,7 @@ class CloudTranscription(Transcription):
             # Use Azure CLI credential first, then fallback to DefaultAzureCredential
             credential = await self._get_credential()
                 
-            token = await credential.get_token(
+            token = credential.get_token(
                 "https://cognitiveservices.azure.com/.default"
             )
             token = token.token
@@ -93,7 +93,7 @@ class CloudTranscription(Transcription):
             # Try Azure CLI credential first
             cli_credential = AzureCliCredential()
             # Test if CLI credential works by getting a token
-            # await cli_credential.get_token("https://cognitiveservices.azure.com/.default")
+            cli_credential.get_token("https://cognitiveservices.azure.com/.default")
             return cli_credential
         except Exception:
             return DefaultAzureCredential()
@@ -104,8 +104,8 @@ class CloudTranscription(Transcription):
             # Use Azure CLI credential first, then fallback to DefaultAzureCredential
             credential = await self._get_credential()
                 
-            async with credential:
-                token = await credential.get_token(
+
+            token = credential.get_token(
                     "https://cognitiveservices.azure.com/.default"
                 )
             token = token.token

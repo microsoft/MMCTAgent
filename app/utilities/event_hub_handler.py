@@ -7,7 +7,7 @@ from azure.eventhub.exceptions import ConnectionLostError, AuthenticationError
 from typing import Annotated, Dict
 import os
 import json
-
+import asyncio
 load_dotenv(find_dotenv(), override=True)
 
 class EventHubHandler:
@@ -48,6 +48,7 @@ class EventHubHandler:
         try:
             # Try Azure CLI credential first
             credential = AzureCliCredential()
+            asyncio.run(credential.get_token("https://eventhubs.azure.net/.default"))
             logger.info("Using Azure CLI credential for Event Hub")
             return credential
         except Exception as e:

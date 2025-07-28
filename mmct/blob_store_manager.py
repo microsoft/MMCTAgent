@@ -23,11 +23,22 @@ from azure.identity.aio import DefaultAzureCredential, AzureCliCredential
 from loguru import logger
  
 class BlobStorageManager:
-    def __init__(self, account_url: str = None):
-        # Initialize credential and transport with limited connection pool
+    def __init__(self):
+        # Private constructor - use create() class method instead
+        pass
+    
+    @classmethod
+    async def create(cls, account_url: str = None):
+        """Factory method to create BlobStorageManager with async initialization."""
+        instance = cls()
+        await instance._initialize(account_url)
+        return instance
+    
+    async def _initialize(self, account_url: str = None):
+        """Initialize credential and transport with limited connection pool."""
         try:
             # Use Azure CLI credential if available, fallback to DefaultAzureCredential
-            self.credential = self._get_credential()
+            self.credential = await self._get_credential()
             self.service_client = BlobServiceClient(
                 account_url or os.getenv("BLOB_ACCOUNT_URL"),
                 credential=self.credential,
@@ -36,11 +47,14 @@ class BlobStorageManager:
         except Exception as e:
             logger.exception(f"Exception occured while creating the blob service client: {e}")
             raise
-    def _get_credential(self):
+    
+    async def _get_credential(self):
         """Get Azure credential, trying CLI first, then DefaultAzureCredential."""
         try:
             # Try Azure CLI credential first
             credential = AzureCliCredential()
+            await credential.get_token("https://storage.azure.com/.default")
+            
             logger.info("Using Azure CLI credential for Blob Storage")
             return credential
         except Exception as e:
@@ -49,6 +63,7 @@ class BlobStorageManager:
             credential = DefaultAzureCredential()
             logger.info("Using DefaultAzureCredential for Blob Storage")
             return credential
+        
     def get_blob_url(self, container: str, blob_name: str) -> str:
         """
         Generate a URL for a blob that doesn't yet exist in storage.

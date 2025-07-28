@@ -25,7 +25,7 @@ class AzureLLMProvider(LLMProvider):
             # Try Azure CLI credential first
             cli_credential = AzureCliCredential()
             # Test if CLI credential works by getting a token
-            # cli_credential.get_token("https://cognitiveservices.azure.com/.default")
+            cli_credential.get_token("https://cognitiveservices.azure.com/.default")
             logger.info("Using Azure CLI credential")
             return cli_credential
         except Exception as e:
@@ -245,6 +245,7 @@ class AzureSearchProvider(SearchProvider):
         self.config = config
         try:
             self.credential = AzureCliCredential()
+            self.credential.get_token("https://search.azure.com/.default")
         except Exception as e:
             logger.info(f"Azure CLI credential not available: {e}. Using DefaultAzureCredential")
             # Fallback to DefaultAzureCredential if CLI credential is not available
@@ -356,6 +357,7 @@ class AzureTranscriptionProvider(TranscriptionProvider):
         self.config = config
         try:
             self.credential = AzureCliCredential()
+            self.credential.get_token("https://cognitiveservices.azure.com/.default")
         except Exception as e:
             logger.info(f"Azure CLI credential not available: {e}. Using DefaultAzureCredential")
             # Fallback to DefaultAzureCredential if CLI credential is not available

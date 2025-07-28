@@ -27,7 +27,7 @@ async def query_vision_llm(
     query: Annotated[str, "A natural language question about the visual content of the video."], 
     timestamp: Annotated[str, "The timestamp (in %H:%M:%S format) around which to sample frames for visual analysis."], 
     video_id: Annotated[str, "Unique identifier for the video from which frames will be extracted."],
-    llm_provider: Optional[object] = None,
+    llm_provider_param: Optional[object] = None,
     vision_provider: Optional[object] = None
 ) -> str:
     """
@@ -43,6 +43,10 @@ async def query_vision_llm(
     """
     try:
         logger.info("Utilizing query vision llm tool")
+        
+        # Use global provider if no provider is passed as parameter
+        current_llm_provider = llm_provider_param if llm_provider_param is not None else llm_provider
+        
         # Convert timestamp to milliseconds
         h, m, s = map(int, timestamp.split(":"))
         index_of_frame = int(h * 3600 + m * 60 + s)
@@ -120,7 +124,7 @@ async def query_vision_llm(
         for attempt, wait_time in enumerate(retry_intervals,start=1):
             try:
                 logger.info("Initiating the call to query vision llm")
-                response = await llm_provider.chat_completion(
+                response = await current_llm_provider.chat_completion(
                     messages=payload['messages'],
                     temperature=payload["temperature"],
                     top_p=payload['top_p'],

@@ -23,16 +23,7 @@ except Exception as e:
     logger.exception(f"Exception occured while instantiating the Event Hub class: {e}")
     raise
 
-try:
-    logger.info(
-        "Creating an instance of blob storage manager to handle operations related to blob"
-    )
-    blob_storage_manager = BlobStorageManager(account_url=os.getenv("BLOB_ACCOUNT_URL"))
-except Exception as e:
-    logger.exception(
-        f"Exception occured while instantiating the blob storage manager class: {e}"
-    )
-    raise
+blob_storage_manager = None  # Will be initialized async in on_event
     
 
 async def on_event(partition_context: PartitionContext, event: EventData):
@@ -49,6 +40,10 @@ async def on_event(partition_context: PartitionContext, event: EventData):
             video_blob_name = payload.get('video_blob_name', None)
             video_blob_url = payload.get('video_blob_url', None)
             logger.info("Successfully fetched payload from the event hub!")
+            
+            # Initialize blob storage manager for this event
+            logger.info("Creating an instance of blob storage manager to handle operations related to blob")
+            blob_storage_manager = await BlobStorageManager.create(account_url=os.getenv("BLOB_ACCOUNT_URL"))
             
             transcription_service = transcription_service.split('.')[-1]
             language = language.split('.')[-1]

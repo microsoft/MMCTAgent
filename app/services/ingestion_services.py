@@ -18,17 +18,7 @@ except Exception as e:
     logger.exception(f"Exception occurred while instantiating the Event Hub class: {e}")
     ingestion_event_hub_handler = None
 
-try:
-    logger.info(
-        "Creating an instance of blob storage manager to handle operations related to blob"
-    )
-    blob_storage_manager = BlobStorageManager(account_url=os.getenv("BLOB_ACCOUNT_URL"))
-    logger.info(f"Successfully created Blob Storage manager for: {os.getenv('BLOB_ACCOUNT_URL')}")
-except Exception as e:
-    logger.exception(
-        f"Exception occurred while instantiating the blob storage manager class: {e}"
-    )
-    blob_storage_manager = None
+blob_storage_manager = None  # Will be initialized async in functions
 
 async def ingest_direct(file: UploadFile, body: dict):
     suffix = os.path.splitext(file.filename)[1]
@@ -48,15 +38,17 @@ async def ingest_direct(file: UploadFile, body: dict):
     except Exception as e:
         logger.error(e); raise HTTPException(500, "Ingestion failed")
     finally:
-        os.remove(path)
+        if os.path.exists(path):
+            os.remove(path)
         await remove_file(video_id=vid)
     return {"message": "success"}
 
 async def ingest_queue(file: UploadFile, body: dict):
     if ingestion_event_hub_handler is None:
         raise HTTPException(500, "Event Hub handler failed to initialize. Check Event Hub configuration and credentials.")
-    if blob_storage_manager is None:
-        raise HTTPException(500, "Blob Storage manager failed to initialize. Check Blob Storage configuration and credentials.")
+    
+    # Initialize blob storage manager
+    blob_storage_manager = await BlobStorageManager.create(account_url=os.getenv("BLOB_ACCOUNT_URL"))
     
     suffix = os.path.splitext(file.filename)[1]
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)

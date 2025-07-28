@@ -24,7 +24,7 @@ buildAndPushImagesToACR:
   buildIngestionConsumer: true
 
 deployAppService:
-  enabled: true
+  enabled: false
 
 deployContainerApps:
-  enabled: true
+  enabled: false

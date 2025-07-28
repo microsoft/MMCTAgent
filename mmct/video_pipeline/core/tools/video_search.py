@@ -1,6 +1,6 @@
 # Importing modules
 from azure.search.documents.models import VectorizedQuery, VectorFilterMode
-from azure.identity import DefaultAzureCredential
+from azure.identity.aio import DefaultAzureCredential
 from loguru import logger
 from mmct.providers.factory import provider_factory
 from mmct.config.settings import MMCTConfig
@@ -62,11 +62,11 @@ class VideoSearch:
     def _get_credential(self):
         """Get Azure credential, trying CLI first, then DefaultAzureCredential."""
         try:
-            from azure.identity import AzureCliCredential
+            from azure.identity.aio import AzureCliCredential
             # Try Azure CLI credential first
             cli_credential = AzureCliCredential()
             # Test if CLI credential works by getting a token
-            # cli_credential.get_token("https://search.azure.com/.default")
+            asyncio.run(cli_credential.get_token("https://search.azure.com/.default"))
             return cli_credential
         except Exception:
             return DefaultAzureCredential()
