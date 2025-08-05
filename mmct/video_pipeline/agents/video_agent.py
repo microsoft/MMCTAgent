@@ -1,5 +1,6 @@
 # Standard Library
 import asyncio
+import os
 from typing import Optional, Annotated
 from dotenv import load_dotenv
 
@@ -10,7 +11,7 @@ from mmct.video_pipeline.prompts_and_description import (
     VIDEO_AGENT_SYSTEM_PROMPT,
     VideoAgentResponse,
 )
-from mmct.video_pipeline.utils.helper import remove_file
+from mmct.video_pipeline.utils.helper import remove_file, get_media_folder, get_video_duration
 from mmct.providers.factory import provider_factory
 from mmct.config.settings import MMCTConfig
 from mmct.exceptions import ProviderException, ConfigurationException
@@ -169,7 +170,7 @@ class VideoAgent:
         Main execution method for the VideoAgent.
         
         Returns:
-            VideoAgentResponse containing the processed video analysis results
+            VideoAgentResponse containing the answer to the query based on video content and related metadata.
             
         Raises:
             ProviderException: If any provider operation fails
@@ -209,6 +210,7 @@ class VideoAgent:
                 
                 logger.info(f"Video IDs from AI Search: {self.video_ids['video_id']}")
 
+
             logger.info("Accumulating the MMCT Video Agent Response for retrieved Video IDs")
             self.session_results = await asyncio.gather(
                 *(
@@ -217,6 +219,16 @@ class VideoAgent:
                 )
             )
             logger.info("Successfully retrieved the results for the Video IDs")
+
+            #creating video duration dictioanary
+            video_duration = {}
+            base_dir = await get_media_folder()
+            for video_id in self.video_ids["video_id"]:
+                if len(video_id) == 64:
+                    video_path = os.path.join(base_dir, video_id + ".mp4")
+                    video_duration[video_id] = await get_video_duration(video_path)
+
+            self.video_duration = video_duration
             
             # Remove files
             logger.info("Cleaning up media files for the retrieved Video IDs")
@@ -290,6 +302,7 @@ class VideoAgent:
                         {"type": "text", "text": f"Query: {self.query}"},
                         {"type": "text", "text": f"Context: {self.session_results}"},
                         {"type": "text", "text": f"metadata: {self.video_ids}"},
+                        {"type": "text", "text": f"video_duration: {self.video_duration}"},
                     ],
                 },
             ]
@@ -317,8 +330,8 @@ if __name__ == "__main__":
 
     async def main():
         # Example usage - replace with your actual values
-        query = "example question about the video"
-        index_name = "your-index-name"
+        query = "what is Gaussian Discriminant Analysis and Covariance Matrices?"
+        index_name = "test_index_long_video"
         use_computer_vision_tool = False
         stream = False
         use_critic_agent = True

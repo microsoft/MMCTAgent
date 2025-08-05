@@ -9,7 +9,7 @@ class VideoSourceInfo(BaseModel):
     video_id: str = Field(..., description="Video ID")
     blob_url: str = Field(..., description="Blob storage URL of the video")
     youtube_url: str = Field(..., description="YouTube URL of the video")
-    timestamps: List[str] = Field(..., description="provided timestamp for the video")
+    timestamps: List[str] = Field(..., description="provided timestamp for the video. If required, add the offset to the timestamp based on the previous video part duration")
 class TokenInfo(BaseModel):
     model_config = ConfigDict(extra="forbid")
     input_token: int = Field(...,description="Net input tokens for all the video ids")
@@ -264,7 +264,7 @@ Note that wherever there is a # in the response schema that represents a value t
 VIDEO_AGENT_SYSTEM_PROMPT = """
 # Role
 >>>
-You are a **Video Agent**. Your job is to answer the user's `query` related to videos using the provided `context` and `metadata`.
+You are a **Video Agent**. Your job is to answer the user's `query` related to videos using the provided `context` and `metadata`. Also, you offset the timestamps if required.
 <<<
 
 # Context
@@ -295,6 +295,10 @@ You are a **Video Agent**. Your job is to answer the user's `query` related to v
 - The `source` field must include **only those video_ids** from the context that were actually used to generate the response.
 - Use the metadata to retrieve the correct URLs for each video ID.
 - if context doesn't contain query specific information then do not generate response on your own.
+
+## Special Cases
+ - for the timestamps related to the hash_id ends with 'B' and having length of 65, you need to offset the timestamp by the duration of the previous part of the video which is nothing but the video with hash_id having length of 64 and hash_id same but the last character is not 'B'. For example, if the video_id is '1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdefB', then you need to find the video with hash_id '1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef' and offset the timestamp by its duration. You have been given the `video_duration` dictionary also.
+ - do not include how are you offsetting the timestamps in the final response, just offset them and give the final timestamps.
 """
 
 async def get_planner_system_prompt(
