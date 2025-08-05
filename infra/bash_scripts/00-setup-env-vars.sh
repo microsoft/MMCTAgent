@@ -53,7 +53,7 @@ aspPremiumTemplateFile="$(convert_path_if_windows "$base_dir/app_service_plan_pr
 aspBasicName="osaspb"
 aspBasicTemplateFile="$(convert_path_if_windows "$base_dir/app_service_plan_basic.json")"
 
-eventhubName="osevhub"
+eventhubName="oseventhub"
 queryPipelineTopicName="query-eventhub"
 ingestionPipelineTopicName="ingestion-eventhub"
 eventhubTemplateFile="$(convert_path_if_windows "$base_dir/azure_event_hub.json")"
