@@ -153,9 +153,11 @@ class VideoSearch:
             # Build filter expression
             filter_expression = []
             if subject:
+                subject = subject.replace("'", "''")  # Escape single quotes for Azure Search
                 filter_expression.append(f"subject eq '{subject}'")
             if variety:
                 if variety != "None":
+                    variety = variety.replace("'", "''")  # Escape single quotes for Azure Search
                     logger.info(f"setting filter for variety: {variety}")
                     filter_expression.append(f"variety eq '{variety}'")
 

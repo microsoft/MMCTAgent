@@ -28,14 +28,11 @@ class CloudTranscription(Transcription):
     async def _load_audio(self):
         try:
             logger.info("Extracting the audio from the video")
-            self.audio_path = os.path.join(
-                await get_media_folder(), f"{self.hash_id}.wav"
-            )
+            self.audio_path = os.path.join(await get_media_folder(), f"{self.hash_id}.wav")
 
-            await extract_wav_from_video(
-                video_path=self.video_path, output_path=self.audio_path
-            )
+            await extract_wav_from_video(video_path=self.video_path, output_path=self.audio_path)
             self.local_save.append(self.audio_path)
+            return "", self.local_save
         except Exception as e:
             logger.exception(f"Error loading audio, {e}")
             raise
@@ -44,10 +41,8 @@ class CloudTranscription(Transcription):
         try:
             # Use Azure CLI credential first, then fallback to DefaultAzureCredential
             credential = await self._get_credential()
-                
-            token = credential.get_token(
-                "https://cognitiveservices.azure.com/.default"
-            )
+
+            token = credential.get_token("https://cognitiveservices.azure.com/.default")
             token = token.token
             resource_id = os.getenv("SPEECH_SERVICE_RESOURCE_ID")
             token = "aad#" + resource_id + "#" + token
@@ -59,9 +54,7 @@ class CloudTranscription(Transcription):
             conf = None
             languages = ["en-IN", "hi-IN", "te-IN", "or-IN"]
             auto_detect_source_language_config = (
-                speechsdk.languageconfig.AutoDetectSourceLanguageConfig(
-                    languages=languages
-                )
+                speechsdk.languageconfig.AutoDetectSourceLanguageConfig(languages=languages)
             )
             speech_recognizer = speechsdk.SpeechRecognizer(
                 speech_config=speech_config,
@@ -69,9 +62,7 @@ class CloudTranscription(Transcription):
                 audio_config=audio_config,
             )
             result = speech_recognizer.recognize_once()
-            auto_detect_source_language_result = (
-                speechsdk.AutoDetectSourceLanguageResult(result)
-            )
+            auto_detect_source_language_result = speechsdk.AutoDetectSourceLanguageResult(result)
             detected_language = auto_detect_source_language_result.language
             # if len(result.text)!=0:
             #     json_result = result.properties[speechsdk.PropertyId.SpeechServiceResponse_JsonResult]
@@ -103,37 +94,32 @@ class CloudTranscription(Transcription):
             result = []
             # Use Azure CLI credential first, then fallback to DefaultAzureCredential
             credential = await self._get_credential()
-                
 
-            token = credential.get_token(
-                    "https://cognitiveservices.azure.com/.default"
-                )
+            token = credential.get_token("https://cognitiveservices.azure.com/.default")
             token = token.token
             resource_id = os.getenv("SPEECH_SERVICE_RESOURCE_ID")
             auth_token = f"aad#{resource_id}#{token}"
             speech_config = speechsdk.SpeechConfig(
                 region=os.getenv("SPEECH_SERVICE_REGION"), auth_token=auth_token
             )
-            logger.info(f"Speech Config initialized with region: {os.getenv('SPEECH_SERVICE_REGION')}")
+            logger.info(
+                f"Speech Config initialized with region: {os.getenv('SPEECH_SERVICE_REGION')}"
+            )
             logger.info(f"Using resource ID: {resource_id}")
             if self.source_language == None:
                 lang = await self.detect_language()
                 self.source_language["lang-code"] = (
                     lang if lang not in [None, "Unknown"] else "en-IN"
                 )
-                self.source_language["lang"] = Languages(
-                    self.source_language["lang-code"]
-                ).name
-            speech_config.speech_recognition_language = self.source_language[
-                "lang-code"
-            ]
+                self.source_language["lang"] = Languages(self.source_language["lang-code"]).name
+            speech_config.speech_recognition_language = self.source_language["lang-code"]
             # Check if audio file exists
             if not os.path.exists(self.audio_path):
                 raise FileNotFoundError(f"Audio file not found: {self.audio_path}")
-            
+
             file_size = os.path.getsize(self.audio_path)
             logger.info(f"Audio file path: {self.audio_path}, size: {file_size} bytes")
-            
+
             audio_config = speechsdk.audio.AudioConfig(filename=self.audio_path)
 
             transcriber = speechsdk.transcription.ConversationTranscriber(
@@ -201,20 +187,18 @@ class CloudTranscription(Transcription):
             # 9) Clean shutdown
             stop_future = transcriber.stop_transcribing_async()
             stop_future.get()
-            
+
             logger.info(f"Transcription completed with {len(result)} segments")
             if not result:
                 logger.warning("No transcription results obtained!")
-            
+
             return result
 
         except Exception as e:
             logger.exception(f"Azure Transcription failed, Error: {e}")
             raise
 
-    async def _get_formatted_transcript(
-        self, transcript: List[Dict[str, Any]]
-    ) -> Optional[str]:
+    async def _get_formatted_transcript(self, transcript: List[Dict[str, Any]]) -> Optional[str]:
         try:
             logger.info("Formatting the generated transcript..")
             if not isinstance(transcript, list):
@@ -235,9 +219,7 @@ class CloudTranscription(Transcription):
             logger.exception(f"Formatting failed, Error: {e}")
             raise
 
-    async def _translate_batch(
-        self, batch, max_retries=3, current_retry=0, prompt=None
-    ):
+    async def _translate_batch(self, batch, max_retries=3, current_retry=0, prompt=None):
         """Translate a batch of text with retry logic for handling response mismatches"""
         to_translate = json.dumps([e["text"] for e in batch], ensure_ascii=False)
         logger.info(
@@ -258,9 +240,7 @@ class CloudTranscription(Transcription):
 
         response = await self.llm_client.beta.chat.completions.parse(
             model=os.getenv(
-                "LLM_MODEL_NAME"
-                if os.getenv("LLM_PROVIDER") == "azure"
-                else "OPENAI_MODEL_NAME"
+                "LLM_MODEL_NAME" if os.getenv("LLM_PROVIDER") == "azure" else "OPENAI_MODEL_NAME"
             ),
             messages=messages,
             temperature=0,
@@ -279,18 +259,12 @@ class CloudTranscription(Transcription):
 
             # If we've reached max retries or have only one entry, return what we have
             if current_retry >= max_retries or len(batch) <= 1:
-                raise ValueError(
-                    "Max retries reached for translation, or can't split further."
-                )
+                raise ValueError("Max retries reached for translation, or can't split further.")
 
             # Split the batch and retry with smaller batches
             mid = len(batch) // 2
-            first_half = await self._translate_batch(
-                batch[:mid], max_retries, current_retry + 1
-            )
-            second_half = await self._translate_batch(
-                batch[mid:], max_retries, current_retry + 1
-            )
+            first_half = await self._translate_batch(batch[:mid], max_retries, current_retry + 1)
+            second_half = await self._translate_batch(batch[mid:], max_retries, current_retry + 1)
             return first_half + second_half
 
         return translations
@@ -347,7 +321,7 @@ class CloudTranscription(Transcription):
 
             all_translations: List[str] = []
             logger.info("Translating the texts batchwise")
-                # Process each batch with retry logic
+            # Process each batch with retry logic
             for batch in batches:
                 batch_translations = await self._translate_batch(batch, prompt=prompt)
                 all_translations.extend(batch_translations)
@@ -365,7 +339,7 @@ class CloudTranscription(Transcription):
 
     async def __call__(self):
         try:
-            await self._load_audio()
+            _, self.local_save = await self._load_audio()
             transcript = await self.get_transcript()  # Speech to text
             logger.info(f"transcript created via azure-stt:{transcript}")
             transcript = await self._get_formatted_transcript(

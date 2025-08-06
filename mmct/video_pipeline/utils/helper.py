@@ -730,3 +730,193 @@ async def check_video_already_ingested(hash_id: str, index_name: str) -> bool:
         logger.error(f"Error checking if video already ingested: {e}")
         # In case of error, return False to proceed with ingestion
         return False
+
+async def load_srt(path: str) -> str:
+    """
+    Asynchronously load the full contents of an SRT (SubRip Subtitle) transcript file,
+    preserving subtitle indexes, timestamps, and text blocks.
+
+    Args:
+        path (str): Path to the .srt transcript file.
+
+    Returns:
+        str: The complete content of the SRT file as a single string, with original formatting.
+    """
+    async with aiofiles.open(path, mode='r', encoding='utf-8') as f:
+        content = await f.read()
+    return content.strip()
+
+def parse_srt_timestamps(srt_content: str) -> list:
+    """
+    Parse SRT content to extract timestamps and text segments.
+    
+    Args:
+        srt_content (str): SRT file content as string
+        
+    Returns:
+        list: List of dictionaries with 'start_time', 'end_time', 'text'
+    """
+    segments = []
+    blocks = srt_content.strip().split('\n\n')
+    
+    for block in blocks:
+        if not block.strip():
+            continue
+            
+        lines = block.strip().split('\n')
+        if len(lines) < 3:
+            continue
+            
+        # Extract timestamp line (second line)
+        timestamp_line = lines[1]
+        if '-->' not in timestamp_line:
+            continue
+            
+        # Parse timestamps
+        start_time_str, end_time_str = timestamp_line.split(' --> ')
+        
+        # Convert timestamp to seconds
+        def timestamp_to_seconds(timestamp_str):
+            timestamp_str = timestamp_str.replace(',', '.')
+            h, m, s = timestamp_str.split(':')
+            return int(h) * 3600 + int(m) * 60 + float(s)
+        
+        start_time = timestamp_to_seconds(start_time_str.strip())
+        end_time = timestamp_to_seconds(end_time_str.strip())
+        
+        # Extract text (lines after timestamp)
+        text = '\n'.join(lines[2:])
+        
+        segments.append({
+            'start_time': start_time,
+            'end_time': end_time,
+            'text': text
+        })
+    
+    return segments
+
+async def chunk_video_by_timestamps(video_path: str, timestamps: list, output_dir: str, hash_id: str) -> list:
+    """
+    Chunk video based on transcript timestamps for parallel processing.
+    
+    Args:
+        video_path (str): Path to the video file
+        timestamps (list): List of timestamp segments from parse_srt_timestamps
+        output_dir (str): Directory to save video chunks
+        hash_id (str): Hash ID for naming chunks
+        
+    Returns:
+        list: List of paths to video chunk files
+    """
+    if not timestamps:
+        logger.warning("No timestamps provided, returning original video")
+        return [video_path]
+    
+    # Calculate mid-point for 50-50 split
+    mid_index = len(timestamps) // 2
+    
+    # Get timestamps for two chunks
+    chunk1_start = timestamps[0]['start_time']
+    chunk1_end = timestamps[mid_index - 1]['end_time']
+    chunk2_start = timestamps[mid_index]['start_time']
+    chunk2_end = timestamps[-1]['end_time']
+    
+    os.makedirs(output_dir, exist_ok=True)
+    
+    chunk_paths = []
+    chunks = [
+        (chunk1_start, chunk1_end, f"{hash_id}.mp4"),
+        (chunk2_start, chunk2_end, f"{hash_id}B.mp4")
+    ]
+    
+    for start_time, end_time, filename in chunks:
+        output_path = os.path.join(output_dir, filename)
+        
+        # Use FFmpeg to extract video segment
+        cmd = [
+            'ffmpeg', '-i', video_path,
+            '-ss', str(start_time),
+            '-t', str(end_time - start_time),
+            '-c', 'copy',
+            '-avoid_negative_ts', 'make_zero',
+            '-y', output_path
+        ]
+        
+        try:
+            subprocess.run(cmd, capture_output=True, text=True, check=True)
+            chunk_paths.append(output_path)
+            logger.info(f"Created video chunk: {output_path}")
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Failed to create video chunk {output_path}: {e.stderr}")
+            raise
+    
+    return chunk_paths
+
+def split_transcript_by_segments(srt_content: str, segment_count: int = 2) -> list:
+    """
+    Split transcript content into segments for parallel processing.
+    Resets timestamps for each chunk to start from 0 (matching video chunks created with FFmpeg).
+    
+    Args:
+        srt_content (str): Original SRT content
+        segment_count (int): Number of segments to split into (default: 2)
+        
+    Returns:
+        list: List of SRT content strings for each segment
+    """
+    segments = parse_srt_timestamps(srt_content)
+    
+    if not segments:
+        return [srt_content]
+    
+    # Split segments into chunks
+    chunk_size = len(segments) // segment_count
+    transcript_chunks = []
+    
+    for i in range(segment_count):
+        start_idx = i * chunk_size
+        if i == segment_count - 1:
+            # Last chunk gets remaining segments
+            end_idx = len(segments)
+        else:
+            end_idx = (i + 1) * chunk_size
+        
+        chunk_segments = segments[start_idx:end_idx]
+        
+        if not chunk_segments:
+            continue
+            
+        # Calculate time offset for chunks after the first one (Part B, C, etc.)
+        # Part A (i == 0) keeps original timestamps, others reset to start from 0
+        if i == 0:
+            # Part A: Keep original timestamps
+            time_offset = 0
+        else:
+            # Part B and beyond: Reset timestamps to start from 0
+            # This matches what FFmpeg does with -avoid_negative_ts make_zero
+            time_offset = chunk_segments[0]['start_time']
+        
+        # Rebuild SRT format for this chunk
+        chunk_srt = ""
+        for j, segment in enumerate(chunk_segments, 1):
+            # Convert seconds back to SRT timestamp format
+            def seconds_to_timestamp(seconds):
+                # Ensure non-negative seconds
+                seconds = max(0, seconds)
+                hours = int(seconds // 3600)
+                minutes = int((seconds % 3600) // 60)
+                secs = seconds % 60
+                return f"{hours:02d}:{minutes:02d}:{secs:06.3f}".replace('.', ',')
+            
+            # Apply offset (0 for Part A, calculated offset for Part B+)
+            adjusted_start_time = segment['start_time'] - time_offset
+            adjusted_end_time = segment['end_time'] - time_offset
+            
+            start_timestamp = seconds_to_timestamp(adjusted_start_time)
+            end_timestamp = seconds_to_timestamp(adjusted_end_time)
+            
+            chunk_srt += f"{j}\n{start_timestamp} --> {end_timestamp}\n{segment['text']}\n\n"
+        
+        transcript_chunks.append(chunk_srt.strip())
+    
+    return transcript_chunks

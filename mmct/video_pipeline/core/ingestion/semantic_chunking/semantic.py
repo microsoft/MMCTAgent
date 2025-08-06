@@ -265,7 +265,11 @@ class SemanticChunking:
         await self.index_client.upload_documents(documents=[doc.model_dump() for doc in doc_objects])
         
     async def run(self,video_blob_url, youtube_url=None):
-        await self._create_search_index() # checking if index is available, if not then creating the same.
+        try:
+            await self._create_search_index() # checking if index is available, if not then creating the same.
+        except Exception as e:
+            logger.error(f"Error creating search index: {e}")
+            await asyncio.sleep(3)
         is_exist = await self._pre_process()
         if is_exist:
             logger.info("Document already exists in the index.")

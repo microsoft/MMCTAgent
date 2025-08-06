@@ -19,7 +19,7 @@ midentityCreation:
   enabled: false
 
 buildAndPushImagesToACR:
-  enabled: false
+  enabled: true
   buildMainApp: true
   buildIngestionConsumer: true
 
