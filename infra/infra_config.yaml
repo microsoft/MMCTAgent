@@ -3,14 +3,14 @@ operatingSystem:
 
 deployInfra:
   enabled: false
-  storageAccount: true
-  aiSearchService: true
-  azureSpeechService: true
-  containerRegistry: true
-  appServicePremiumPlan: true
-  appServiceBasicPlan: true
+  storageAccount: false
+  aiSearchService: false
+  azureSpeechService: false
+  containerRegistry: false
+  appServicePremiumPlan: false
+  appServiceBasicPlan: false
   eventHubService: true
-  azureOpenAIService: true
+  azureOpenAIService: false
 
 envCreation:
   enabled: false
@@ -27,4 +27,4 @@ deployAppService:
   enabled: false
 
 deployContainerApps:
-  enabled: false
+  enabled: true

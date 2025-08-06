@@ -6,6 +6,7 @@ from autogen_agentchat.agents import AssistantAgent
 from autogen_agentchat.teams import SelectorGroupChat, RoundRobinGroupChat
 from autogen_agentchat.conditions import MaxMessageTermination, TextMentionTermination
 from autogen_agentchat.base import TaskResult
+from autogen_agentchat.ui import Console
 from mmct.image_pipeline.core.tools.vit import vitTool
 from mmct.image_pipeline.core.tools.recog import recogTool
 from mmct.image_pipeline.core.tools.object_detect import objectDetectTool
@@ -398,28 +399,9 @@ class ImageAgent:
         try:
             if self.stream:
                 response_generator = await self.run_stream()
-                total_input = 0
-                total_output = 0
-                async for response in response_generator:
-                    print(response, flush=True)
-                    if isinstance(response, TaskResult):
-                        result = response.messages[-1].content
-                        if result == "TERMINATE":
-                            result = response.messages[-2:]  # last two messages
-                        print("Total Input", total_input)
-                        print("Total Output", total_output)
-
-                        self.result = {
-                            "result": result,
-                            "tokens": {
-                                "total_input": total_input,
-                                "total_output": total_output,
-                            },
-                        }  # Returning final response
-                    else:
-                        if response.models_usage:
-                            total_input += response.models_usage.prompt_tokens
-                            total_output += response.models_usage.completion_tokens
+                self.result = await Console(response_generator)
+                if isinstance(self.result,TaskResult):
+                    self.result = self.result.messages[-1]
             else:
                 result = await self.run()
                 self.result = result

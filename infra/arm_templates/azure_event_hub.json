@@ -76,7 +76,7 @@
                     "retentionTimeInHours": 3
                 },
                 "messageRetentionInDays": 1,
-                "partitionCount": 2,
+                "partitionCount": 1,
                 "status": "Active"
             }
         },
@@ -97,7 +97,7 @@
                     "retentionTimeInHours": 3
                 },
                 "messageRetentionInDays": 1,
-                "partitionCount": 2,
+                "partitionCount": 1,
                 "status": "Active"
             }
         },

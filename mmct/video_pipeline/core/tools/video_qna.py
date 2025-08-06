@@ -12,7 +12,7 @@ import ast
 from enum import Enum
 from typing import Annotated
 from autogen_agentchat.agents import AssistantAgent
-
+from autogen_agentchat.ui import Console
 # from mmct.custom_logger import logger as _
 from autogen_agentchat.teams import SelectorGroupChat, RoundRobinGroupChat
 from autogen_agentchat.conditions import MaxMessageTermination, TextMentionTermination
@@ -265,23 +265,10 @@ async def video_qna(
     )
     if stream:
         response_generator = await video_qna_instance.run_stream()
-        total_input = 0
-        total_output = 0
-        async for response in response_generator:
-            print(response, flush=True)
-            if isinstance(response, TaskResult):
-                result = response.messages[-1].content
-                if result=="TERMINATE":
-                    result = response.messages[-2:] # last two messages
-                # print("Total Input", total_input)
-                # print("Total Output", total_output)
-                
-                return {"result":result, "tokens":{"total_input":total_input, "total_output":total_output}}  # Returning final response
-            if response.models_usage:
-                total_input += response.models_usage.prompt_tokens
-                total_output += response.models_usage.completion_tokens
-
-
+        messages = await Console(response_generator)
+        if isinstance(messages,TaskResult):
+            return messages.messages[-1]
+        return messages
     else:
         return await video_qna_instance.run()
     
