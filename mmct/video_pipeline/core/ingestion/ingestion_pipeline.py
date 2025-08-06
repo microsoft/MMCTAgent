@@ -126,7 +126,7 @@ class IngestionPipeline:
         video_path: str,
         index_name: str,
         language: Languages,
-        transcription_service: Optional[str] = TranscriptionServices.AZURE_STT.value,
+        transcription_service: Optional[str] = None,
         youtube_url: Optional[str] = None,
         transcript_path: Optional[str] = None,
         use_computer_vision_tool: Optional[bool] = False,
