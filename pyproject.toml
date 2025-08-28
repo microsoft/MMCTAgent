@@ -60,7 +60,7 @@ docs = [
 ]
 
 [tool.setuptools]
-packages = ["mmct"]
+packages = ["mmct","mcp_server"]
 
 [tool.setuptools.package-data]
 mmct = ["py.typed"]

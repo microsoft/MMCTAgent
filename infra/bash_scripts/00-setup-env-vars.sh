@@ -44,7 +44,7 @@ azureSpeechServiceName="osstt"
 azureSpeechServiceRegion="centralindia"
 azureSpeechServiceTemplateFile="$(convert_path_if_windows "$base_dir/azure_speech_service.json")"
 
-containerRegistryName="osacrtemp"
+containerRegistryName="osacr"
 containerRegistryTemplateFile="$(convert_path_if_windows "$base_dir/container_registry.json")"
 
 aspPremiumName="osaspp"

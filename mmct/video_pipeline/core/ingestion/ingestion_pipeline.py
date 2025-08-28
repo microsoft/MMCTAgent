@@ -1184,8 +1184,8 @@ class IngestionPipeline:
 
 if __name__ == "__main__":
     # Example usage - replace with your actual values
-    video_path = "/home/v-amanpatkar/work/chapter_generation_opt/MMCTAgent/mmct/video_pipeline/core/ingestion/ingestion_pipeline.py"
-    index = "test_index_a"
+    video_path = "video-path"
+    index = "index-name"
     source_language = Languages.ENGLISH_UNITED_STATES
     ingestion = IngestionPipeline(
         video_path=video_path,
