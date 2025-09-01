@@ -10,7 +10,32 @@ import aiofiles
 from loguru import logger
 
 
-@mcp.tool(name="video_ingestion_tool")
+@mcp.tool(
+    name="video_ingestion_tool",
+    description="""The Video Ingestion Tool (video_ingestion_tool) enables agents to ingest video content into the MMCT Video Pipeline, preparing it for downstream search and question-answering tasks.
+
+This tool downloads the video from a given URL, processes it through the ingestion pipeline, and enriches it with transcripts, summaries, visual frames, and metadata. It supports multiple languages, transcription services, optional computer vision analysis, and configurable frame stacking for efficient indexing.
+
+Once ingested, the video data is stored in the specified search index, making it available for later retrieval and multimodal reasoning via other MMCT tools.
+
+## Input Schema
+- video_url (string, required) → Publicly accessible video URL.
+- file_name (string, required) → Local file name for temporary storage.
+- index_name (string, required) → Target search index for ingestion.
+- language (enum, required) → Video language (from Languages enum).
+- transcription_service (string, optional) → Transcription service to use (e.g., Whisper, Azure Speech).
+- youtube_url (string, optional) → Source YouTube URL (if available).
+- transcript_path (string, optional) → Path to an existing transcript file (if bypassing auto-transcription).
+- use_computer_vision_tool (boolean, optional, default=False) → Enable frame-level vision analysis (object detection, scene recognition).
+- disable_console_log (boolean, optional, default=False) → Suppress console logging.
+- hash_video_id (string, optional) → Unique hash identifier for the video.
+- frame_stacking_grid_size (int, optional, default=4) → Grid size for frame stacking. Values >1 enable stacking, 1 disables.
+
+## Output
+
+No direct response is returned. The ingestion pipeline enriches and indexes the video in the specified knowledge base index, enabling later use by kb_tool, video_agent_tool, and other MMCT flows.
+"""
+)
 async def video_ingestion_tool(
     video_url: Annotated[str, "Video URL"],
     file_name: Annotated[str, "File name of the video"],

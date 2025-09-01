@@ -25,7 +25,36 @@ except Exception as e:
 
 
 @mcp.tool(
-    description="Search the video-chapter knowledge base with optional modes and filters",
+    name="kb_tool",
+    description="""The Knowledge Base Search Tool (kb_tool) allows agents to retrieve structured metadata from an AI Search index based on a user's query. 
+    
+It supports three search modes:
+
+1. full → keyword-based full-text search
+2. vector → embedding similarity search
+3. semantic → semantic ranking with natural language understanding
+
+Agents can apply filters (category, sub-category, subject, variety, time range, or video ID) to narrow results, and use the select parameter to return only specific fields from the indexed documents (e.g., category, sub_category, subject, variety, hash_video_id).
+
+The tool returns the top-k most relevant results along with optional semantic answers, enabling agents to extract meaningful information from a video knowledge base or similar structured datasets.
+
+## Input Schema
+- query (string, required) → The search text or * for full index scans (only valid with full search).
+- query_type (string, default=full) → One of full, vector, or semantic.
+- index_name (string, required) → Target Azure AI Search index name.
+- k (integer, default=10) → Number of top results to return.
+- filters (object, optional) → Filtering options:
+- category (string)
+- sub_category (string)
+- subject (string)
+- variety (string)
+- time_from / time_to (ISO datetime strings)
+- hash_video_id (string)
+- select (list of strings, optional) → Specific fields to include in results.
+
+## Output
+
+A list of result dictionaries, each containing metadata fields retrieved from the search index, based on the query, mode, and filters applied.""",
 )
 async def kb_tool(
     request: Annotated[
