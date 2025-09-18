@@ -141,4 +141,6 @@ async def main(tools_to_validate: List[str] = None) -> None:
 
 if __name__ == "__main__":
     # Run the main function with desired tools
+    # supported tools: kb_tool, video_agent_tool, video_ingestion_tool, image_agent_tool
+    # input the tools that you have to validate
     asyncio.run(main(tools_to_validate=["kb_tool"]))
