@@ -287,10 +287,28 @@ class AzureSearchProvider(SearchProvider):
     async def search(self, query: str, index_name: str = None, **kwargs) -> List[Dict]:
         """Search documents using Azure AI Search."""
         try:
+            vector_queries = None
+            semantic_configuration_name=None
+
             search_text = kwargs.pop("search_text", query)
             top = kwargs.pop("top", 10)
-            vector_queries = kwargs.pop("vector_queries", [])
-            
+            embedding = kwargs.pop("embedding", [])
+            query_type = kwargs.pop("query_type", None)
+            vector_queries = kwargs.pop("vector_queries",None)
+
+            if query_type=="semantic":
+                semantic_configuration_name=kwargs.pop("semantic_configuration_name","my-semantic-search-config")
+                search_text = None
+                
+            if query_type=="vector":
+                query_type = None
+                
+            if embedding and top and not vector_queries:
+                vector_query = VectorizedQuery(
+                    vector=embedding, k_nearest_neighbors=top, fields="embeddings"
+                )
+                vector_queries = [vector_query]
+
             if index_name and index_name != self.client._index_name:
                 # Create new client for different index
                 config = self.config.copy()
@@ -302,7 +320,9 @@ class AzureSearchProvider(SearchProvider):
             results = client.search(
                 search_text=search_text,
                 top=top,
+                query_type=query_type,
                 vector_queries=vector_queries,
+                semantic_configuration_name=semantic_configuration_name,
                 **kwargs
             )
             
@@ -310,7 +330,7 @@ class AzureSearchProvider(SearchProvider):
         except Exception as e:
             logger.error(f"Azure AI Search failed: {e}")
             raise ProviderException(f"Azure AI Search failed: {e}")
-    
+        
     @handle_exceptions(retries=3, exceptions=(Exception,))
     @convert_exceptions({Exception: ProviderException})
     async def index_document(self, document: Dict, index_name: str = None) -> bool:
