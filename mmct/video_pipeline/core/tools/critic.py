@@ -75,8 +75,8 @@ async def critic_tool(
                     ]
                 },
             ],
-            "temperature": 0,
-            "top_p": 0.1,
+           "temperature": 0,
+           "top_p": 0.1,
         }
 
         retry_intervals = [10, 15]

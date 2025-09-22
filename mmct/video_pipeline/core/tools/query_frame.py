@@ -1,7 +1,9 @@
+"""Query specific video frames to extract detailed information and answer questions.
+
+This tool analyzes video frames to provide comprehensive answers to queries. It can work with
+frame IDs or timestamp ranges and uses advanced image processing for optimal analysis.
 """
-this tool is used to query on the relevant frames provided by other tools [`get_relevant_frames`]
-"""
-from typing import Annotated
+from typing import Annotated, Optional
 from datetime import time
 from mmct.video_pipeline.utils.helper import download_blobs, get_media_folder, encode_image_to_base64, load_images, stack_images_horizontally
 from mmct.video_pipeline.core.tools.utils.search_keyframes import KeyframeSearcher
@@ -10,7 +12,7 @@ from mmct.providers.factory import provider_factory
 from mmct.config.settings import MMCTConfig
 
 # Initialize configuration and providers
-config = MMCTConfig()
+config = MMCTConfig(model_name = os.getenv("LLM_VISION_DEPLOYMENT_NAME", "gpt-4o"))
 llm_provider = provider_factory.create_llm_provider(
     config.llm.provider,
     config.llm.model_dump()
@@ -18,22 +20,42 @@ llm_provider = provider_factory.create_llm_provider(
 
 
 async def query_frame(
-        query:Annotated[str,'query to be look for frames'],
-        frame_ids:Annotated[list,'list of frame id']=None, 
-        video_id:Annotated[str,'video hash id']=None,
-        timestamps:Annotated[tuple,'timestamps of the frames relavant to the query'] = None    
-    ) -> str:
-    """
-    query on the relevant frames provided by other tools [`get_relevant_frames`]
+    query: Annotated[str, "Natural language question about video content to analyze"],
+    frame_ids: Annotated[Optional[list], "List of specific frame filenames to analyze (e.g., ['video_123.jpg', 'video_456.jpg'])"] = None,
+    video_id: Annotated[Optional[str], "Unique video identifier hash for frame retrieval"] = None,
+    timestamps: Annotated[Optional[list], "List of time range pairs in HH:MM:SS format, e.g., [['00:07:45', '00:09:44'], ['00:21:22', '00:23:17']]"] = None
+) -> str:
+    """Analyze video frames to answer specific questions about visual content.
+
+    This function processes video frames using advanced AI vision models to provide detailed
+    answers to queries. It supports both direct frame selection via frame_ids and automatic
+    frame discovery via timestamp ranges.
+
     Args:
-        query: query to be look for frames
-        frame_ids: list of frame paths
+        query: Natural language question about the video content (e.g., "What objects are visible?",
+               "Describe the scene in detail", "What actions are being performed?")
+        frame_ids: Optional list of specific frame filenames to analyze. If provided, only these
+                  frames will be processed. Use when you have exact frame references.
+        video_id: Required video identifier for frame retrieval from storage. Must be provided
+                 if using timestamps parameter.
+        timestamps: Optional list of time range pairs in HH:MM:SS format. The system will
+                   automatically find and analyze relevant frames within these time windows.
+                   Example: [['00:07:45', '00:09:44'], ['00:21:22', '00:23:17']]
+
     Returns:
-        str: the response to the query
+        str: Comprehensive analysis and answer to the query based on the processed frames.
+             The response includes detailed descriptions, object identification, scene analysis,
+             and any other relevant information found in the frames.
+
+    Note:
+        - Either frame_ids OR (video_id + timestamps) must be provided
+        - When using timestamps, the system searches for the most relevant frames within the specified ranges
+        - Frames are processed with high-resolution analysis for maximum detail extraction
+        - Large frame sets are optimized through intelligent stacking to maintain processing efficiency
     """
 
-    # temporary setup for part B of the video, take only the first 64 characters of video_id
-    if len(video_id)>64:
+    # Handle video_id validation and truncation for compatibility
+    if video_id and len(video_id) > 64:
         video_id = video_id[:64]
 
     # Get search endpoint from environment
@@ -205,6 +227,6 @@ if __name__ == "__main__":
         ]
         
         result = await query_frame(query, frame_ids, video_id)
-        pass
+        print(f"Query result: {result}")
     
     asyncio.run(main())

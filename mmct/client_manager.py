@@ -78,7 +78,7 @@ class ClientManager:
             "use_managed_identity": self.config.llm.use_managed_identity,
             "timeout": self.config.llm.timeout,
             "max_retries": self.config.llm.max_retries,
-            "temperature": self.config.llm.temperature,
+            # "temperature": self.config.llm.temperature,
         }
         
         # Handle API key

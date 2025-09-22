@@ -122,6 +122,7 @@ class VideoQnA:
             system_message=(f"""{planner_system_prompt}"""),
             tools=self.tools,
             reflect_on_tool_use=True,
+            max_tool_iterations = 100
         )
 
         text_mention_termination = TextMentionTermination("TERMINATE")
@@ -243,7 +244,7 @@ if __name__ == "__main__":
     # Example usage - replace with your actual values
     query = "I am seeking clarification on the definition of skew. I attempted to use the formula presented in class, which is defined as skew(node) = height(node.right) - height(node.left). For example, given a tree, I calculated the skew using this formula and obtained the following results: for node Z, the height is 2, yielding a skew of 1 - 0 = 1; for node Y, the height is 1, resulting in a skew of 0 - 0 = 0; and for node X, the height is 0, leading to a skew of 0 - 0 = 0. This seems to suggest that the tree is balanced, as all nodes have a skew within the range {-1, 0, 1}. However, I intuitively believe that this tree should be considered unbalanced, skewed to the right by 2. Based on my observations, I would expect the skews to be calculated as follows: for Z, the height is 2, yielding a skew of 2; for Y, the height is 1, resulting in a skew of 1; and for X, the height remains 0, yielding a skew of 0. Which interpretation is correct? If the second interpretation holds merit, I am uncertain about the correct formula or what aspect of my calculations may be flawed?  what polygon does the instructure used to inclose the example tree? what is tutor having in end when explaining the example?"
     
-    video_id = "b66b839dca7a702429999dbe341a1043c987da554fa4960d339dbd478f29f101B"
+    #video_id = "b66b839dca7a702429999dbe341a1043c987da554fa4960d339dbd478f29f101B"
     #youtube_url = "https://youtube.com/watch?v=U1JYwHcFfso"
     use_critic_agent = True
     stream = True
@@ -252,7 +253,7 @@ if __name__ == "__main__":
     result = asyncio.run(
         video_qna(
             query=query,
-            video_id=video_id,
+            #video_id=video_id,
             #youtube_url=youtube_url,
             use_critic_agent=use_critic_agent,
             stream=stream,
