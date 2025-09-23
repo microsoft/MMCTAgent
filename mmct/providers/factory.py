@@ -5,7 +5,7 @@ from .base import LLMProvider, EmbeddingProvider, SearchProvider, VisionProvider
 from .azure_providers import AzureLLMProvider, AzureEmbeddingProvider, AzureSearchProvider, AzureVisionProvider, AzureTranscriptionProvider
 from .openai_providers import OpenAILLMProvider, OpenAIEmbeddingProvider, OpenAIVisionProvider, OpenAITranscriptionProvider
 from ..exceptions import ConfigurationException
-
+from .custom_providers.search_provider import CustomSearchProvider
 
 class ProviderFactory:
     """Factory class for creating provider instances."""
@@ -22,6 +22,7 @@ class ProviderFactory:
     
     _search_providers: Dict[str, Type[SearchProvider]] = {
         'azure_ai_search': AzureSearchProvider,
+        'custom_search': CustomSearchProvider
         # Add other search providers here
     }
     
