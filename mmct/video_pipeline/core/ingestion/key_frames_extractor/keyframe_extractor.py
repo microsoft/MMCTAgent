@@ -124,7 +124,7 @@ class KeyframeExtractor:
         original_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         original_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         fps = cap.get(cv2.CAP_PROP_FPS)
-        frames_per_second = int(fps) if fps > 0 else 30
+        frames_per_second = fps if fps > 0 else 30.0
         
         # Performance optimization: reduce frame size for optical flow computation
         scale_factor = min(1.0, self.config.max_frame_width / max(original_width, original_height))
@@ -167,8 +167,8 @@ class KeyframeExtractor:
             if frame_count % sample_interval != 0:
                 continue
             
-            # Calculate timestamp
-            timestamp_seconds = frame_count / frames_per_second
+            # Calculate timestamp (ensure float precision)
+            timestamp_seconds = float(frame_count) / float(frames_per_second)
             
             # Resize frame for faster optical flow computation
             if scale_factor < 1.0:

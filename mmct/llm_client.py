@@ -7,6 +7,7 @@ from autogen_ext.models.openai import (
 from azure.identity import DefaultAzureCredential
 from openai import OpenAI, AzureOpenAI, AsyncAzureOpenAI, AsyncOpenAI
 from azure.identity import get_bearer_token_provider
+
 from dotenv import load_dotenv, find_dotenv
 load_dotenv(find_dotenv(),override=True)
 

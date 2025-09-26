@@ -14,7 +14,7 @@ from enum import Enum
 from typing import Annotated
 from autogen_agentchat.agents import AssistantAgent
 from autogen_agentchat.ui import Console
-from autogen_agentchat.teams import SelectorGroupChat, RoundRobinGroupChat
+from autogen_agentchat.teams import Swarm, RoundRobinGroupChat
 from autogen_agentchat.conditions import MaxMessageTermination, TextMentionTermination
 from autogen_agentchat.base import TaskResult
 from mmct.video_pipeline.core.tools.get_context import get_context
@@ -28,6 +28,10 @@ from mmct.video_pipeline.prompts_and_description import (
     PLANNER_DESCRIPTION,
     CRITIC_DESCRIPTION,
 )
+
+from autogen_ext.models.cache import ChatCompletionCache, CHAT_CACHE_VALUE_TYPE
+from autogen_ext.cache_store.diskcache import DiskCacheStore
+from diskcache import Cache as DiskCache
 from mmct.llm_client import LLMClient  # Keep for backward compatibility
 
 load_dotenv(override=True)
@@ -45,20 +49,22 @@ class VideoQnaTools(Enum):
 
 class VideoQnA:
     """
-    VideoQnA with comprehensive multi-tool support for video analysis.
+    VideoQnA with comprehensive multi-tool support for video analysis using Swarm orchestration.
 
     MMCT consists of:
     - **Planner Agent**: Has access to three tools for comprehensive video analysis:
       1. get_context: Retrieves transcript and visual summary documents
-      2. get_relevant_frames: Gets specific frame names based on visual queries  
+      2. get_relevant_frames: Gets specific frame names based on visual queries
       3. query_frame: Analyzes downloaded frames with vision models
     - **Critic Agent**: Validates or refines the planner's output.
 
-    Workflow:
+    Workflow (with Swarm orchestration):
     1. Planner starts with get_context for transcript/summary information
     2. If more visual content needed, uses get_relevant_frames for frame selection
     3. Uses query_frame to analyze the downloaded frames visually
     4. Combines textual and visual information for comprehensive answers
+    5. Can hand off to critic for validation and refinement
+    6. Critic can hand back to planner if revisions are needed
 
     Args:
         query (str): The natural language question to be answered based on the video content.
@@ -75,12 +81,16 @@ class VideoQnA:
         use_critic_agent: bool = True,
         index_name: str = "education-video-index-v2",
         llm_provider: Optional[object] = None,
+        use_graph_rag: bool = False,
+        cache: bool = True
     ):
         self.query = query
         self.video_id = video_id
         self.use_critic_agent = use_critic_agent
         self.index_name = index_name
         self.youtube_url = youtube_url
+        self.use_graph_rag = use_graph_rag
+        self.cache = cache
 
         # Initialize providers if not provided
         if llm_provider is None:
@@ -95,6 +105,24 @@ class VideoQnA:
                 autogen=True, service_provider=os.getenv("LLM_PROVIDER", "azure")
             ).get_client()
 
+        # Only enable caching if cache parameter is True
+        if self.cache:
+            use_cache_backend = os.getenv("AUTOGEN_CACHE_BACKEND", "disk")  # "disk" or "redis"
+            if use_cache_backend.lower() == "redis":
+                # Shared cache across processes
+                from autogen_ext.cache_store.redis import RedisStore
+                import redis
+                redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+                redis_client = redis.from_url(redis_url)
+                store = RedisStore[CHAT_CACHE_VALUE_TYPE](redis_client)  # type: ignore
+            else:
+                # Local persistent cache
+                cache_dir = os.getenv("AUTOGEN_DISK_CACHE_DIR", "./.autogen_ext_cache")
+                store = DiskCacheStore[CHAT_CACHE_VALUE_TYPE](DiskCache(cache_dir))  # type: ignore
+
+            # Wrap the base model client so AgentChat uses the cached client everywhere
+            self.model_client = ChatCompletionCache(self.model_client, store)
+
         self.tools = [get_context, get_relevant_frames, query_frame]
         self.planner_agent = None
         self.critic_agent = None
@@ -105,6 +133,7 @@ class VideoQnA:
             + (f"\nInstruction:video id:{self.video_id}" if self.video_id is not None else "")
             + (f"\nyoutube url:{self.youtube_url}" if self.youtube_url is not None else "")
             + (f"\nUse the index name:{self.index_name} to retrieve context.")
+            + (f"\n Set the use_graph_rag as True" if self.use_graph_rag else "")
         )
 
     async def _initialize_agents(self):
@@ -122,7 +151,8 @@ class VideoQnA:
             system_message=(f"""{planner_system_prompt}"""),
             tools=self.tools,
             reflect_on_tool_use=True,
-            max_tool_iterations = 100
+            max_tool_iterations = 100,
+            handoffs=["critic"] if self.use_critic_agent else []
         )
 
         text_mention_termination = TextMentionTermination("TERMINATE")
@@ -138,17 +168,17 @@ class VideoQnA:
                 system_message=(f"{CRITIC_AGENT_SYSTEM_PROMPT}"),
                 tools=[critic_tool],
                 reflect_on_tool_use=False,
+                handoffs=["planner"]
             )
 
-            self.team = SelectorGroupChat(
-                [self.planner, self.critic],
-                model_client=self.model_client,
-                termination_condition=termination,
-                allow_repeated_speaker=True,
+            self.team = Swarm(
+                participants=[self.planner, self.critic],
+                termination_condition=termination
             )
         else:
             self.team = RoundRobinGroupChat(
-                participants=[self.planner], termination_condition=termination
+                participants=[self.planner],
+                termination_condition=termination
             )
 
     async def setup(self):
@@ -182,19 +212,13 @@ class VideoQnA:
         """
         await self.setup()
 
-        if self.use_critic_agent:
-            result = await self.team.run(task=self.task)
-        else:
-            result = await self.team.run(task=self.task)
+        result = await self.team.run(task=self.task)
         tokens = await self.calculate_total_tokens(result.messages)
         return {"result": result.messages[-1].content, "tokens": tokens}
 
     async def run_stream(self):
         await self.setup()
-        if self.use_critic_agent:
-            return self.team.run_stream(task=self.task)
-        else:
-            return self.team.run_stream(task=self.task)
+        return self.team.run_stream(task=self.task)
 
 
 async def video_qna(
@@ -209,18 +233,21 @@ async def video_qna(
     ] = "education-video-index-v2",
     stream: Annotated[bool, "Set to True to return the response as a stream."] = False,
     llm_provider: Optional[object] = None,
+    use_graph_rag: Annotated[bool, "Set to True to use GraphRAG for context retrieval."] = False,
+    cache: Annotated[bool, "Set to True to enable cache for model responses."] = True
 ):
     """
-    Video QnA with comprehensive multi-tool support for video analysis.
+    Video QnA with comprehensive multi-tool support for video analysis using Swarm orchestration.
 
     Answers a user query based on the content of a specified video using three complementary tools:
     1. get_context: Retrieves transcript and visual summary documents
     2. get_relevant_frames: Gets specific frame names based on visual queries
     3. query_frame: Analyzes downloaded frames with vision models
-    
+
     The planner intelligently combines textual and visual information for comprehensive responses.
+    With Swarm orchestration, agents can dynamically hand off tasks for better collaboration.
     """
-   
+
 
     video_qna_instance = VideoQnA(
         video_id=video_id,
@@ -228,10 +255,13 @@ async def video_qna(
         query=query,
         use_critic_agent=use_critic_agent,
         index_name=index_name,
+        use_graph_rag=use_graph_rag,
         llm_provider=llm_provider,
+        cache=cache,
     )
     if stream:
         response_generator = await video_qna_instance.run_stream()
+        #return response_generator
         messages = await Console(response_generator)
         if isinstance(messages, TaskResult):
             return messages.messages[-1]
@@ -242,22 +272,22 @@ async def video_qna(
 
 if __name__ == "__main__":
     # Example usage - replace with your actual values
-    query = "I am seeking clarification on the definition of skew. I attempted to use the formula presented in class, which is defined as skew(node) = height(node.right) - height(node.left). For example, given a tree, I calculated the skew using this formula and obtained the following results: for node Z, the height is 2, yielding a skew of 1 - 0 = 1; for node Y, the height is 1, resulting in a skew of 0 - 0 = 0; and for node X, the height is 0, leading to a skew of 0 - 0 = 0. This seems to suggest that the tree is balanced, as all nodes have a skew within the range {-1, 0, 1}. However, I intuitively believe that this tree should be considered unbalanced, skewed to the right by 2. Based on my observations, I would expect the skews to be calculated as follows: for Z, the height is 2, yielding a skew of 2; for Y, the height is 1, resulting in a skew of 1; and for X, the height remains 0, yielding a skew of 0. Which interpretation is correct? If the second interpretation holds merit, I am uncertain about the correct formula or what aspect of my calculations may be flawed?  what polygon does the instructure used to inclose the example tree? what is tutor having in end when explaining the example?"
-    
-    #video_id = "b66b839dca7a702429999dbe341a1043c987da554fa4960d339dbd478f29f101B"
-    #youtube_url = "https://youtube.com/watch?v=U1JYwHcFfso"
+    query = "<placeholder for query>"
+    # video_id = "<placeholder for hash video Id>" #Optional
+    # youtube_url = "<placeholder for youtube url>" #Optional
     use_critic_agent = True
     stream = True
-    index_name = "education-video-index-v2"
+    index_name = "<placeholder for index name>"
 
     result = asyncio.run(
         video_qna(
             query=query,
-            #video_id=video_id,
-            #youtube_url=youtube_url,
+            #video_id=video_id, #Optional
+            #youtube_url=youtube_url, #Optional
             use_critic_agent=use_critic_agent,
             stream=stream,
             index_name=index_name,
+            use_graph_rag=False,
+            cache = False
         )
     )
-    

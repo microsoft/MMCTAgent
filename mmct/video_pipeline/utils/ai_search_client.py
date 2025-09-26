@@ -5,6 +5,7 @@ from datetime import datetime
 
 from azure.core.credentials import TokenCredential
 from azure.identity import DefaultAzureCredential
+from azure.identity.aio import AzureCliCredential
 from azure.search.documents.aio import SearchClient
 from azure.search.documents.indexes.aio import SearchIndexClient
 from azure.search.documents.indexes.models import SearchIndex
@@ -50,16 +51,46 @@ class AISearchClient:
             endpoint (str): The Azure AI Search service endpoint URL.
             index_name (str): The name of the search index.
             credential (TokenCredential, optional): The credential to use for authentication.
-                Defaults to DefaultAzureCredential.
+                Defaults to DefaultAzureCredential with AzureCliCredential fallback.
         """
         self.endpoint = endpoint
         self.index_name = index_name
-        self.credential = credential or DefaultAzureCredential()
+        self.credential = credential or self._get_credential()
         self._search_client = None
         self._index_client = None
-        
+
         # Initialize clients if index_name is provided
         self._init_search_client()
+
+    def _get_credential(self):
+        """Get credential - start with DefaultAzureCredential."""
+        logger.info("Using DefaultAzureCredential for authentication")
+        return DefaultAzureCredential()
+
+    async def _retry_with_cli_credential(self, operation_func, *args, **kwargs):
+        """Retry an operation with AzureCliCredential if DefaultAzureCredential fails."""
+        try:
+            # First attempt with current credential
+            return await operation_func(*args, **kwargs)
+        except Exception as e:
+            if "Forbidden" in str(e) or "Authentication" in str(e):
+                logger.warning(f"Authentication failed with DefaultAzureCredential: {e}")
+                logger.info("Retrying with AzureCliCredential...")
+
+                # Switch to AzureCliCredential
+                self.credential = AzureCliCredential()
+
+                # Reinitialize clients with new credential
+                self._search_client = None
+                self._index_client = None
+                self._init_search_client()
+                self._init_index_client()
+
+                # Retry the operation
+                return await operation_func(*args, **kwargs)
+            else:
+                # Re-raise non-authentication errors
+                raise
     
     def _init_search_client(self):
         """Initialize the search client if not already initialized."""

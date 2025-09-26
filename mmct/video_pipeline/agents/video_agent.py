@@ -9,6 +9,7 @@ from mmct.video_pipeline.prompts_and_description import (
     VIDEO_AGENT_SYSTEM_PROMPT,
     VideoAgentResponse,
 )
+from autogen_agentchat.ui import Console
 from mmct.config.settings import MMCTConfig
 from mmct.providers.factory import provider_factory
 from mmct.utils.logging_config import LoggingConfig
@@ -19,10 +20,10 @@ load_dotenv(override=True)
 
 class VideoAgent:
     """
-    Simplified agent for video question answering using the updated video_qna function.
+    Simplified agent for video question answering using the updated video_qna function with Swarm orchestration.
 
     This agent provides a clean interface that:
-    1. Calls video_qna with the provided parameters
+    1. Calls video_qna (v2 with Swarm) with the provided parameters
     2. Formats the response using LLM with structured output
     3. Returns a properly structured VideoAgentResponse
 
@@ -34,6 +35,38 @@ class VideoAgent:
         use_critic_agent (bool): Whether to use the critic agent for validation. Defaults to True.
         stream (bool): Whether to stream the response output. Defaults to False.
         llm_provider (Optional[object]): LLM provider instance. Defaults to None (uses config).
+
+    Example:
+        Basic usage with query and index:
+        ```python
+        video_agent = VideoAgent(
+            query="What are the benefits of organic farming?",
+            index_name="farming-video-index"
+        )
+        result = await video_agent()
+        print(result.response)
+        ```
+
+        With specific video ID:
+        ```python
+        video_agent = VideoAgent(
+            query="Explain the farming technique shown",
+            index_name="farming-video-index",
+            video_id="abc123def456"
+        )
+        result = await video_agent()
+        ```
+
+        With YouTube URL and streaming:
+        ```python
+        video_agent = VideoAgent(
+            query="Summarize this farming video",
+            index_name="farming-video-index",
+            youtube_url="https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            stream=True
+        )
+        result = await video_agent()
+        ```
     """
 
     def __init__(
@@ -42,9 +75,11 @@ class VideoAgent:
         index_name: str,
         video_id: Optional[str] = None,
         youtube_url: Optional[str] = None,
-        use_critic_agent: bool = True,
+        use_critic_agent: Optional[bool] = True,
         stream: bool = False,
-        llm_provider: Optional[object] = None
+        llm_provider: Optional[object] = None,
+        use_graph_rag: Optional[bool] = False,
+        cache: Optional[bool] = False
     ):
         # Store parameters
         self.query = query
@@ -53,7 +88,8 @@ class VideoAgent:
         self.youtube_url = youtube_url
         self.use_critic_agent = use_critic_agent
         self.stream = stream
-
+        self.use_graph_rag = use_graph_rag
+        self.cache = cache
         # Initialize configuration and logging
         self.config = MMCTConfig()
         self._setup_logging()
@@ -78,14 +114,14 @@ class VideoAgent:
 
     async def __call__(self) -> VideoAgentResponse:
         """
-        Main execution method for the VideoAgent.
+        Main execution method for the VideoAgent using Swarm orchestration.
 
         Returns:
             VideoAgentResponse: Structured response containing the answer to the query.
         """
         try:
-            # Call the video_qna function with simplified parameters
-            # Get response from video_qna
+            # Call the video_qna function (v2 with Swarm) with simplified parameters
+            # Get response from video_qna with Swarm orchestration
             video_qna_response = await video_qna(
                 query=self.query,
                 video_id=self.video_id,
@@ -93,8 +129,13 @@ class VideoAgent:
                 use_critic_agent=self.use_critic_agent,
                 index_name=self.index_name,
                 stream=self.stream,
-                llm_provider=self.llm_provider
+                llm_provider=self.llm_provider,
+                use_graph_rag=self.use_graph_rag,
+                cache = self.cache
             )
+
+            if self.stream:
+                return video_qna_response
 
             # Generate final formatted answer using LLM with video_qna response
             formatted_response = await self._generate_final_answer(video_qna_response)
@@ -152,23 +193,31 @@ class VideoAgent:
 if __name__ == "__main__":
 
     async def main():
-        """Example usage of VideoAgent."""
-        query = "What is the tutor wearing in the video?"
-        youtube_url = "https://youtube.com/watch?v=U1JYwHcFfso"
-        index_name = "education-video-index-v2"
-
+        """Example usage of VideoAgent with Swarm orchestration."""
+        query = "<placeholder for query>"
+        youtube_url = "<placeholder for youtube url>" #Optional
+        index_name = "<placeholer for index name>"
+        stream = False
+        cache = False
         video_agent = VideoAgent(
             query=query,
-            youtube_url=youtube_url,
+            # youtube_url=youtube_url,
             index_name=index_name,
             use_critic_agent=True,
-            stream=False
+            stream=stream,
+            cache = cache
         )
 
         results = await video_agent()
-        print("-" * 60)
-        print(f"Query: {query}")
-        print("-" * 60)
-        print(results)
+        if stream:
+            messages = await Console(results)
+            # if isinstance(messages, TaskResult):
+            #     return messages.messages[-1]
+            # return messages
+        else:
+            print("-" * 60)
+            print(f"Query: {query}")
+            print("-" * 60)
+            print(results)
 
     asyncio.run(main())

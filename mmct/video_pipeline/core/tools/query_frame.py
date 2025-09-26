@@ -1,23 +1,58 @@
-"""Query specific video frames to extract detailed information and answer questions.
+"""Query specific video frames to extract detailed information and answer questions - Optimized version.
 
-This tool analyzes video frames to provide comprehensive answers to queries. It can work with
-frame IDs or timestamp ranges and uses advanced image processing for optimal analysis.
+This tool analyzes video frames with optimized I/O operations for faster image loading and encoding.
+Features concurrent processing, efficient compression, and memory-optimized operations.
 """
-from typing import Annotated, Optional
-from datetime import time
-from mmct.video_pipeline.utils.helper import download_blobs, get_media_folder, encode_image_to_base64, load_images, stack_images_horizontally
-from mmct.video_pipeline.core.tools.utils.search_keyframes import KeyframeSearcher
 import os
+import asyncio
+import base64
+from datetime import time
+from typing import Annotated, Optional
+
+from azure.storage.blob.aio import BlobServiceClient as AsyncBlobServiceClient
+from azure.identity import DefaultAzureCredential, AzureCliCredential
 from mmct.providers.factory import provider_factory
 from mmct.config.settings import MMCTConfig
+from mmct.video_pipeline.core.tools.utils.search_keyframes import KeyframeSearcher
 
 # Initialize configuration and providers
-config = MMCTConfig(model_name = os.getenv("LLM_VISION_DEPLOYMENT_NAME", "gpt-4o"))
+config = MMCTConfig(model_name=os.getenv("LLM_VISION_DEPLOYMENT_NAME", "gpt-4o"))
 llm_provider = provider_factory.create_llm_provider(
     config.llm.provider,
     config.llm.model_dump()
 )
 
+def _get_credential():
+    """Get Azure credential, trying CLI first, then DefaultAzureCredential."""
+    try:
+        # Try Azure CLI credential first
+        cli_credential = AzureCliCredential()
+        # Test if CLI credential works by getting a token
+        cli_credential.get_token("https://storage.azure.com/.default")
+        return cli_credential
+    except Exception:
+        return DefaultAzureCredential()
+
+async def download_and_encode_blob(blob_name: str, container_name: str) -> Optional[str]:
+    """Download JPG blob directly to memory and encode to base64."""
+    try:
+        credential = _get_credential()
+        blob_service_client = AsyncBlobServiceClient(
+            os.getenv("BLOB_ACCOUNT_URL"), credential
+        )
+        container_client = blob_service_client.get_container_client(container_name)
+        blob_client = container_client.get_blob_client(blob_name)
+
+        # Download blob data directly to memory
+        stream = await blob_client.download_blob()
+        image_data = await stream.readall()
+
+        # Direct base64 encoding (no processing needed for JPG)
+        return base64.b64encode(image_data).decode('utf-8')
+
+    except Exception as e:
+        print(f"Failed to download and encode blob {blob_name}: {e}")
+        return None
 
 async def query_frame(
     query: Annotated[str, "Natural language question about video content to analyze"],
@@ -25,33 +60,8 @@ async def query_frame(
     video_id: Annotated[Optional[str], "Unique video identifier hash for frame retrieval"] = None,
     timestamps: Annotated[Optional[list], "List of time range pairs in HH:MM:SS format, e.g., [['00:07:45', '00:09:44'], ['00:21:22', '00:23:17']]"] = None
 ) -> str:
-    """Analyze video frames to answer specific questions about visual content.
-
-    This function processes video frames using advanced AI vision models to provide detailed
-    answers to queries. It supports both direct frame selection via frame_ids and automatic
-    frame discovery via timestamp ranges.
-
-    Args:
-        query: Natural language question about the video content (e.g., "What objects are visible?",
-               "Describe the scene in detail", "What actions are being performed?")
-        frame_ids: Optional list of specific frame filenames to analyze. If provided, only these
-                  frames will be processed. Use when you have exact frame references.
-        video_id: Required video identifier for frame retrieval from storage. Must be provided
-                 if using timestamps parameter.
-        timestamps: Optional list of time range pairs in HH:MM:SS format. The system will
-                   automatically find and analyze relevant frames within these time windows.
-                   Example: [['00:07:45', '00:09:44'], ['00:21:22', '00:23:17']]
-
-    Returns:
-        str: Comprehensive analysis and answer to the query based on the processed frames.
-             The response includes detailed descriptions, object identification, scene analysis,
-             and any other relevant information found in the frames.
-
-    Note:
-        - Either frame_ids OR (video_id + timestamps) must be provided
-        - When using timestamps, the system searches for the most relevant frames within the specified ranges
-        - Frames are processed with high-resolution analysis for maximum detail extraction
-        - Large frame sets are optimized through intelligent stacking to maintain processing efficiency
+    """
+    This is query_frame tool with optimized I/O operations.
     """
 
     # Handle video_id validation and truncation for compatibility
@@ -64,9 +74,9 @@ async def query_frame(
     # Initialize searcher
     searcher = KeyframeSearcher(
         search_endpoint=search_endpoint,
-        index_name=os.getenv("KEYFRAME_INDEX_NAME", "video-keyframes-index-2")
+        index_name=os.getenv("KEYFRAME_INDEX_NAME", "farming-video-bihar-index")
     )
-        
+
     # Determine which frames to use
     frame_filenames = []
 
@@ -74,7 +84,6 @@ async def query_frame(
         # Search for frames based on timestamps
         for timestamp in timestamps:
             start_time, end_time = timestamp
-            # create filter for the timestamp range and video id; timestamp is format HH:MM:SS
             # Convert string timestamps to time objects if needed
             if isinstance(start_time, str):
                 start_time = time.fromisoformat(start_time)
@@ -106,75 +115,44 @@ async def query_frame(
         frame_filenames = frame_ids if frame_ids else []
 
     # Make frame_filenames unique
-    frame_filenames = list(dict.fromkeys(frame_filenames))  # Preserves order while removing duplicates
-    print(frame_filenames)
-    # Create relevant folder
-    relevant_folder = os.path.join(await get_media_folder(),'relevant_frames',video_id)
+    frame_filenames = list(dict.fromkeys(frame_filenames))
+    print(f"Processing {len(frame_filenames)} frames directly from blob storage")
 
-    # Download the frames from blob in the relevant folder
+    # Prepare blob paths
     container_name = "keyframes"
     blob_paths = [f"{video_id}/{j}" for j in frame_filenames if j is not None]
-    await download_blobs(blob_paths, relevant_folder, container_name=container_name)
 
-    # Load and process the downloaded frames for LLM query
-    frame_paths = []
-    for frame_filename in frame_filenames:
-        frame_filename_only = os.path.basename(frame_filename)
-        frame_path = os.path.join(relevant_folder, frame_filename_only)
-        if os.path.exists(frame_path):
-            frame_paths.append(frame_path)
+    # Download and encode images directly from blob storage (no disk I/O)
+    print(f"Downloading and encoding {len(blob_paths)} images from blob storage...")
 
-    # Load images from paths
-    loaded_images = await load_images(frame_paths)
+    # Process blobs concurrently - direct blob to base64
+    tasks = [download_and_encode_blob(blob_path, container_name) for blob_path in blob_paths]
+    encoded_results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    # Process frames: keep first 10 as individual frames, stack remaining in groups of 3
-    processed_images = []
-    stacking_info = ""
+    # Filter successful results
+    encoded_images = [result for result in encoded_results
+                     if isinstance(result, str) and result is not None]
 
-    if len(loaded_images) <= 10:
-        # Use all frames as individual images
-        processed_images = loaded_images
-    else:
-        # Keep first 10 frames as individual images
-        processed_images = loaded_images[:10]
-        remaining_frames = loaded_images[10:]
+    print(f"Successfully processed {len(encoded_images)} images directly from blob storage")
 
-        # Stack remaining frames in groups of 3 horizontally
-        stacked_count = 0
-        for i in range(0, len(remaining_frames), 3):
-            group = remaining_frames[i:i+3]
-            if group:
-                # Stack horizontally
-                stacked_image = await stack_images_horizontally(group, type="pil")
-                processed_images.append(stacked_image)
-                stacked_count += len(group)
-
-        if stacked_count > 0:
-            stacking_info = f"\n\nNote: {stacked_count} additional frames have been horizontally stacked in groups of 3 to optimize processing."
-
-    # Encode the processed images to base64
-    encoded_images = []
-    for image in processed_images:
-        encoded_image = await encode_image_to_base64(image)
-        encoded_images.append(encoded_image)
+    if not encoded_images:
+        return "No valid images could be processed."
 
     # Prepare content for LLM query
     content = []
-    for i in encoded_images:
+    for encoded_image in encoded_images:
         content.append({
             "type": "image_url",
             "image_url": {
-                "url": f"data:image/jpeg;base64,{i}",
-                "detail":"high"
+                "url": f"data:image/jpeg;base64,{encoded_image}",
+                "detail": "high"
             }
         })
 
-    content.append(
-        {
-            "type":"text",
-            "text" :f"{query}{stacking_info}"
-        }
-    )
+    content.append({
+        "type": "text",
+        "text": f"Query: {query}"
+    })
 
     payload = {
         "messages": [
@@ -183,8 +161,15 @@ async def query_frame(
                 "content": [
                     {
                         "type": "text",
-                        "text": """You are an AI assistant that find detailed information from a set of images to answer the question. Note that some images may be horizontally stacked combinations of multiple frames to optimize processing. When analyzing such stacked images, consider each section as a separate frame.""",
-                        
+                        "text": """You are an expert visual analysis assistant specialized in extracting detailed information from video frames. Your task is to analyze the provided images and answer queries based solely on the visual content observed.
+
+                        Instructions:
+                        - Analyze all visual elements present in the images thoroughly
+                        - Provide comprehensive and accurate descriptions based only on what you can see
+                        - Extract relevant details that would be useful for downstream processing
+                        - Do not include any information from your training knowledge that is not visible in the images
+                        - Be specific and detailed in your observations
+                        - Each image represents a separate individual frame from the video""",
                     }
                 ]
             },
@@ -194,22 +179,27 @@ async def query_frame(
             }
         ],
         "temperature": 0,
-        "top_p":0.1
+        "top_p": 0.1
     }
 
     response = await llm_provider.chat_completion(
-                     messages=payload['messages'],
-                    temperature=payload["temperature"],
-                    top_p=payload['top_p'],
-                )
+        messages=payload['messages'],
+        temperature=payload["temperature"],
+        top_p=payload['top_p'],
+        max_tokens=500
+    )
+
+    # Clean up memory after LLM call
+    del encoded_images
+    del content
+    del payload
+
     return response["content"]
-    
-    
 
 
 if __name__ == "__main__":
     import asyncio
-    
+
     async def main():
         query = "What materials are required to prepare the chilly nursery bed, and what are their uses?"
         video_id = "d5bbc45fb8d284082f84b788b9dce1a931052e1e650daa4889de78654dbb9d45"
@@ -225,8 +215,8 @@ if __name__ == "__main__":
             "d5bbc45fb8d284082f84b788b9dce1a931052e1e650daa4889de78654dbb9d45_10643.jpg",
             "d5bbc45fb8d284082f84b788b9dce1a931052e1e650daa4889de78654dbb9d45_11774.jpg"
         ]
-        
+
         result = await query_frame(query, frame_ids, video_id)
         print(f"Query result: {result}")
-    
+
     asyncio.run(main())

@@ -21,7 +21,7 @@ from azure.search.documents.indexes.models import (
     SemanticSearch
 )
 from azure.core.credentials import AzureKeyCredential
-from azure.identity import AzureCliCredential
+from azure.identity import AzureCliCredential, DefaultAzureCredential
 import numpy as np
 
 
@@ -45,7 +45,11 @@ class VideoFrameSearchClient:
         if search_key:
             credential = AzureKeyCredential(search_key)
         else:
-            credential = AzureCliCredential()
+            try:
+                credential = AzureCliCredential()
+                credential.get_token("https://search.azure.com/.default")
+            except Exception as e:
+                credential = DefaultAzureCredential()
         
         self.index_client = SearchIndexClient(endpoint=search_endpoint, credential=credential)
         self.async_index_client = AsyncSearchIndexClient(endpoint=search_endpoint, credential=credential)

@@ -34,6 +34,14 @@ from mmct.video_pipeline.core.ingestion.key_frames_extractor.keyframe_extractor 
     KeyframeExtractor,
     KeyframeExtractionConfig,
 )
+from mmct.video_pipeline.core.ingestion.key_frames_extractor.clip_embeddings import (
+    CLIPEmbeddingsGenerator,
+    EmbeddingConfig,
+    FrameEmbedding,
+)
+from mmct.video_pipeline.core.ingestion.key_frames_extractor.keyframe_search_index import (
+    KeyframeSearchIndex,
+)
 
 from mmct.video_pipeline.core.ingestion.semantic_chunking.semantic import (
     SemanticChunking,
@@ -72,6 +80,8 @@ class ProcessingContext:
     chapter_responses: Optional[Any] = None
     chapter_transcripts: Optional[Any] = None
     is_already_ingested: Optional[bool] = None
+    keyframe_metadata: Optional[List] = None
+    frame_embeddings: Optional[List[FrameEmbedding]] = None
     
     def __post_init__(self):
         if self.blob_urls is None:
@@ -249,50 +259,137 @@ class IngestionPipeline:
             for frame in keyframe_metadata:
                 self.logger.debug(f"  Frame {frame.frame_number}: {frame.timestamp_seconds:.2f}s (motion: {frame.motion_score:.3f})")
 
+            return keyframe_metadata
+
         except Exception as e:
             self.logger.exception(f"Exception occurred during keyframe extraction: {e}")
             raise
 
-    async def _extract_keyframes_from_parts(self, video_paths: list, hash_suffixes: list):
+    async def _generate_embeddings_for_keyframes(self, context: ProcessingContext) -> ProcessingContext:
         """
-        Extract keyframes from multiple video parts.
+        Generate CLIP embeddings for extracted keyframes.
         """
         try:
-            self.logger.info(f"Starting keyframe extraction for {len(video_paths)} video parts...")
+            if not context.keyframe_metadata:
+                self.logger.warning("No keyframe metadata available for embedding generation")
+                return context
 
-            # Generate base hash ID from Part A video for consistent hash IDs
-            part_a_path = video_paths[0]  # Part A is always first
-            base_hash_id = await get_file_hash(part_a_path)
+            self.logger.info(f"Starting embedding generation for {len(context.keyframe_metadata)} keyframes...")
 
-            for video_path, hash_suffix in zip(video_paths, hash_suffixes):
-                part_name = "Part A" if hash_suffix == "" else f"Part {hash_suffix}"
-                part_hash_id = base_hash_id + hash_suffix
+            # Configure embedding generation
+            embedding_config = EmbeddingConfig(
+                clip_model_name="openai/clip-vit-base-patch32",
+                batch_size=8
+            )
 
-                self.logger.info(f"Extracting keyframes for {part_name}: {os.path.basename(video_path)}")
-                self.logger.info(f"  Hash ID: {part_hash_id}")
+            # Initialize embeddings generator
+            embeddings_generator = CLIPEmbeddingsGenerator(embedding_config)
 
-                # Configure keyframe extraction
-                keyframe_config = KeyframeExtractionConfig(
-                    motion_threshold=self.motion_threshold,
-                    sample_fps=1
+            try:
+                # Generate embeddings
+                context.frame_embeddings = await embeddings_generator.process_frames(
+                    context.keyframe_metadata,
+                    context.hash_id
                 )
 
-                # Initialize keyframe extractor
-                keyframe_extractor = KeyframeExtractor(keyframe_config)
+                self.logger.info(f"Successfully generated {len(context.frame_embeddings)} frame embeddings")
 
-                # Extract keyframes for this part
-                keyframe_metadata = await keyframe_extractor.extract_keyframes(
-                    video_path=video_path,
-                    video_id=part_hash_id
-                )
+            finally:
+                # Clean up embeddings generator resources
+                embeddings_generator.cleanup()
 
-                self.logger.info(f"Successfully extracted {len(keyframe_metadata)} keyframes for {part_name}")
-                for frame in keyframe_metadata:
-                    self.logger.debug(f"  Frame {frame.frame_number}: {frame.timestamp_seconds:.2f}s (motion: {frame.motion_score:.3f})")
+            return context
 
         except Exception as e:
-            self.logger.exception(f"Exception occurred during keyframe extraction from parts: {e}")
+            self.logger.exception(f"Exception occurred during embedding generation: {e}")
             raise
+
+    async def _store_frame_embeddings_to_search_index(self, context: ProcessingContext) -> ProcessingContext:
+        """
+        Store frame embeddings to Azure AI Search index.
+        """
+        try:
+            if not context.frame_embeddings:
+                self.logger.warning("No frame embeddings available for storage")
+                return context
+
+            self.logger.info(f"Storing {len(context.frame_embeddings)} frame embeddings to search index...")
+
+            # Get Azure Search endpoint
+            search_endpoint = os.getenv("SEARCH_SERVICE_ENDPOINT")
+            if not search_endpoint:
+                self.logger.error("SEARCH_SERVICE_ENDPOINT environment variable not set")
+                return context
+
+            # Create keyframe search index
+            keyframe_index_name = f"keyframes-{self.index_name}"
+            keyframe_search_index = KeyframeSearchIndex(
+                search_endpoint=search_endpoint,
+                index_name=keyframe_index_name
+            )
+
+            try:
+                # Upload frame embeddings to search index
+                success = await keyframe_search_index.upload_frame_embeddings(
+                    frame_embeddings=context.frame_embeddings,
+                    video_id=context.hash_id,
+                    video_path=context.video_path
+                )
+
+                if success:
+                    self.logger.info("Successfully stored frame embeddings to search index")
+                else:
+                    self.logger.error("Failed to store frame embeddings to search index")
+
+            finally:
+                await keyframe_search_index.close()
+
+            return context
+
+        except Exception as e:
+            self.logger.exception(f"Exception occurred during frame embeddings storage: {e}")
+            raise
+
+    # async def _extract_keyframes_from_parts(self, video_paths: list, hash_suffixes: list):
+    #     """
+    #     Extract keyframes from multiple video parts.
+    #     """
+    #     try:
+    #         self.logger.info(f"Starting keyframe extraction for {len(video_paths)} video parts...")
+
+    #         # Generate base hash ID from Part A video for consistent hash IDs
+    #         part_a_path = video_paths[0]  # Part A is always first
+    #         base_hash_id = await get_file_hash(part_a_path)
+
+    #         for video_path, hash_suffix in zip(video_paths, hash_suffixes):
+    #             part_name = "Part A" if hash_suffix == "" else f"Part {hash_suffix}"
+    #             part_hash_id = base_hash_id + hash_suffix
+
+    #             self.logger.info(f"Extracting keyframes for {part_name}: {os.path.basename(video_path)}")
+    #             self.logger.info(f"  Hash ID: {part_hash_id}")
+
+    #             # Configure keyframe extraction
+    #             keyframe_config = KeyframeExtractionConfig(
+    #                 motion_threshold=self.motion_threshold,
+    #                 sample_fps=1
+    #             )
+
+    #             # Initialize keyframe extractor
+    #             keyframe_extractor = KeyframeExtractor(keyframe_config)
+
+    #             # Extract keyframes for this part
+    #             keyframe_metadata = await keyframe_extractor.extract_keyframes(
+    #                 video_path=video_path,
+    #                 video_id=part_hash_id
+    #             )
+
+    #             self.logger.info(f"Successfully extracted {len(keyframe_metadata)} keyframes for {part_name}")
+    #             for frame in keyframe_metadata:
+    #                 self.logger.debug(f"  Frame {frame.frame_number}: {frame.timestamp_seconds:.2f}s (motion: {frame.motion_score:.3f})")
+
+    #     except Exception as e:
+    #         self.logger.exception(f"Exception occurred during keyframe extraction from parts: {e}")
+    #         raise
 
 
     async def _perform_early_ingestion_check(self) -> bool:
@@ -1139,21 +1236,9 @@ class IngestionPipeline:
                 # Single video processing (no split) - original logic
                 self.logger.info("Processing single video (no split required)")
                 
-                # Generate hash ID early to check for duplicates
+                # Generate hash ID
                 hash_id = await get_file_hash(file_path=self.video_path)
                 self.logger.info(f"Generated hash ID: {hash_id}")
-                
-                # Check if video already exists in the index (early duplicate check)
-                is_already_ingested = await check_video_already_ingested(
-                    hash_id=hash_id, 
-                    index_name=self.index_name
-                )
-                
-                if is_already_ingested:
-                    self.logger.info(f"Video with hash_id {hash_id} already exists in index {self.index_name}. Skipping ingestion.")
-                    return
-                
-                self.logger.info("Video not found in index. Proceeding with ingestion...")
                 
                 # Create processing context
                 context = ProcessingContext(
@@ -1161,14 +1246,25 @@ class IngestionPipeline:
                     video_path=self.video_path,
                     video_extension=self.video_extension
                 )
-                
+
+                # Extract keyframes and generate embeddings early in pipeline
+                context.keyframe_metadata = await self._extract_keyframes()
+                self.logger.info("Keyframes extracted!")
+
+                context = await self._generate_embeddings_for_keyframes(context)
+                self.logger.info("Embeddings generated for keyframes!")
+
+                # Store frame embeddings to search index
+                context = await self._store_frame_embeddings_to_search_index(context)
+                self.logger.info("Frame embeddings stored to search index!")
+
                 # Get blob manager
                 blob_manager = await self._get_blob_manager()
-                
+
                 # Run functional pipeline methods
                 context = await self.get_transcription(context, blob_manager)
                 self.logger.info("Transcript Generated!")
-                
+
                 context = await self._get_frames_timestamps(context, blob_manager)
                 self.logger.info("Frames and Timestamps Generated!")
                 
@@ -1411,12 +1507,13 @@ class IngestionPipeline:
 if __name__ == "__main__":
     # Example usage - replace with your actual values
     video_path = "/home/v-amanpatkar/work/chapter_generation_opt/video/sample.mp4"
-    index = "test_index_a"
-    youtube_url = "https://www.youtube.com/watch?v=W6wVU5b5nQk&t=1s"
+    index = "test-index"
+    youtube_url = "https://www.youtube.com/watch?v=U0GsnjN8pFc"
     source_language = Languages.ENGLISH_UNITED_STATES
     ingestion = IngestionPipeline(
         video_path=video_path,
         index_name=index,
+        youtube_url=youtube_url,
         transcription_service=TranscriptionServices.AZURE_STT,
         language=source_language,
     )

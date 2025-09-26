@@ -91,9 +91,13 @@ async def download_blobs(blob_names, output_dir, container_name=None):
             print(f"Failed: {blob_name} - {e}")
             return None
 
+    download_tasks = [download_single(blob_name) for blob_name in blob_names]
     results = await asyncio.gather(
-        *(download_single(blob_name) for blob_name in blob_names)
+        *download_tasks
     )
+    # results = await asyncio.gather(
+    #     *(download_single(blob_name) for blob_name in blob_names)
+    # )
     await blob_service_client.close()
 
     # Filter out any failed (None) results and return the successful downloads
@@ -666,22 +670,11 @@ async def remove_file(video_id):
             except Exception as e:
                 print(f"Error deleting directory {local_path}: {e}")
                     
-        transcript_blob_name = f"transcript_{video_id}.srt"
-        timestamps_blob_name = f"timestamps_{video_id}.txt"
-        frames_dir_name = f"Frames/{video_id}"
-        compressed_video_file_name = f"Compressed_Videos/{video_id}.mp4"
-        video = f"{video_id}.mp4"
-        summary_blob_name = f"{video_id}.json"
-        audio_wav_name = f"{video_id}.wav"
-        audio_mp3_name = f"{video_id}.mp3"
-        await remove_entity(transcript_blob_name)
-        await remove_entity(timestamps_blob_name)
-        await remove_dir(frames_dir_name)
-        await remove_entity(summary_blob_name)
-        await remove_entity(audio_wav_name)
-        await remove_entity(audio_mp3_name)
-        await remove_entity(compressed_video_file_name)
-        await remove_entity(video)
+        keyframes_dir_name = f"media/relevant_frames/{video_id}"
+       
+        #frames_dir_name = f"Frames/{video_id}"
+        await remove_dir(keyframes_dir_name)
+        
         print("All files and directories removed successfully!")
         
     except Exception as e:
