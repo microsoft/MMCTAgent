@@ -1,6 +1,10 @@
 # **MMCT - Video Pipeline**
 
-[![](/docs/multimedia/VideoPipeline.webp)](https://arxiv.org/pdf/2405.18358)
+<p align="center">
+  <a href="https://arxiv.org/abs/2405.18358">
+    <img src="/docs/multimedia/VideoPipeline.webp" alt="Video Pipeline - Main Architecture" width="60%" />
+  </a>
+</p>
 
 ## **Overview**
 
