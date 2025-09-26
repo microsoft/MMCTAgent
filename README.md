@@ -39,7 +39,7 @@ MMCTAgent is a state-of-the-art multi-modal AI framework that brings human-like 
 
 <p align="center">
   <a href="https://arxiv.org/abs/2405.18358">
-    <img src="docs/multimedia/VideoPipeline.webp" alt="Video Pipeline - Main Architecture" width="80%" />
+    <img src="docs/multimedia/VideoPipeline.webp" alt="Video Pipeline - Main Architecture" width="100%" />
   </a>
 </p>
 
