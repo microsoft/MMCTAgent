@@ -39,7 +39,7 @@ MMCTAgent is a state-of-the-art multi-modal AI framework that brings human-like 
 
 <p align="center">
   <a href="https://arxiv.org/abs/2405.18358">
-    <img src="docs/multimedia/VideoPipeline.webp" alt="Video Pipeline - Main Architecture" width="100%" />
+    <img src="docs/multimedia/VideoPipeline.webp" alt="Video Pipeline - Main Architecture" width="100%" height="80%" />
   </a>
 </p>
 
@@ -81,7 +81,11 @@ It supports a configurable set of tools via the `ImageQnaTools` enum:
 <details>
 
 <summary>VideoAgent</summary>
-[![](docs/multimedia/videoPipeline.webp)](https://arxiv.org/abs/2405.18358)
+<p align="center">
+  <a href="https://arxiv.org/abs/2405.18358">
+    <img src="docs/multimedia/videoPipeline.webp" alt="Video Pipeline" width="100%" height="100%" />
+  </a>
+</p>
 
 Optimized for deep video understanding:
 
