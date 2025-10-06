@@ -324,7 +324,7 @@ class KeyframeSearchIndex:
     async def close(self):
         """Close the search client."""
         try:
-            await self.search_client.close()
-            await self.index_client.close()
+            self.search_client.close()
+            self.index_client.close()
         except Exception as e:
             logger.warning(f"Error closing search clients: {e}")

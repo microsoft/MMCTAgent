@@ -1,102 +1,258 @@
 """
-MCP Client for testing the MMCT Agent MCP Server.
+Client for interacting with the MCP Server to get visual timestamps.
 
-This client connects to the MCP server and validates available tools.
-Run with: python client.py
+This client sends queries to the running MCP server and retrieves timestamps
+of keyframes matching the query.
+
+Usage:
+    python client.py --query <query> [--top-k <number>] [--video-id <id>] [--youtube-url <url>]
+
+Examples:
+    python client.py --query 'person walking'
+    python client.py --query 'car driving' --top-k 5
+    python client.py --query 'person walking' --video-id video123
+    python client.py --query 'sunset scene' --youtube-url 'https://youtube.com/watch?v=xyz'
 """
 
-import asyncio
-from typing import List, Dict, Any
-from loguru import logger
-from fastmcp import Client
+import httpx
+import json
+import sys
+import argparse
+from typing import Optional
 
 
-async def list_and_log_tools(client: Client) -> List[str]:
-    """
-    Fetch and display all available tools from the MCP server.
+class MCPClient:
+    """Client for interacting with the MCP Server."""
 
-    Args:
-        client (Client): Active MCP client instance.
+    def __init__(self, server_url: str = "http://0.0.0.0:8000/mcp"):
+        """
+        Initialize the MCP client.
 
-    Returns:
-        List[str]: List of available tool names.
-    """
-    logger.info("Fetching available tools from the MCP server...")
-    tools = await client.list_tools()
+        Args:
+            server_url: URL of the MCP server (default: http://0.0.0.0:8000/mcp)
+        """
+        self.server_url = server_url.rstrip('/')
+        self.client = httpx.Client(timeout=30.0)
+        self.session_id = None
+        self._initialize_session()
 
-    available_tool_names = []
-    logger.info("Available tools:")
-    for tool in tools:
-        available_tool_names.append(tool.name)
-        logger.info(f"\nTool Name: {tool.name}")
-        logger.info(f"Description: {tool.description}")
-        logger.info(f"Input Schema: {tool.inputSchema}")
+    def _initialize_session(self):
+        """Initialize MCP session and get session ID."""
+        payload = {
+            "jsonrpc": "2.0",
+            "id": 0,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {
+                    "name": "lively-client",
+                    "version": "1.0.0"
+                }
+            }
+        }
 
-    return available_tool_names
+        try:
+            response = self.client.post(
+                self.server_url,
+                json=payload,
+                headers={
+                    "Content-Type": "application/json",
+                    "Accept": "application/json, text/event-stream"
+                }
+            )
+            response.raise_for_status()
+
+            # Extract session ID from response header
+            self.session_id = response.headers.get("mcp-session-id")
+            if not self.session_id:
+                raise Exception("Failed to get session ID from server")
+
+            # Send initialized notification
+            notification = {
+                "jsonrpc": "2.0",
+                "method": "notifications/initialized"
+            }
+            self.client.post(
+                self.server_url,
+                json=notification,
+                headers={
+                    "Content-Type": "application/json",
+                    "Accept": "application/json, text/event-stream",
+                    "mcp-session-id": self.session_id
+                }
+            )
+
+        except Exception as e:
+            raise Exception(f"Failed to initialize MCP session: {str(e)}")
+
+    def get_visual_timestamps(
+        self,
+        query: str,
+        top_k: int = 3,
+        video_id: Optional[str] = None,
+        youtube_url: Optional[str] = None
+    ) -> str:
+        """
+        Get timestamps for keyframes matching a text query.
+
+        Args:
+            query: Text query describing what to search for (e.g., "person walking", "car driving")
+            top_k: Number of top results to return (default: 3)
+            video_id: Optional video ID to filter results to a specific video
+            youtube_url: Optional YouTube URL to filter results. Takes precedence over video_id if both provided.
+
+        Returns:
+            Comma-separated string of timestamps in seconds (e.g., "5.0, 12.5, 18.0")
+        """
+        # Prepare the MCP tool call request
+        payload = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "get_visual_timestamps",
+                "arguments": {
+                    "query": query,
+                    "top_k": top_k
+                }
+            }
+        }
+
+        # Add optional parameters if provided
+        if youtube_url:
+            payload["params"]["arguments"]["youtube_url"] = youtube_url
+        elif video_id:
+            payload["params"]["arguments"]["video_id"] = video_id
+
+        try:
+            headers = {
+                "Content-Type": "application/json",
+                "Accept": "application/json, text/event-stream"
+            }
+
+            # Include session ID if available
+            if self.session_id:
+                headers["mcp-session-id"] = self.session_id
+
+            response = self.client.post(
+                f"{self.server_url}",
+                json=payload,
+                headers=headers
+            )
+            response.raise_for_status()
+
+            # Parse SSE response
+            result = None
+            for line in response.text.split('\n'):
+                if line.startswith('data: '):
+                    data = line[6:]  # Remove 'data: ' prefix
+                    if data.strip():
+                        result = json.loads(data)
+
+            if not result:
+                return "No response from server"
+
+            # Extract the result from the MCP response
+            if "error" in result:
+                return f"Error: {result['error'].get('message', 'Unknown error')}"
+
+            if "result" in result and "content" in result["result"]:
+                # MCP returns content as a list of text items
+                content = result["result"]["content"]
+                if content and len(content) > 0:
+                    return content[0].get("text", "No timestamps found")
+
+            return "No timestamps found"
+
+        except httpx.HTTPError as e:
+            return f"HTTP Error: {str(e)}"
+        except Exception as e:
+            return f"Error: {str(e)}"
+
+    def close(self):
+        """Close the HTTP client."""
+        self.client.close()
+
+    def __enter__(self):
+        """Context manager entry."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit."""
+        self.close()
 
 
-async def validate_tool(
-    client: Client, tool_name: str, arguments: Dict[str, Any]
-) -> None:
-    """
-    Call and validate a specific tool by name.
+def main():
+    """Example usage of the MCP client."""
+    parser = argparse.ArgumentParser(
+        description="Search for video keyframes using natural language queries",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python client.py --query 'person walking'
+  python client.py --query 'car driving' --top-k 5
+  python client.py --query 'person walking' --video-id video123
+  python client.py --query 'sunset scene' --youtube-url 'https://youtube.com/watch?v=xyz'
+        """
+    )
 
-    Args:
-        client (Client): Active MCP client instance.
-        tool_name (str): Name of the tool to validate.
-        arguments (Dict[str, Any]): Arguments for the tool call.
-    """
-    logger.info(f"Validating tool: {tool_name}")
-    try:
-        result = await client.call_tool(name=tool_name, arguments=arguments)
-        logger.success(f"Tool '{tool_name}' executed successfully.")
-        logger.debug(f"Result: {result}")
-    except Exception as e:
-        logger.error(f"Failed to execute tool '{tool_name}': {e}")
+    parser.add_argument(
+        '--query',
+        type=str,
+        required=True,
+        help='Text query describing what to search for (e.g., "person walking", "car driving")'
+    )
+    parser.add_argument(
+        '--top-k',
+        type=int,
+        default=3,
+        help='Number of top results to return (default: 3)'
+    )
+    parser.add_argument(
+        '--video-id',
+        type=str,
+        default=None,
+        help='Optional video ID to filter results to a specific video'
+    )
+    parser.add_argument(
+        '--youtube-url',
+        type=str,
+        default=None,
+        help='Optional YouTube URL to filter results. Takes precedence over video-id if both provided.'
+    )
+    parser.add_argument(
+        '--server-url',
+        type=str,
+        default="http://0.0.0.0:8000/mcp",
+        help='MCP server URL (default: http://0.0.0.0:8000/mcp)'
+    )
 
+    args = parser.parse_args()
 
-async def main(tools_to_validate: List[str] = None) -> None:
-    """
-    Main entry point for connecting with MCP server and validating tools.
+    print(f"Searching for: '{args.query}'")
+    print(f"Top K: {args.top_k}")
+    if args.youtube_url:
+        print(f"YouTube URL: {args.youtube_url}")
+    elif args.video_id:
+        print(f"Video ID: {args.video_id}")
+    print("-" * 80)
 
-    Args:
-        tools_to_validate (List[str], optional): List of tool names to validate.
-                                                Defaults to available tools.
-    """
-    if tools_to_validate is None:
-        tools_to_validate = ["get_visual_timestamps"]
+    # Use the client
+    with MCPClient(server_url=args.server_url) as client:
+        timestamps = client.get_visual_timestamps(
+            query=args.query,
+            top_k=args.top_k,
+            video_id=args.video_id,
+            youtube_url=args.youtube_url
+        )
+        print(f"\nTimestamps: {timestamps}")
 
-    try:
-        logger.info("Initializing MCP client...")
-        client = Client("http://127.0.0.1:8000/mcp")
-
-        async with client:
-            # Step 1: Verify connection
-            await client.ping()
-            logger.success("Connected successfully to the MCP server.")
-
-            # Step 2: Get available tools
-            available_tools = await list_and_log_tools(client)
-
-            # Step 3: Validate selected tools
-            if "get_visual_timestamps" in tools_to_validate and "get_visual_timestamps" in available_tools:
-                await validate_tool(
-                    client,
-                    "get_visual_timestamps",
-                    {
-                        "query": "person walking",
-                        "top_k": 3,
-                        # "video_id": "optional-video-id",  # Optional: filter by video_id
-                        # "youtube_url": "https://www.youtube.com/watch?v=...",  # Optional: filter by youtube_url (takes precedence)
-                    },
-                )
-
-    except Exception as e:
-        logger.exception(f"Unexpected error occurred: {e}")
+        # Parse timestamps if successful
+        if timestamps and not timestamps.startswith("Error") and not timestamps.startswith("No"):
+            timestamp_list = [t.strip() for t in timestamps.split(",")]
+            print(f"Parsed list: {timestamp_list}")
 
 
 if __name__ == "__main__":
-    # Run the main function with desired tools
-    # Supported tools: get_visual_timestamps
-    # Input the tools that you want to validate
-    asyncio.run(main(tools_to_validate=["get_visual_timestamps"]))
+    main()
