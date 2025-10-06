@@ -36,17 +36,37 @@ Extracts frames and stores them in Azure Blob Storage and AI Search.
 python -m mcp_server.main
 ```
 
-### 5. Test MCP Server (Optional)
+### 5. Query Video Frames
 
-Test the server and list available tools:
+Use the client to search for video frames using natural language queries:
 
 ```bash
-python client.py
+# Basic search
+python client.py --query 'person walking'
+
+# Search with more results
+python client.py --query 'car driving' --top-k 5
+
+# Filter by video ID
+python client.py --query 'person walking' --video-id video123
+
+# Filter by YouTube URL
+python client.py --query 'sunset scene' --youtube-url 'https://youtube.com/watch?v=xyz'
+
+# Use custom server URL
+python client.py --query 'person walking' --server-url 'http://localhost:8000/mcp'
 ```
 
-### 6. Use Search Tool
+**Available Options:**
+- `--query` (required): Text description of what to search for
+- `--top-k` (optional, default: 3): Number of top results to return
+- `--video-id` (optional): Filter results by video ID
+- `--youtube-url` (optional): Filter results by YouTube URL (takes precedence over video-id)
+- `--server-url` (optional, default: http://0.0.0.0:8000/mcp): MCP server URL
 
-Connect your MCP client to use the `get_visual_timestamps` tool for searching video frames.
+### 6. Use Search Tool in MCP Clients
+
+Connect any MCP client to use the `get_visual_timestamps` tool for searching video frames programmatically.
 
 ## Requirements
 
