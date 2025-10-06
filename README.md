@@ -86,7 +86,7 @@ Optimized for deep video understanding:
 
 **Video Question Answering**  
 
-[![](docs/multimedia/videoAgent.webp)](https://arxiv.org/abs/2405.18358)
+[![](docs/multimedia/videoAgent.png)](https://arxiv.org/abs/2405.18358)
 
    Applies a fixed toolchain orchestrated by the Planner:
 
@@ -108,7 +108,6 @@ Published on **arXiv** – [arxiv.org/abs/2405.18358](https://arxiv.org/abs/2405
 ## **Table of Contents**
 
 - [Getting Started](#getting-started)
-- [Prerequisites](#prerequisites)
 - [Provider System](#provider-system)
 - [Configuration](#configuration)
 - [Usage](#usage)
@@ -166,6 +165,46 @@ Published on **arXiv** – [arxiv.org/abs/2405.18358](https://arxiv.org/abs/2405
    pip install -r requirements.txt
    ```
 
+5. **Usage**
+
+Ingest a video through MMCT Video Ingestion Pipeline.
+
+```python
+from mmct.video_pipeline import IngestionPipeline, Languages, TranscriptionServices
+
+ingestion = IngestionPipeline(
+    video_path="path-of-your-video",
+    index_name="index-name",
+    transcription_service=TranscriptionServices.WHISPER,
+    language=Languages.ENGLISH_INDIA,
+)
+
+# Run the ingestion pipeline
+await ingestion()
+```
+
+Perform Q&A through MMCT's Video Agent.
+```python
+from mmct.video_pipeline import VideoAgent
+import asyncio
+
+# Configure the Video Agent
+video_agent = VideoAgent(
+    query="input-query",
+    index_name="your-index-name",
+    video_id=None,  # Optional: specify video ID
+    youtube_url=None,  # Optional: YouTube URL
+    use_critic_agent=True,  # Enable critic agent
+    stream=False,  # Stream response
+    use_graph_rag=False,  # Optional: use graph RAG
+    cache=False  # Optional: enable caching
+)
+
+# Execute video analysis
+response = await video_agent()
+print(f"Video Analysis: {response}")
+```
+
 ## **Provider System**
 
 ### **Multi-Cloud & Vendor-Agnostic Architecture**
@@ -181,39 +220,29 @@ MMCTAgent now features a **modular provider system** that allows you to seamless
 | **Transcription** | Azure Speech Services, OpenAI Whisper | Audio-to-text conversion |
 | **Storage** | Azure Blob Storage, Local Storage | File storage and management |
 
-#### Key Benefits
-
-- **🔄 Vendor Independence**: Switch between Azure, OpenAI, and other providers
-- **🛡️ Enhanced Security**: Built-in support for Managed Identity and Key Vault
-- **⚙️ Flexible Configuration**: Environment-based or programmatic configuration
-- **🔧 Easy Migration**: Backward compatibility with existing configurations
-- **📊 Centralized Management**: Single configuration point for all services
-
 For detailed configuration instructions, see our [Provider Configuration Guide](docs/PROVIDERS.md).
 
 ---
 
-
-## **Prerequisites**
-
-Below are the Azure Resources that are required to execute this repository. You can checkout the `infra` folder and utilize the `INFRA_DEPLOYMENT_GUIDE` to not only deploy the resources through ARM Templates but also build the containers and directly deploy the script to Azure App Services and Azure Container Apps.
-
-| Resource Name                 | Documentation Article | Microsoft Intra-Identity Role |
-|--------------------------------|----------------------|------------------------------------|
-| Storage Account                | [Document](https://learn.microsoft.com/en-us/azure/storage/common/storage-account-overview)        | *Storage Blob Data Reader/Contributor* |
-| Azure Computer Vision  [Optional]        | [Document](https://learn.microsoft.com/en-us/azure/ai-services/computer-vision/)        | *Cognitive Services User*           |
-| Azure OpenAI (4o, 4o-mini, text-embedding-ada-002, Whisper) | [Document](https://learn.microsoft.com/en-us/azure/ai-services/openai/) | *Cognitive Services OpenAI User* |
-| Azure AI Search                | [Document](https://learn.microsoft.com/en-us/azure/search/)        | *Search Index Data Contributor*       |
-| Azure AI Search                | [Document](https://learn.microsoft.com/en-us/azure/search/)        | *Search Service Contributor*       |
-| Azure Speech Service           | [Document](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/)        | *Cognitive Services Speech Contributor* or *Cognitive Services Speech User* role.          |
-| Azure App Service [Optional] | [Document](https://learn.microsoft.com/en-us/azure/app-service/)        | *NA*             |
-| Azure Event Hub [Optional] | [Document](https://learn.microsoft.com/en-us/azure/app-service/)        | *Azure Event Hubs Data Owner* |
-| Azure Container Registry [Optional] | [Document](https://learn.microsoft.com/en-us/azure/container-registry/) | *Reader or Contributor* |
-| Application Insights [Optional]          | [Document](https://learn.microsoft.com/en-us/azure/azure-monitor/app/app-insights-overview)        | *NA*                                |
-
-> Note: If you want to utilize the Microsoft Azure Intra Id Access then you can assign the above corresponding roles for the each resource. Otherwise you can use the API Key or Connection String approach to utilize the resources.
-
 ## **Configuration**
+
+### System Requirements for CLIP embeddings ([openai/clip-vit-base-patch32](https://huggingface.co/openai/clip-vit-base-patch32))
+
+Minimum (development / small-scale):
+- CPU: 4-core modern i5/i7, ~8 GB RAM
+- Disk: ~500 MB caching model + image/text data
+- GPU: none (works but slow)
+
+Recommended (for decent speed / batching):
+- CPU: 8+ cores, 16 GB RAM
+- GPU: NVIDIA with ≥ 4-6 GB VRAM (e.g. RTX 2060/3060)
+- PyTorch + CUDA installed, with mixed precision support
+
+High-throughput / production (fast, large batches):
+
+- 16+ cores CPU, 32+ GB RAM
+- GPU: 8-16 GB+ VRAM, fast memory bandwidth (e.g. RTX 3090, A100)
+- Use float16 / bfloat16, efficient batching, parallel preprocessing
 
 ### Environment Setup
 
@@ -315,6 +344,11 @@ MMCTAgent
 ├── infra
 |   └── INFRA_DEPLOYMENT_GUIDE.md    # Guide for deployment of Azure Infrastructure 
 ├── app                              # contains the FASTAPI application over the mmct pipelines.
+├── mcp_server
+│   ├── main.py                      # you need to run main.py to start MCP server
+│   ├── client.py                    # MCP server client to connect to MCP server
+│   ├── notebooks/                   # contains the examples to utilize MCP server through different agentic-frameworks
+│   └── README.md                    # Guide for MCP server.
 ├── mmct
 │   ├── .
 │   ├── image_pipeline
