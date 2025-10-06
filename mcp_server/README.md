@@ -1,224 +1,241 @@
-# **MMCTAgent MCP Server**
+# Lively MCP Server
 
-A powerful Model Context Protocol (MCP) server that exposes MMCT (Multi-modal Critical Thinking) Agent capabilities through a standardized interface. Built with FastMCP for seamless integration with AI agents and applications.
+Model Context Protocol (MCP) server for visual search and video understanding using CLIP embeddings and Azure AI Search.
 
-## **Quick Start**
+## Overview
 
-<details>
-<summary>Requirements Installation</summary>
+This module provides tools for searching video keyframes using natural language queries. It:
+1. Embeds text queries using CLIP (the same model used to embed keyframes during ingestion)
+2. Performs vector similarity search in Azure AI Search
+3. Returns timestamps, filenames, and blob URLs of matching keyframes
 
-Ensure to install the requirements from the `requirements.txt` present in the base directory.
+## Features
 
-</details>
+- **Natural Language Search**: Search video keyframes using descriptive text queries
+- **CLIP Embeddings**: Uses the same CLIP model as the ingestion pipeline for consistency
+- **Vector Search**: Leverages Azure AI Search's vector similarity search
+- **Flexible Filtering**: Filter results by video ID
+- **Multiple Output Formats**: Get full summaries or just timestamps
 
-<details>
+## Installation
 
-<summary>Start the Server</summary>
-
-```python
-python main.py
-```
-
-Server runs on `http://0.0.0.0:8000` by default.
-</details>
-
-<details>
-
-<summary>Test Connection</summary>
-
-You can test out individual tool using the `client.py`.
+The MCP server uses the same dependencies as the ingestion pipeline. Ensure you have:
 
 ```bash
-python client.py
-```
-</details>
-
-<details>
-
-<summary>Available Tools</summary>
-
-### 1. **Video Agent Tool** (`video_agent_tool`)
-
-**Purpose**: Answer natural language questions over ingested video content through MMCT reasoning.
-
-**Key Features**:
-
-- Multi-modal reasoning (transcript + visual frames)
-- Optional critic agent for enhanced accuracy
-- Automatic document retrieval from vector database
-
-```python
-# Example usage
-{
-    "query": "What is the main topic discussed?",
-    "index_name": "video-knowledge-base",
-    "video_id": "optional-video-id",
-    "use_computer_vision_tool": True,
-    "use_critic_agent": True,
-    "top_n": 1
-}
+pip install torch transformers pillow azure-search-documents azure-identity
 ```
 
-### 2. **Video Ingestion Tool** (`video_ingestion_tool`)
+## Configuration
 
-**Purpose**: Process and index video content for searchability  
-**Key Features**:
+Set the following environment variables (or use `.env` file):
 
-- Multi-language transcription support
-- Frame extraction and visual analysis
-- Automatic metadata enrichment
+```bash
+# Required
+SEARCH_SERVICE_ENDPOINT=https://your-search-service.search.windows.net
+SEARCH_INDEX_NAME=video-keyframes-index
 
-```python
-# Example usage
-{
-    "video_url": "https://example.com/video.mp4",
-    "file_name": "video.mp4",
-    "index_name": "my-video-index",
-    "language": "en-US",
-    "transcription_service": "whisper",
-    "use_computer_vision_tool": False,
-    "frame_stacking_grid_size": 4
-}
+# Optional (if not using Azure CLI authentication)
+SEARCH_API_KEY=your-search-api-key
+
+# Optional model configuration
+CLIP_MODEL_NAME=openai/clip-vit-base-patch32
+DEFAULT_TOP_K=10
 ```
 
-### 3. **Image Agent Tool** (`image_agent_tool`)
+## Usage
 
-**Purpose**: Analyze images and answer questions about visual content  
-**Key Features**:
-
-- Multiple analysis modes (OCR, Object Detection, VIT, Recognition)
-- Optional critic agent validation
-- Automatic image download and cleanup
+### Basic Search
 
 ```python
-# Example usage
-{
-    "image_url": "https://example.com/image.jpg",
-    "query": "What text is visible in this image?",
-    "tools": ["OCR", "OBJECT_DETECTION"],
-    "use_critic_agent": True
-}
+from mcp_server.tools import get_visual_summary
+
+# Search for keyframes
+summary = get_visual_summary(
+    query="person walking on the street",
+    search_endpoint=os.getenv("SEARCH_SERVICE_ENDPOINT"),
+    index_name="video-keyframes-index",
+    top_k=10
+)
+
+print(f"Found {summary['total_results']} keyframes")
+for keyframe in summary['keyframes']:
+    print(f"  {keyframe['timestamp_seconds']:.2f}s - {keyframe['blob_url']}")
 ```
 
-### 4. **Knowledge Base Tool** (`kb_tool`)
-
-**Purpose**: Search and retrieve structured metadata from indexed content  
-**Key Features**:
-
-- Multiple search modes (full-text, vector, semantic)
-- Advanced filtering capabilities
-- Flexible field selection
+### Get Timestamps Only
 
 ```python
-# Example usage
+from mcp_server.tools import get_visual_timestamps
+
+# Get just timestamps
+timestamps = get_visual_timestamps(
+    query="car driving",
+    search_endpoint=os.getenv("SEARCH_SERVICE_ENDPOINT"),
+    index_name="video-keyframes-index",
+    top_k=5
+)
+
+for ts in timestamps:
+    print(f"{ts['timestamp_seconds']:.2f}s - {ts['keyframe_filename']}")
+```
+
+### Filter by Video
+
+```python
+# Search within a specific video
+summary = get_visual_summary(
+    query="outdoor scene",
+    search_endpoint=os.getenv("SEARCH_SERVICE_ENDPOINT"),
+    index_name="video-keyframes-index",
+    video_id="abc123def456",
+    top_k=10
+)
+```
+
+### Using the Class
+
+```python
+from mcp_server.tools import VisualSearchTool
+
+# Initialize tool once
+tool = VisualSearchTool(
+    search_endpoint=os.getenv("SEARCH_SERVICE_ENDPOINT"),
+    index_name="video-keyframes-index"
+)
+
+# Perform multiple searches
+summary1 = tool.get_visual_summary("person walking", top_k=5)
+summary2 = tool.get_visual_summary("car driving", top_k=5)
+```
+
+## API Reference
+
+### `get_visual_summary()`
+
+Search for keyframes and get a full summary.
+
+**Parameters:**
+- `query` (str): Text query describing what to search for
+- `search_endpoint` (str): Azure AI Search endpoint URL
+- `index_name` (str): Name of the search index
+- `search_api_key` (str, optional): API key for Azure Search
+- `top_k` (int, default=10): Number of results to return
+- `video_id` (str, optional): Filter results by video ID
+- `clip_model_name` (str, default="openai/clip-vit-base-patch32"): CLIP model to use
+
+**Returns:**
+```python
 {
-    "request": {
-        "query": "machine learning concepts",
-        "query_type": "semantic",
-        "index_name": "knowledge-base",
-        "k": 10,
-        "filters": {
-            "category": "Education",
-            "time_from": "2024-01-01T00:00:00Z"
+    "query": "person walking",
+    "total_results": 10,
+    "keyframes": [
+        {
+            "id": "uuid",
+            "video_id": "abc123",
+            "keyframe_filename": "abc123_150.jpg",
+            "timestamp_seconds": 5.0,
+            "motion_score": 12.5,
+            "blob_url": "https://...",
+            "youtube_url": "https://...",
+            "created_at": "2025-10-06T...",
+            "search_score": 0.95
         },
-        "select": ["category", "subject", "hash_video_id"]
-    }
+        ...
+    ]
 }
 ```
 
-### Search Modes
+### `get_visual_timestamps()`
 
-| Mode | Description | Use Case |
-|------|-------------|----------|
-| `full` | Keyword-based search | Exact term matching |
-| `vector` | Embedding similarity | Semantic similarity |
-| `semantic` | Natural language understanding | Complex queries |
+Get just timestamps without full metadata.
 
-</details>
+**Parameters:** Same as `get_visual_summary()`
 
-<details>
-
-<summary>Configuration</summary>
-
-The server automatically configures providers through MMCTConfig:
-
-- **Search Provider**: Azure AI Search integration
-- **Embedding Provider**: Vector embedding generation
-- **Transcription Services**: Multiple ASR options
-
-</details>
-
-<details>
-
-<summary>Project Structure</summary>
-
-```py
-mcp_server/
-├── server.py                # FastMCP server instance
-├── main.py                  # Server entry point
-├── client.py                # Test client with examples
-├── tools/                   # MCP tool implementations
-│   ├── video_agent_tool.py
-│   ├── image_agent_tool.py
-│   ├── video_ingestion_tool.py
-│   └── kb_tool.py
-├── schemas/                 # Pydantic schemas
-└── notebooks/               # Usage examples
+**Returns:**
+```python
+[
+    {
+        "timestamp_seconds": 5.0,
+        "keyframe_filename": "abc123_150.jpg",
+        "video_id": "abc123",
+        "blob_url": "https://...",
+        "youtube_url": "https://...",
+        "search_score": 0.95
+    },
+    ...
+]
 ```
 
-</details>
+## Example Queries
 
-## **Integration with Agents**
+Here are some example queries you can try:
 
-Integration of `AutoGen` Agent with MCP server has been provided in the `notebooks/autogen_mcp_example.ipynb`. You can understand the connection setup with the AutoGen.
-Below are the links which showcase the integration of MCP server tools with agents.
-- [AutoGen Docs](https://microsoft.github.io/autogen/stable/reference/python/autogen_ext.tools.mcp.html#module-autogen_ext.tools.mcp)
-- [MCP tools integration in Semantic Kernel](https://valentinaalto.medium.com/leverage-mcp-tools-with-semantic-kernel-agents-36120136832d)
+- `"person walking on the street"`
+- `"car driving on highway"`
+- `"sunset over ocean"`
+- `"group of people talking"`
+- `"indoor office scene"`
+- `"outdoor mountain landscape"`
+- `"dog playing in park"`
+- `"cityscape at night"`
 
+## How It Works
 
-## **Deployment of Resources & MCP server**
+1. **Query Embedding**: The text query is processed through the CLIP text encoder to generate a 512-dimensional embedding vector
 
-For the deployment of MCP server you can visit the `MMCT Infrastructure Deployment Guide` present in the `infra` folder. 
+2. **Vector Search**: The embedding is sent to Azure AI Search, which performs cosine similarity search against the indexed keyframe embeddings
 
-Required Resources are on Azure Cloud:
-1. Azure Storage Account
-2. Azure AI Search Service
-3. Azure Speech Service/Azure OpenAI Whisper
-4. Azure OpenAI - Chat Model, Embedding Model and OpenAI Whisper (if not using Azure Speech Service)
+3. **Result Ranking**: Results are ranked by similarity score and returned with full metadata
 
-You can utilize any service to deploy the MCP server such as Azure App Service, Azure Container Apps etc. Ensure to validate the required role assignment if using [Microsoft Intra Id Access](https://learn.microsoft.com/en-us/entra/identity).
+4. **Filtering**: Optional video_id filter narrows results to a specific video
 
-## **Multi-Tenant Setup for MCP server**
+## Authentication
 
-This section covers the way to authorize the MCP server so it can access the respective client's resources when receiving the incoming request.
+The MCP server supports multiple authentication methods (in priority order):
 
-  The OBO (On-Behalf-Of) flow describes the scenario of a web API using an identity other than its own to call another web API. Referred to as delegation in OAuth, the intent is to pass a user's identity and permissions through the request chain. [[source]](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-on-behalf-of-flow)
+1. **Azure CLI** (recommended): Run `az login` before using
+2. **Managed Identity**: Automatically used in Azure environments
+3. **API Key**: Provide via `search_api_key` parameter
 
-For our MCP server the OBO Flow Auth representation is below:
+## Examples
 
-<p align="center">
-    <img src="docs/img/obo_flow_auth.png" alt="OBO Flow Auth" width=70% style="margin:10px">
-</p>
+Run the example script to see the tools in action:
 
-The following configuration steps must be performed:
-1. **MCP App Registration (in MCP Tenant)**
-    - Create an App Registration for the MCP Server in its own tenant.
-    - This app registration represents the MCP Server’s identity in Azure AD.
-    - Ensure a **Service Principal** is created for it in the MCP Tenant.
-2. **Enable Multi-Tenant Access**
-    - In the MCP App Registration, set the app to **multi-tenant** so that it can accept tokens from other tenants (e.g., the client’s tenant).
-    - This allows the MCP app to be consented/used outside its home tenant.
-3. **Create Service Principal in Client Tenant**
-    - When the Agentic Client first requests access, an **MCP App Service Principal** (an instance of the MCP App Registration) is created in the **Client’s Tenant**.
-    - This requires **admin consent** in the client’s tenant.
-4. **Grant Required API Permissions**
-    - Assign the correct API permissions / role assignments in the client’s tenant for the MCP Service Principal.
-    - For example, allow it to access Azure resources (Key Vault, AI Search, Blob, OpenAI) on behalf of the user.
-    - Ensure proper whitelisting / RBAC setup in the client’s Azure AD.
-5. **Consistent Resource Access via Key Vault**
-    - Resource names (endpoints) may vary across tenants, e.g.:
-      - `AZURE_OPENAI_ENDPOINT`
-      - `AZURE_SEARCH_ENDPOINT` 
-    - To standardize, the **MCP Server reads all endpoints/secrets from a Key Vault**, where environment variable keys are always consistent.
-    - This ensures that, regardless of client tenant naming differences, the MCP Server always looks up the same variable name to access the correct resource endpoint.
-</details>
+```bash
+cd mcp_server
+python example_usage.py
+```
+
+## Integration with Ingestion Pipeline
+
+This module is designed to work seamlessly with the ingestion pipeline:
+
+- Uses the same CLIP model (`openai/clip-vit-base-patch32` by default)
+- Queries the same Azure AI Search index
+- Returns metadata that matches the ingestion output
+
+## Troubleshooting
+
+**Model loading issues:**
+- Ensure you have enough disk space for CLIP model (~1GB)
+- Check internet connectivity for first-time model download
+
+**Search failures:**
+- Verify `SEARCH_SERVICE_ENDPOINT` is correct
+- Check authentication (run `az login` or provide API key)
+- Ensure the index exists and has data
+
+**No results:**
+- Try different query phrasings
+- Increase `top_k` value
+- Check if keyframes were properly ingested
+
+## Performance Tips
+
+- Initialize `VisualSearchTool` once and reuse for multiple queries
+- Use GPU if available for faster CLIP inference
+- Adjust `top_k` based on your needs (lower = faster)
+
+## License
+
+Part of the Lively video ingestion and search system.
