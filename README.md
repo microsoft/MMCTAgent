@@ -33,7 +33,7 @@ MMCTAgent is a state-of-the-art multi-modal AI framework that brings human-like 
 ### Why MMCTAgent?
 
 - **🧠 Human-Inspired Critical Thinking**: MMCTAgent emulates human cognitive processes by iteratively analyzing multi-modal information, decomposing complex queries, planning strategies, and dynamically evolving its reasoning.
-- **🎯 Superior Performance**: Outperforms traditional approaches on complex visual reasoning benchmarks  
+- **🎯 Superior Performance**: Outperforms traditional approaches on complex visual reasoning benchmarks.  
 - **🔬 Research-Driven Innovation**: Designed as a research framework, MMCTAgent integrates critical thinking elements such as verification of final answers and self-reflection through a novel approach that defines a vision-based critic and identifies task-specific evaluation criteria, thereby enhancing its decision-making abilities.
 - **🚀 Easy Integration**: Its modular design allows for easy integration into existing workflows, facilitating adoption across various domains requiring advanced visual reasoning capabilities.
 
@@ -50,10 +50,10 @@ MMCTAgent is a state-of-the-art multi-modal AI framework that brings human-like 
 MMCTAgent is inspired by human cognitive processes and integrates a structured reasoning loop:
 
 - **Planner**:  
-  Generates an initial response using relevant tools for visual or multi-modal inputs.
+  Generates an initial response using relevant tools for visual or multi-modal input.
 
 - **Critic**:  
-  Evaluates the Planner’s response and provides feedback to improve accuracy and decision-making.  
+  Evaluates the Planner’s response and provides feedback to improve accuracy and decision-making. 
 ---
 
 ### **Modular Agents**
@@ -69,12 +69,12 @@ MMCTAgent includes two specialized agents:
 A reasoning engine tailored for static image understanding.  
 It supports a configurable set of tools via the `ImageQnaTools` enum:
 
-- `OBJECT_DETECTION` – Detects objects in the image.
+- `OBJECT_DETECTION` – Detects objects in an image.
 - `OCR` – Extracts embedded text content.
 - `RECOG` – Recognizes scenes, faces, or objects.
 - `VIT` – Applies GPT-4V for high-level visual reasoning.
 
-> The Critic can be toggled via `use_critic_agent` flag.
+> The Critic can be toggled via the `use_critic_agent` flag.
 
 </details>
 
@@ -90,9 +90,9 @@ Optimized for deep video understanding:
 
    Applies a fixed toolchain orchestrated by the Planner:
 
-   - `GET_CONTEXT` – Extracts transcript and visual summary chunks relevant to the query.
-   - `GET_RELEVANT_FRAMES` – Provides semantic similiar keyframes related to the query. This tool is based on the CLIP embedding.
-   - `QUERY_FRAME` – Queries specific video keyframes frames to extract detailed information to provide the additional visual context to the planner.
+- `GET_CONTEXT` – Extracts transcript and visual summary chunks relevant to the query.
+- `GET_RELEVANT_FRAMES` – Provides semantically similar keyframes related to the query. This tool is based on the CLIP embedding.
+- `QUERY_FRAME` – Queries specific video keyframes to extract detailed information and provide additional visual context to the Planner.
 
 > The Critic agent helps validate and refine answers, improving reasoning depth.
 
@@ -368,16 +368,15 @@ MMCTAgent
 
 ## **Contributing**
 
-We welcome contributions from the community! MMCTAgent is an open-source project and we encourage you to help make it better.
+We welcome contributions from the community! MMCTAgent is an open-source project, and we encourage you to help make it better.
 
 #### Steps to Contribute
 
-1. **Fork the Repository**: Click the "Fork" button on GitHub
+1. **Fork the Repository**: Click the "Fork" button on GitHub.
 2. **Create a Feature Branch**: `git checkout -b feature/your-feature-name`
-3. **Make Changes**: Implement your improvements
-4. **Add Tests**: Ensure your changes are well-tested
-5. **Submit a Pull Request**: Describe your changes and submit for review
-
+3. **Make Changes**: Implement your improvements.
+4. **Add Tests**: Ensure your changes are well-tested.
+5. **Submit a Pull Request**: Describe your changes and submit them for review.
 
 ## **Citation**
 
