@@ -220,7 +220,7 @@ MMCTAgent now features a **modular provider system** that allows you to seamless
 | **Transcription** | Azure Speech Services, OpenAI Whisper | Audio-to-text conversion |
 | **Storage** | Azure Blob Storage, Local Storage | File storage and management |
 
-For detailed configuration instructions, see our [Provider Configuration Guide](docs/PROVIDERS.md).
+For detailed configuration instructions, see our [Provider Configuration Guide](mmct/providers/README.md).
 
 ---
 

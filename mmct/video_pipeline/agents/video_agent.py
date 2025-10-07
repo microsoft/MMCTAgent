@@ -134,9 +134,6 @@ class VideoAgent:
                 cache = self.cache
             )
 
-            if self.stream:
-                return video_qna_response
-
             # Generate final formatted answer using LLM with video_qna response
             formatted_response = await self._generate_final_answer(video_qna_response)
             return formatted_response
