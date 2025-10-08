@@ -36,17 +36,17 @@ async def main():
     try:
         # Make sure you've run 'az login' first!
         result = await run_ingestion(
-            video_path="/home/v-amanpatkar/work/demo/videoplayback.mp4",
+            video_path="/home/v-amanpatkar/work/demo/Vector Spaces Introduction -.mp4",
             search_endpoint=os.getenv("SEARCH_SERVICE_ENDPOINT"),
             index_name="test_lively",
             storage_account_url=os.getenv("AZURE_STORAGE_ACCOUNT_URL"),
             # Optional fallbacks (uncomment if not using Azure CLI):
             # storage_connection_string=os.getenv("AZURE_STORAGE_CONNECTION_STRING"),
             # search_api_key=os.getenv("SEARCH_API_KEY"),
-            motion_threshold=2.5,
-            sample_fps=2,
+            motion_threshold=1,
+            sample_fps=5,
             # Optional: YouTube URL for the video
-            youtube_url="https://www.youtube.com/watch?v=example"
+            youtube_url="https://www.youtube.com/watch?v=mSDU6PTFI3o"
         )
 
         logger.info("=" * 80)

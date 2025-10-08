@@ -22,5 +22,5 @@ if __name__ == '__main__':
     logger.info("Starting MCP Server...")
     logger.info(f"Search Endpoint: {os.getenv('SEARCH_SERVICE_ENDPOINT')}")
     logger.info(f"Index Name: {os.getenv('SEARCH_INDEX_NAME', 'video-keyframes-index')}")
-
-    mcp.run(transport="streamable-http", port=8000, host='0.0.0.0')
+    port = int(os.environ.get("PORT", 8000))
+    mcp.run(transport="streamable-http", port=port, host='0.0.0.0')

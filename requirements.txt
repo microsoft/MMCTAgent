@@ -1,5 +1,5 @@
 # Core dependencies
-opencv-python>=4.8.0
+opencv-python-headless>=4.8.0
 numpy>=1.24.0
 pillow>=10.0.0
 
@@ -23,3 +23,4 @@ aiofiles>=23.0.0
 
 mcp[cli]
 fastmcp
+loguru
