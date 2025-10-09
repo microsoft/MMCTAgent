@@ -9,6 +9,9 @@ import numpy as np
 from PIL import Image
 import torch
 from transformers import CLIPProcessor, CLIPModel
+from transformers.utils.import_utils import is_flash_attn_2_available
+from colpali_engine.models import ColQwen2_5, ColQwen2_5_Processor
+
 from ..core import FrameMetadata, FrameEmbedding, EmbeddingConfig, get_media_folder
 
 logger = logging.getLogger(__name__)
@@ -39,20 +42,26 @@ class CLIPEmbeddingsGenerator:
             else:
                 self.device = self.config.device
 
-            logger.info(f"Initializing CLIP model {self.config.clip_model_name} on {self.device}")
+            logger.info(f"Initializing Embedding model {self.config.clip_model_name} on {self.device}")
 
             # Load model and processor
-            self.model = CLIPModel.from_pretrained(self.config.clip_model_name)
-            self.processor = CLIPProcessor.from_pretrained(self.config.clip_model_name, use_fast=False)
+            if self.config.clip_model_name.startswith('openai'):
+                self.model = CLIPModel.from_pretrained(self.config.clip_model_name)
+                self.processor = CLIPProcessor.from_pretrained(self.config.clip_model_name, use_fast=False)
+            elif self.config.clip_model_name.startswith('vidore'):
+                self.model = ColQwen2_5.from_pretrained(self.config.clip_model_name, attn_implementation="flash_attention_2" if is_flash_attn_2_available() else None,)
+                self.processor = ColQwen2_5_Processor.from_pretrained(self.config.clip_model_name, use_fast=False)
+            else:
+                raise ValueError(f"Unsupported model name: {self.config.clip_model_name}")
 
             # Move model to device
             self.model = self.model.to(self.device)
             self.model.eval()
 
-            logger.info("CLIP model initialized successfully")
+            logger.info("Embedding model initialized successfully")
 
         except Exception as e:
-            logger.error(f"Failed to initialize CLIP model: {e}")
+            logger.error(f"Failed to initialize Embedding model: {e}")
             raise
 
     def _load_and_preprocess_image(self, image_path: str) -> Optional[Image.Image]:
@@ -79,30 +88,35 @@ class CLIPEmbeddingsGenerator:
             return None
 
     def _generate_batch_embeddings(self, images: List[Image.Image]) -> np.ndarray:
-        """
-        Generate embeddings for a batch of images.
-
-        Args:
-            images: List of PIL Image objects
-
-        Returns:
-            NumPy array of embeddings
-        """
         try:
-            # Process images
-            inputs = self.processor(images=images, return_tensors="pt", padding=True)
-            inputs = {k: v.to(self.device) for k, v in inputs.items()}
+            if isinstance(self.processor, CLIPProcessor):
+                # CLIP path
+                inputs = self.processor(images=images, return_tensors="pt", padding=True)
+                inputs = {k: v.to(self.device) for k, v in inputs.items()}
+                with torch.no_grad():
+                    feats = self.model.get_image_features(**inputs)
+            else:
+                # ColQwen2_5 path — use processor.process_images
+                processed = self.processor.process_images(images)  # likely returns a dict or a tensor wrapper
+                processed = {k: v.to(self.device) for k, v in processed.items()}
+                with torch.no_grad():
+                    outputs = self.model(**processed)
+                    # depending on implementation, outputs might be a tensor or a dict
+                    if hasattr(outputs, "image_embeds"):
+                        feats = outputs.image_embeds
+                    elif isinstance(outputs, torch.Tensor):
+                        feats = outputs
+                    else:
+                        # Could be a dict or multi-vector structure
+                        # e.g. feats = outputs["image_embeds"]
+                        feats = outputs.get("image_embeds", None)
+                        if feats is None:
+                            raise RuntimeError("Could not find feature outputs in ColQwen2_5 forward output")
 
-            # Generate embeddings
-            with torch.no_grad():
-                image_features = self.model.get_image_features(**inputs)
-                # Normalize embeddings
-                image_features = image_features / image_features.norm(dim=1, keepdim=True)
+            # normalize
+            feats = feats / feats.norm(dim=1, keepdim=True)
 
-            # Convert to numpy and move to CPU
-            embeddings = image_features.cpu().numpy()
-
-            return embeddings
+            return feats.cpu().numpy()
 
         except Exception as e:
             logger.error(f"Failed to generate batch embeddings: {e}")

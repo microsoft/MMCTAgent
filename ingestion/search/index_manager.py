@@ -216,11 +216,19 @@ class KeyframeSearchIndex:
             # Create frame filename
             frame_filename = f"{video_id}_{frame_embedding.frame_metadata.frame_number}.jpg"
 
+            # Ensure embedding is 1D for Azure AI Search
+            embedding = frame_embedding.clip_embedding
+            if embedding.ndim > 1:
+                # Use mean pooling for multi-vector embeddings (e.g., ColQwen2_5)
+                # This reduces [num_patches, dim] to [dim]
+                import numpy as np
+                embedding = np.mean(embedding, axis=0)
+
             document = {
                 "id": frame_id,
                 "video_id": video_id,
                 "keyframe_filename": frame_filename,
-                "clip_embedding": frame_embedding.clip_embedding.tolist(),
+                "clip_embedding": embedding.tolist(),
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "motion_score": float(frame_embedding.frame_metadata.motion_score),
                 "timestamp_seconds": float(frame_embedding.frame_metadata.timestamp_seconds),

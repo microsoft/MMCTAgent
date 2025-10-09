@@ -77,7 +77,8 @@ class IngestionPipeline:
         self.blob_config = blob_config or BlobStorageConfig()
         self.search_config = search_config or SearchIndexConfig(
             search_endpoint=search_endpoint,
-            index_name=index_name
+            index_name=index_name,
+            embedding_model=self.embedding_config.clip_model_name
         )
 
         # Components (initialized on demand)

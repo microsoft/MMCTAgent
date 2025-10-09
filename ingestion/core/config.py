@@ -4,7 +4,12 @@ Configuration dataclasses for video ingestion pipeline.
 
 from dataclasses import dataclass
 from typing import Optional
+from enum import Enum
 
+class EmbeddingModel(Enum):
+    """Enumeration of supported embedding models."""
+    CLIP_VIT_BASE_PATCH32 = "openai/clip-vit-base-patch32"
+    COLQWEN_2_5 = "vidore/colqwen2.5-v0.2"
 
 @dataclass
 class KeyframeExtractionConfig:
@@ -18,7 +23,7 @@ class KeyframeExtractionConfig:
 @dataclass
 class EmbeddingConfig:
     """Configuration for embedding generation."""
-    clip_model_name: str = "openai/clip-vit-base-patch32"
+    clip_model_name: str = EmbeddingModel.COLQWEN_2_5.value
     batch_size: int = 8
     device: str = "auto"  # "cpu", "cuda", or "auto"
     max_image_size: int = 224
@@ -39,8 +44,18 @@ class SearchIndexConfig:
     """Configuration for Azure AI Search index."""
     search_endpoint: str = ""
     index_name: str = "video-keyframes-index"
-    vector_dimensions: int = 512
+    embedding_model: str = EmbeddingModel.COLQWEN_2_5.value
     hnsw_m: int = 4
     hnsw_ef_construction: int = 400
     hnsw_ef_search: int = 500
     batch_upload_size: int = 100
+
+    @property
+    def vector_dimensions(self) -> int:
+        """Get vector dimensions based on the embedding model."""
+        if self.embedding_model.startswith('openai'):
+            return 512  # CLIP models
+        elif self.embedding_model.startswith('vidore'):
+            return 128  # ColQwen models
+        else:
+            raise ValueError(f"Unknown embedding model: {self.embedding_model}")

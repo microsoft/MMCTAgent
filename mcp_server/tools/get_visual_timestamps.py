@@ -8,6 +8,7 @@ import os
 from typing import Optional
 from ..server import mcp
 from .visual_search_client import search_keyframes
+from ..config import EmbeddingModel
 
 
 def _get_visual_timestamps_impl(
@@ -36,6 +37,8 @@ def _get_visual_timestamps_impl(
     if not search_endpoint:
         return "Error: SEARCH_SERVICE_ENDPOINT not configured in environment"
 
+    print("Using Embedding Model:", EmbeddingModel.COLQWEN_2_5.value)
+
     # Get search results
     try:
         results = search_keyframes(
@@ -45,7 +48,8 @@ def _get_visual_timestamps_impl(
             search_api_key=search_api_key,
             top_k=top_k,
             video_id=video_id,
-            youtube_url=youtube_url
+            youtube_url=youtube_url,
+            embedding_model=EmbeddingModel.COLQWEN_2_5.value
         )
 
         # Extract timestamp values and format as comma-separated string

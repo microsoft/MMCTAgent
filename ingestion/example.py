@@ -112,7 +112,7 @@ async def advanced_example():
         # Custom search index configuration
         search_config = SearchIndexConfig(
             index_name="video-keyframes-index",
-            vector_dimensions=512,
+            embedding_model="openai/clip-vit-base-patch32",  # Will determine vector_dimensions automatically
             hnsw_m=4,
             hnsw_ef_construction=400,
             hnsw_ef_search=500,

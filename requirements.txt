@@ -24,3 +24,4 @@ aiofiles>=23.0.0
 mcp[cli]
 fastmcp
 loguru
+git+https://github.com/illuin-tech/colpali
