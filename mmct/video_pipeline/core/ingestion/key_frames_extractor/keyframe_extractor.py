@@ -24,39 +24,95 @@ class KeyframeExtractionConfig:
     debug_mode: bool = False
 
 class KeyframeExtractor:
-    """Optimized keyframe extractor using optical flow motion detection."""
-    
+    """Optimized keyframe extractor using optical flow motion detection with GPU acceleration."""
+
     def __init__(self, config: KeyframeExtractionConfig = None):
         """
         Initialize the keyframe extractor.
-        
+
         Args:
             config: Configuration object for extraction parameters
         """
         self.config = config or KeyframeExtractionConfig()
+
+        # Detect GPU availability
+        self.use_gpu = False
+        self.gpu_optical_flow = None
+
+        try:
+            # Check if CUDA is available in OpenCV
+            if cv2.cuda.getCudaEnabledDeviceCount() > 0:
+                self.use_gpu = True
+                # Initialize GPU optical flow (Farneback algorithm on GPU)
+                self.gpu_optical_flow = cv2.cuda_FarnebackOpticalFlow.create(
+                    numLevels=3,
+                    pyrScale=0.5,
+                    fastPyramids=False,
+                    winSize=12,
+                    numIters=2,
+                    polyN=5,
+                    polySigma=1.2,
+                    flags=0
+                )
+                logger.info("GPU acceleration enabled for keyframe extraction")
+            else:
+                logger.info("No CUDA-enabled GPU found, using CPU for keyframe extraction")
+        except AttributeError:
+            # cv2.cuda module not available (OpenCV not compiled with CUDA support)
+            logger.info("OpenCV not compiled with CUDA support, using CPU for keyframe extraction")
+        except Exception as e:
+            logger.warning(f"Failed to initialize GPU acceleration: {e}. Falling back to CPU.")
+            self.use_gpu = False
     
     def calculate_optical_flow_score(self, prev_gray: np.ndarray, curr_gray: np.ndarray) -> float:
         """
-        Calculate motion score using optimized optical flow.
-        
+        Calculate motion score using optimized optical flow (GPU if available, otherwise CPU).
+
         Args:
             prev_gray: Previous frame in grayscale
             curr_gray: Current frame in grayscale
-            
+
         Returns:
             Motion score (higher = more motion)
         """
-        # Balanced optical flow parameters for speed vs accuracy
+        if self.use_gpu and self.gpu_optical_flow is not None:
+            # GPU-accelerated optical flow
+            try:
+                # Upload frames to GPU
+                gpu_prev = cv2.cuda_GpuMat()
+                gpu_curr = cv2.cuda_GpuMat()
+                gpu_prev.upload(prev_gray)
+                gpu_curr.upload(curr_gray)
+
+                # Calculate optical flow on GPU
+                gpu_flow = self.gpu_optical_flow.calc(gpu_prev, gpu_curr, None)
+
+                # Download flow from GPU to CPU
+                flow = gpu_flow.download()
+
+                # Calculate magnitude
+                magnitude, _ = cv2.cartToPolar(flow[..., 0], flow[..., 1])
+                motion_score = np.mean(magnitude)
+
+                return motion_score
+
+            except Exception as e:
+                # Fall back to CPU if GPU computation fails
+                logger.warning(f"GPU optical flow failed, falling back to CPU: {e}")
+                self.use_gpu = False
+                # Fall through to CPU computation below
+
+        # CPU-based optical flow (fallback or when GPU not available)
         flow = cv2.calcOpticalFlowFarneback(
-            prev_gray, curr_gray, None, 
-            pyr_scale=0.5, levels=3, winsize=12, 
+            prev_gray, curr_gray, None,
+            pyr_scale=0.5, levels=3, winsize=12,
             iterations=2, poly_n=5, poly_sigma=1.2, flags=0
         )
-        
+
         # Faster magnitude calculation using cv2.cartToPolar
         magnitude, _ = cv2.cartToPolar(flow[..., 0], flow[..., 1])
         motion_score = np.mean(magnitude)
-        
+
         return motion_score
     
     async def _save_frame_batch(self, pending_frames: List[Dict]) -> List[FrameMetadata]:
@@ -153,8 +209,10 @@ class KeyframeExtractor:
         sample_interval = frames_per_second // self.config.sample_fps
         if sample_interval <= 0:
             sample_interval = 1
-        
-        logger.info(f"Processing video: {os.path.basename(video_path)} ({original_width}x{original_height})")
+
+        # Log device being used for optical flow computation
+        device_type = "CUDA GPU" if self.use_gpu else "CPU"
+        logger.info(f"Processing video: {os.path.basename(video_path)} ({original_width}x{original_height}) using {device_type}")
         
         while cap.isOpened():
             ret, frame = cap.read()
@@ -252,6 +310,25 @@ class KeyframeExtractor:
                     os.remove(frame_path)
             except Exception as e:
                 logger.warning(f"Could not remove frame {frame_filename}: {e}")
+
+    def cleanup_gpu_resources(self) -> None:
+        """
+        Clean up GPU resources if they were allocated.
+        Call this method when done with keyframe extraction to free GPU memory.
+        """
+        if self.use_gpu:
+            try:
+                # Clear GPU optical flow instance
+                if self.gpu_optical_flow is not None:
+                    self.gpu_optical_flow = None
+
+                # Force garbage collection to free GPU memory
+                import gc
+                gc.collect()
+
+                logger.info("GPU resources cleaned up")
+            except Exception as e:
+                logger.warning(f"Error cleaning up GPU resources: {e}")
 
 
 async def extract_keyframes_from_video(video_path: str,

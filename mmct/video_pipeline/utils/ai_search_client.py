@@ -63,9 +63,18 @@ class AISearchClient:
         self._init_search_client()
 
     def _get_credential(self):
-        """Get credential - start with DefaultAzureCredential."""
-        logger.info("Using DefaultAzureCredential for authentication")
-        return DefaultAzureCredential()
+        """Get credential - try AzureCliCredential first, then fall back to DefaultAzureCredential."""
+        try:
+            from azure.identity import AzureCliCredential
+            # Try Azure CLI credential first
+            cli_credential = AzureCliCredential()
+            # Test if CLI credential works by getting a token
+            cli_credential.get_token("https://search.azure.com/.default")
+            logger.info("Using AzureCliCredential for authentication")
+            return cli_credential
+        except Exception as e:
+            logger.info(f"AzureCliCredential not available ({e}), falling back to DefaultAzureCredential")
+            return DefaultAzureCredential()
 
     async def _retry_with_cli_credential(self, operation_func, *args, **kwargs):
         """Retry an operation with AzureCliCredential if DefaultAzureCredential fails."""
@@ -419,6 +428,39 @@ class AISearchDocument(BaseModel):
     hash_video_id: str = Field(
         ...,
         searchable=True,
+        filterable=True,
+        retrievable=True,
+        stored=True,
+        sortable=False,
+        facetable=False,
+        key=False
+    )
+    parent_id: str = Field(
+        default="None",
+        description="Original video ID (before splitting)",
+        searchable=False,
+        filterable=True,
+        retrievable=True,
+        stored=True,
+        sortable=False,
+        facetable=False,
+        key=False
+    )
+    parent_duration: str = Field(
+        default="None",
+        description="Original video duration in seconds",
+        searchable=False,
+        filterable=True,
+        retrievable=True,
+        stored=True,
+        sortable=False,
+        facetable=False,
+        key=False
+    )
+    video_duration: str = Field(
+        default="None",
+        description="Duration of this specific video part in seconds",
+        searchable=False,
         filterable=True,
         retrievable=True,
         stored=True,

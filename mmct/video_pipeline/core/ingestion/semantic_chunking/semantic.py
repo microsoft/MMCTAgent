@@ -26,7 +26,7 @@ load_dotenv(find_dotenv(),override=True)
 
 
 class SemanticChunking:
-    def __init__(self, hash_id:str, index_name:str, transcript:str,blob_urls,base64Frames, frame_stacking_grid_size: int = 4)->None:
+    def __init__(self, hash_id:str, index_name:str, transcript:str,blob_urls,base64Frames, frame_stacking_grid_size: int = 4, parent_id: Optional[str] = None, parent_duration: Optional[float] = None, video_duration: Optional[float] = None)->None:
         if os.environ.get("MANAGED_IDENTITY", None) is None:
             raise Exception(
                 "MANAGED_IDENTITY requires boolean value for selecting authorization either with Managed Identity or API Key"
@@ -57,6 +57,9 @@ class SemanticChunking:
         self.hash_id = hash_id
         self.index_name = index_name
         self.frame_stacking_grid_size = frame_stacking_grid_size
+        self.parent_id = parent_id
+        self.parent_duration = parent_duration
+        self.video_duration = video_duration
         self.chapter_generator = ChapterGeneration(frame_stacking_grid_size=frame_stacking_grid_size)
         self.embed_client = LLMClient(service_provider=os.getenv("LLM_PROVIDER", "azure"), isAsync=True, embedding=True).get_client()
         self.index_client = AISearchClient(
@@ -247,6 +250,9 @@ class SemanticChunking:
                 chapter_transcript=chapter_transcript,
                 subject=self.subject_data['subject'] or "None",
                 variety=self.subject_data['variety_of_subject'] or "None",
+                parent_id=self.parent_id or "None",
+                parent_duration=str(self.parent_duration) if self.parent_duration is not None else "None",
+                video_duration=str(self.video_duration) if self.video_duration is not None else "None",
                 blob_audio_url=self.blob_urls['audio_blob_url'].split(".net")[-1][1:] or "None",
                 blob_video_url=video_blob_url.split(".net")[-1][1:] or "None",
                 blob_transcript_file_url=self.blob_urls['transcript_blob_url'].split(".net")[-1][1:] or "None",
