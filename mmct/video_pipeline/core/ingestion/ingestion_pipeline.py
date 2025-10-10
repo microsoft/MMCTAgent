@@ -387,6 +387,7 @@ class IngestionPipeline:
             )
 
             if is_already_ingested:
+                
                 self.logger.info(f"Video with hash_id {video_hash_id} already exists in index {self.index_name}. Skipping pipeline - no processing needed.")
                 return False
 

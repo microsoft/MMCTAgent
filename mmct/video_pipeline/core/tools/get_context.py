@@ -36,7 +36,7 @@ async def get_context(
     query: Annotated[str, "query for which documents needs to fetch"],
     index_name: Annotated[str, "vector index name"],
     video_id: Annotated[str, "video id if provided in the instruction"] = None,
-    youtube_url: Annotated[str, "youtube url if provided in the instruction"] = None,
+    url: Annotated[str, "url if provided in the instruction to filter out the search results"] = None,
     use_graph_rag: Annotated[str, "whether to use graph rag or not"] = 'False',
 ) -> str:
     """
@@ -55,8 +55,8 @@ async def get_context(
         search_results = await search_provider.search(query=query, index_name="temp",embedding=embedding)
         return search_results
 
-    if youtube_url:
-        filter_query = f"youtube_url eq '{youtube_url}'"
+    if url:
+        filter_query = f"youtube_url eq '{url}'"
     elif video_id:
         filter_query = f"hash_video_id eq '{video_id}'"
     else:
@@ -86,8 +86,8 @@ async def get_context(
 if __name__ == "__main__":
     import asyncio
 
-    video_id = "6242f2b4e99f13c3dec2f9b4cc2b4f2d1e4970d06f1173443875c8ce62580fc2"
-    query = "what are the key elements in the machine learning?"
-    index_name = "education-video-index-v2"
+    video_id = "hash-video-id"
+    query = "user-query"
+    index_name = "index-name"
     results = asyncio.run(get_context(video_id=video_id, query=query,index_name= index_name,use_graph_rag=True))
     print(results)

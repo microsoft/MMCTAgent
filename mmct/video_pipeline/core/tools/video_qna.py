@@ -77,7 +77,7 @@ class VideoQnA:
         self,
         query: str,
         video_id:  Optional[str] = None,
-        youtube_url:  Optional[str] = None,
+        url:  Optional[str] = None,
         use_critic_agent: bool = True,
         index_name: str = "education-video-index-v2",
         llm_provider: Optional[object] = None,
@@ -88,7 +88,7 @@ class VideoQnA:
         self.video_id = video_id
         self.use_critic_agent = use_critic_agent
         self.index_name = index_name
-        self.youtube_url = youtube_url
+        self.url = url
         self.use_graph_rag = use_graph_rag
         self.cache = cache
 
@@ -131,7 +131,7 @@ class VideoQnA:
         self.task = (
             f"query:{self.query}."
             + (f"\nInstruction:video id:{self.video_id}" if self.video_id is not None else "")
-            + (f"\nyoutube url:{self.youtube_url}" if self.youtube_url is not None else "")
+            + (f"\nurl:{self.url}" if self.url is not None else "")
             + (f"\nUse the index name:{self.index_name} to retrieve context.")
             + (f"\n Set the use_graph_rag as True" if self.use_graph_rag else "")
         )
@@ -224,7 +224,7 @@ class VideoQnA:
 async def video_qna(
     query: Annotated[str, "The question to be answered based on the content of the video."],
     video_id: Annotated[str, "The unique identifier of the video."]=None,
-    youtube_url: Annotated[str, "The YouTube URL of the video."]=None,
+    url: Annotated[str, "The URL of the video to filter out the search results"]=None,
     use_critic_agent: Annotated[
         bool, "Set to True to enable a critic agent that validates the response."
     ] = True,
@@ -251,7 +251,7 @@ async def video_qna(
 
     video_qna_instance = VideoQnA(
         video_id=video_id,
-        youtube_url=youtube_url,
+        url=url,
         query=query,
         use_critic_agent=use_critic_agent,
         index_name=index_name,
@@ -274,7 +274,7 @@ if __name__ == "__main__":
     # Example usage - replace with your actual values
     query = "<placeholder for query>"
     # video_id = "<placeholder for hash video Id>" #Optional
-    # youtube_url = "<placeholder for youtube url>" #Optional
+    # url = "<placeholder for url to filter out the results>" #Optional
     use_critic_agent = True
     stream = True
     index_name = "<placeholder for index name>"
@@ -283,7 +283,7 @@ if __name__ == "__main__":
         video_qna(
             query=query,
             #video_id=video_id, #Optional
-            #youtube_url=youtube_url, #Optional
+            # url=url, #Optional
             use_critic_agent=use_critic_agent,
             stream=stream,
             index_name=index_name,

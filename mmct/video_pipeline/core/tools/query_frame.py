@@ -69,12 +69,12 @@ async def query_frame(
         video_id = video_id[:64]
 
     # Get search endpoint from environment
-    search_endpoint = os.getenv('AZURE_SEARCH_ENDPOINT', 'https://osaistemp.search.windows.net')
+    search_endpoint = os.getenv('SEARCH_ENDPOINT')
 
     # Initialize searcher
     searcher = KeyframeSearcher(
         search_endpoint=search_endpoint,
-        index_name=os.getenv("KEYFRAME_INDEX_NAME", "farming-video-bihar-index")
+        index_name=os.getenv("KEYFRAME_INDEX_NAME")
     )
 
     # Determine which frames to use

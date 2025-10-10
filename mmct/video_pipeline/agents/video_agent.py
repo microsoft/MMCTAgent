@@ -31,7 +31,7 @@ class VideoAgent:
         query (str): The natural language question about video content.
         index_name (str): Name of the Azure Cognitive Search index for video retrieval.
         video_id (Optional[str]): Specific video ID to query. Defaults to None.
-        youtube_url (Optional[str]): YouTube URL to query. Defaults to None.
+        url (Optional[str]): URL to filter the search results for that particular video. Defaults to None.
         use_critic_agent (bool): Whether to use the critic agent for validation. Defaults to True.
         stream (bool): Whether to stream the response output. Defaults to False.
         llm_provider (Optional[object]): LLM provider instance. Defaults to None (uses config).
@@ -57,12 +57,12 @@ class VideoAgent:
         result = await video_agent()
         ```
 
-        With YouTube URL and streaming:
+        With URL and streaming:
         ```python
         video_agent = VideoAgent(
             query="Summarize this farming video",
             index_name="farming-video-index",
-            youtube_url="https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            url="https://video-url.mp4",
             stream=True
         )
         result = await video_agent()
@@ -74,7 +74,7 @@ class VideoAgent:
         query: str,
         index_name: str,
         video_id: Optional[str] = None,
-        youtube_url: Optional[str] = None,
+        url: Optional[str] = None,
         use_critic_agent: Optional[bool] = True,
         stream: bool = False,
         llm_provider: Optional[object] = None,
@@ -85,7 +85,7 @@ class VideoAgent:
         self.query = query
         self.index_name = index_name
         self.video_id = video_id
-        self.youtube_url = youtube_url
+        self.url = url
         self.use_critic_agent = use_critic_agent
         self.stream = stream
         self.use_graph_rag = use_graph_rag
@@ -125,7 +125,7 @@ class VideoAgent:
             video_qna_response = await video_qna(
                 query=self.query,
                 video_id=self.video_id,
-                youtube_url=self.youtube_url,
+                url=self.url,
                 use_critic_agent=self.use_critic_agent,
                 index_name=self.index_name,
                 stream=self.stream,
@@ -133,9 +133,6 @@ class VideoAgent:
                 use_graph_rag=self.use_graph_rag,
                 cache = self.cache
             )
-
-            if self.stream:
-                return video_qna_response
 
             # Generate final formatted answer using LLM with video_qna response
             formatted_response = await self._generate_final_answer(video_qna_response)
@@ -195,13 +192,13 @@ if __name__ == "__main__":
     async def main():
         """Example usage of VideoAgent with Swarm orchestration."""
         query = "<placeholder for query>"
-        youtube_url = "<placeholder for youtube url>" #Optional
+        url = "<placeholder for url>" #Optional
         index_name = "<placeholer for index name>"
         stream = False
         cache = False
         video_agent = VideoAgent(
             query=query,
-            # youtube_url=youtube_url,
+            url=url,
             index_name=index_name,
             use_critic_agent=True,
             stream=stream,
