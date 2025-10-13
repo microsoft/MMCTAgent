@@ -375,24 +375,50 @@ async def extract_wav_from_video(video_path: str, output_path: str):
         if not output_path.endswith(".wav"):
             output_path = os.path.splitext(output_path)[0] + ".wav"
 
-        with open(os.devnull, "wb") as devnull:
-            subprocess.call(
-                [
-                    "ffmpeg",
-                    "-y",
-                    "-i",
-                    video_path,
-                    "-ac",
-                    "1",
-                    "-ar",
-                    "16000",
-                    "-f",
-                    "wav",
-                    output_path,
-                ],
-                stdout=devnull,
-                stderr=devnull,
-            )
+        # First check if video has an audio stream using ffprobe
+        probe_process = await asyncio.create_subprocess_exec(
+            "ffprobe",
+            "-v", "error",
+            "-select_streams", "a:0",
+            "-show_entries", "stream=codec_type",
+            "-of", "default=noprint_wrappers=1:nokey=1",
+            video_path,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+
+        probe_stdout, probe_stderr = await probe_process.communicate()
+
+        # If no audio stream found, raise informative error
+        if not probe_stdout or probe_stdout.strip() != b"audio":
+            raise Exception(f"Video file has no audio stream: {video_path}")
+
+        # Use asyncio.create_subprocess_exec for truly async execution
+        # Add -map 0:a to explicitly select audio stream
+        process = await asyncio.create_subprocess_exec(
+            "ffmpeg",
+            "-y",
+            "-i",
+            video_path,
+            "-map", "0:a",  # Explicitly map audio stream
+            "-ac",
+            "1",
+            "-ar",
+            "16000",
+            "-f",
+            "wav",
+            output_path,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+
+        # Wait for ffmpeg to complete and capture output
+        stdout, stderr = await process.communicate()
+
+        # Check if the process completed successfully
+        if process.returncode != 0:
+            stderr_output = stderr.decode('utf-8', errors='ignore') if stderr else "No error output"
+            raise Exception(f"FFmpeg failed with return code {process.returncode}. Error: {stderr_output}")
 
         return output_path
     except Exception as e:

@@ -179,6 +179,8 @@ class VideoCompressor:
             f"{self.video_bitrate}k",
             "-pass",
             "2",
+            "-map", "0:v",  # Explicitly map video stream
+            "-map", "0:a?",  # Explicitly map audio stream if it exists (? makes it optional)
             "-c:a",
             self.audio_codec,
             "-b:a",
@@ -193,6 +195,22 @@ class VideoCompressor:
         self._run_and_log(cmd1, "First Pass")
         self._run_and_log(cmd2, "Second Pass")
         self._cleanup_temp_files()
+
+        # Verify output has both video and audio streams
+        try:
+            probe = ffmpeg.probe(self.output_path)
+            has_video = any(s['codec_type'] == 'video' for s in probe['streams'])
+            has_audio = any(s['codec_type'] == 'audio' for s in probe['streams'])
+
+            if not has_video:
+                raise RuntimeError("Compressed video has no video stream!")
+            if not has_audio:
+                self.logger.warning("Compressed video has no audio stream - original video may not have audio")
+            else:
+                self.logger.info("Compressed video has both video and audio streams")
+        except Exception as e:
+            self.logger.warning(f"Could not verify compressed video streams: {e}")
+
         self.logger.info(f"Compression complete. Output saved to: {self.output_path}")
 
 

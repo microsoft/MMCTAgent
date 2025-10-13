@@ -583,11 +583,11 @@ class IngestionPipeline:
                 upload_results = await asyncio.gather(*batch)
                 del upload_results
                 gc.collect()
-            
+
             self.logger.info(f"Files uploaded for part {part_hash_id}")
 
             await blob_manager.close()
-            
+
             # Clean up local files for this part
             await remove_file(context.hash_id)
             
@@ -803,6 +803,29 @@ class IngestionPipeline:
             raise
 
 
+    async def _check_video_has_audio(self, video_path: str) -> bool:
+        """
+        Check if video file has an audio stream.
+        Returns True if audio exists, False otherwise.
+        """
+        try:
+            process = await asyncio.create_subprocess_exec(
+                "ffprobe",
+                "-v", "error",
+                "-select_streams", "a:0",
+                "-show_entries", "stream=codec_type",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+                video_path,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+
+            stdout, stderr = await process.communicate()
+            return stdout and stdout.strip() == b"audio"
+        except Exception as e:
+            self.logger.warning(f"Could not check for audio stream: {e}")
+            return False
+
     async def __call__(self):
         """Main ingestion pipeline method - now supports video splitting and parallel processing."""
         try:
@@ -810,6 +833,21 @@ class IngestionPipeline:
             should_continue = await self._perform_early_ingestion_check()
             if not should_continue:
                 return
+
+            # Check if video has audio stream BEFORE processing (only if transcript_path not provided)
+            if not self.transcript_path:
+                self.logger.info("Checking if video has audio stream...")
+                has_audio = await self._check_video_has_audio(self.video_path)
+                if not has_audio:
+                    error_msg = (
+                        "ERROR: Video does not have an audio stream!\n"
+                        "Please provide either:\n"
+                        "  1. A video file with audio, OR\n"
+                        "  2. A transcript file using the transcript_path parameter"
+                    )
+                    self.logger.error(error_msg)
+                    raise ValueError(error_msg)
+                self.logger.info("Video has audio stream - proceeding with transcription")
 
             await self._check_and_compress_video()  # Check file size and compress if needed
             self.logger.info("Video compression check completed!")
@@ -1175,9 +1213,9 @@ class IngestionPipeline:
 
 if __name__ == "__main__":
     # Example usage - replace with your actual values
-    video_path = "/home/v-amanpatkar/work/demo/videoplayback.mp4"
+    video_path = "/home/v-amanpatkar/work/demo/Andrej Karpathy Software Is Changing (Again).mp4"
     index = "nptel_test"
-    youtube_url = "https://www.youtube.com/watch?v=mSDU6PTFI3o"
+    youtube_url = "https://www.youtube.com/watch?v=LCEmiRjPEtQ"
     source_language = Languages.ENGLISH_UNITED_STATES
    # transcript_path = "/home/v-amanpatkar/work/demo/transcript/Vector Spaces Introduction.srt"
     ingestion = IngestionPipeline(

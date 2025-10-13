@@ -57,7 +57,7 @@ class SemanticChunking:
         self.parent_id = parent_id
         self.parent_duration = parent_duration
         self.video_duration = video_duration
-        self.chapter_generator = ChapterGeneration(frame_stacking_grid_size=frame_stacking_grid_size)
+        self.chapter_generator = ChapterGeneration(frame_stacking_grid_size=frame_stacking_grid_size, keyframe_index=f"keyframes-{index_name}")
         self.embed_client = LLMClient(service_provider=os.getenv("LLM_PROVIDER", "azure"), isAsync=True, embedding=True).get_client()
         self.index_client = AISearchClient(
             endpoint=os.getenv("SEARCH_SERVICE_ENDPOINT"),

@@ -21,14 +21,14 @@ load_dotenv(find_dotenv(), override=True)
 
 
 class ChapterGeneration:
-    def __init__(self, frame_stacking_grid_size=4):
+    def __init__(self, keyframe_index, frame_stacking_grid_size=4):
         self.llm_client = LLMClient(
             service_provider=os.getenv("LLM_PROVIDER", "azure"), isAsync=True
         ).get_client()
         self.frame_stacking_grid_size = frame_stacking_grid_size
         self.index_client = SearchClient(
             endpoint=os.getenv("SEARCH_SERVICE_ENDPOINT"),
-            index_name="keyframes-nptel_test",
+            index_name=keyframe_index,
             credential=self._get_credential()
         )
 

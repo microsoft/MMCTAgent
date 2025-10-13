@@ -27,10 +27,23 @@ class CloudTranscription(Transcription):
 
     async def _load_audio(self):
         try:
-            logger.info("Extracting the audio from the video")
+            logger.info(f"Extracting the audio from the video: {self.video_path}")
             self.audio_path = os.path.join(await get_media_folder(), f"{self.hash_id}.wav")
+            logger.info(f"Target audio path: {self.audio_path}")
+
+            # Verify video file exists before extraction
+            if not os.path.exists(self.video_path):
+                raise FileNotFoundError(f"Video file not found for audio extraction: {self.video_path}")
 
             await extract_wav_from_video(video_path=self.video_path, output_path=self.audio_path)
+
+            # Verify audio file was created successfully
+            if not os.path.exists(self.audio_path):
+                raise FileNotFoundError(f"Audio extraction failed - output file not created: {self.audio_path}")
+
+            audio_size = os.path.getsize(self.audio_path)
+            logger.info(f"Audio extracted successfully: {self.audio_path} (size: {audio_size} bytes)")
+
             self.local_save.append(self.audio_path)
             return "", self.local_save
         except Exception as e:
