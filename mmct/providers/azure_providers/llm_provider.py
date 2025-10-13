@@ -2,7 +2,7 @@ from mmct.providers.base import LLMProvider
 from loguru import logger
 from openai import AsyncAzureOpenAI, AzureOpenAI
 from azure.identity import DefaultAzureCredential, AzureCliCredential, get_bearer_token_provider
-from mmct.exceptions import ProviderException, ConfigurationException
+from mmct.utils.error_handler import ProviderException, ConfigurationException
 from typing import Dict, Any, List
 from mmct.utils.error_handler import handle_exceptions, convert_exceptions
 

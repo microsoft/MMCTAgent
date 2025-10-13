@@ -1,6 +1,6 @@
 
 from mmct.utils.error_handler import handle_exceptions, convert_exceptions
-from mmct.exceptions import ProviderException, ConfigurationException
+from mmct.utils.error_handler import ProviderException, ConfigurationException
 from loguru import logger
 from azure.identity import DefaultAzureCredential, AzureCliCredential
 from typing import Dict, Any, List

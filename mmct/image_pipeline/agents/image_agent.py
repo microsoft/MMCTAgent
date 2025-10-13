@@ -18,7 +18,7 @@ from mmct.image_pipeline.prompts import (
 )
 from mmct.providers.factory import provider_factory
 from mmct.config.settings import MMCTConfig
-from mmct.exceptions import ProviderException, ConfigurationException
+from mmct.utils.error_handler import ProviderException, ConfigurationException
 from mmct.utils.logging_config import LoggingConfig
 from mmct.utils.error_handler import handle_exceptions
 from mmct.image_pipeline.prompts import IMAGE_AGENT_SYSTEM_PROMPT, ImageAgentResponse

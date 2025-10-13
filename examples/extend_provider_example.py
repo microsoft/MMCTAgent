@@ -11,7 +11,7 @@ from typing import Dict, Any, List
 from mmct.providers.azure_providers import AzureLLMProvider
 from mmct.providers.openai_providers import OpenAIEmbeddingProvider
 from mmct.providers.factory import provider_factory
-from mmct.exceptions import ProviderException
+from mmct.utils.error_handler import ProviderException
 from loguru import logger
 
 

@@ -11,7 +11,7 @@ This example shows:
 from typing import Dict, Any, List
 from mmct.providers.base import LLMProvider, EmbeddingProvider
 from mmct.providers.factory import provider_factory
-from mmct.exceptions import ProviderException
+from mmct.utils.error_handler import ProviderException
 
 
 class CustomLLMProvider(LLMProvider):

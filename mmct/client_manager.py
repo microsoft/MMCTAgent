@@ -6,7 +6,7 @@ from .providers.factory import ProviderFactory
 from .providers.base import LLMProvider, SearchProvider, VisionProvider, TranscriptionProvider
 from .security.secrets import SecretsManager
 from .utils.logging_config import LoggingConfig, get_logger
-from .exceptions import ConfigurationException
+from .utils.error_handler import ConfigurationException
 
 
 class ClientManager:
