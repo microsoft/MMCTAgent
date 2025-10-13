@@ -405,16 +405,19 @@ class IngestionPipeline:
         """
         Orchestrate keyframe extraction based on video configuration.
         Handles both single video and multi-part video scenarios.
+        Returns keyframe metadata (dict for split videos, list for single video, None otherwise).
         """
         try:
             if len(video_paths) > 1:
                 # Video was split - extract keyframes from each part
                 self.logger.info(f"Video was split into {len(video_paths)} parts. Extracting keyframes from each part...")
-                await self._extract_keyframes_from_video_parts(video_paths, hash_suffixes)
+                keyframe_metadata_map = await self._extract_keyframes_from_video_parts(video_paths, hash_suffixes)
+                return keyframe_metadata_map
             else:
                 # Single video - extract keyframes from original
                 self.logger.info("Single video detected. Extracting keyframes from original video...")
-                await self._extract_keyframes()
+                keyframe_metadata = await self._extract_keyframes()
+                return keyframe_metadata
 
         except Exception as e:
             self.logger.exception(f"Exception occurred during keyframe extraction orchestration: {e}")
@@ -423,6 +426,7 @@ class IngestionPipeline:
     async def _extract_keyframes_from_video_parts(self, video_paths: list, hash_suffixes: list):
         """
         Extract keyframes from multiple video parts with consistent naming.
+        Returns a dictionary mapping hash_id to keyframe metadata list.
         """
         try:
             self.logger.info(f"Starting keyframe extraction for {len(video_paths)} video parts...")
@@ -430,6 +434,9 @@ class IngestionPipeline:
             # Generate base hash ID from Part A video for consistent hash IDs
             part_a_path = video_paths[0]  # Part A is always first
             base_hash_id = await get_file_hash(part_a_path)
+
+            # Store metadata for each part
+            keyframe_metadata_map = {}
 
             for video_path, hash_suffix in zip(video_paths, hash_suffixes):
                 part_name = "Part A" if hash_suffix == "" else f"Part {hash_suffix}"
@@ -453,9 +460,14 @@ class IngestionPipeline:
                     video_id=part_hash_id
                 )
 
+                # Store metadata for this part
+                keyframe_metadata_map[part_hash_id] = keyframe_metadata
+
                 self.logger.info(f"Successfully extracted {len(keyframe_metadata)} keyframes for {part_name}")
                 for frame in keyframe_metadata:
                     self.logger.debug(f"  Frame {frame.frame_number}: {frame.timestamp_seconds:.2f}s (motion: {frame.motion_score:.3f})")
+
+            return keyframe_metadata_map
 
         except Exception as e:
             self.logger.exception(f"Exception occurred during keyframe extraction from video parts: {e}")
@@ -509,7 +521,7 @@ class IngestionPipeline:
             self.logger.exception(f"Exception occurred during keyframe upload: {e}")
             raise
     
-    async def _process_video_part_parallel(self, video_path: str, part_hash_id: str, transcript_path: Optional[str] = None, parent_id: Optional[str] = None, parent_duration: Optional[float] = None) -> None:
+    async def _process_video_part_parallel(self, video_path: str, part_hash_id: str, transcript_path: Optional[str] = None, parent_id: Optional[str] = None, parent_duration: Optional[float] = None, keyframe_metadata: Optional[List] = None) -> None:
         """
         Process a single video part in parallel - used for split videos.
 
@@ -557,6 +569,21 @@ class IngestionPipeline:
             context.blob_urls["keyframes_blob_folder_url"] = blob_manager.get_blob_url(
                 container=self.keyframe_container, blob_name=f"keyframes/{context.hash_id}"
             )
+
+            # Use the keyframe metadata that was extracted earlier
+            if keyframe_metadata:
+                context.keyframe_metadata = keyframe_metadata
+                self.logger.info(f"Using {len(keyframe_metadata)} keyframes for part {part_hash_id}")
+
+                # Generate embeddings for these keyframes
+                context = await self._generate_embeddings_for_keyframes(context)
+                self.logger.info(f"Generated embeddings for {len(context.frame_embeddings)} keyframes for part {part_hash_id}")
+
+                # Store embeddings to AI Search index
+                context = await self._store_frame_embeddings_to_search_index(context)
+                self.logger.info(f"Stored frame embeddings to AI Search for part {part_hash_id}")
+            else:
+                self.logger.warning(f"No keyframe metadata provided for part {part_hash_id}")
 
             # Run functional pipeline methods
             context = await self.get_transcription(context, blob_manager)
@@ -861,7 +888,7 @@ class IngestionPipeline:
             video_paths, hash_suffixes = await split_video_if_needed(self.video_path)
 
             # Extract keyframes after video splitting check
-            await self._perform_keyframe_extraction(video_paths, hash_suffixes)
+            keyframe_metadata_result = await self._perform_keyframe_extraction(video_paths, hash_suffixes)
             self.logger.info("Keyframes extraction completed!")
             self.logger.info(f"Processing {len(video_paths)} video part(s)")
 
@@ -912,14 +939,19 @@ class IngestionPipeline:
                     # Get corresponding transcript path if available
                     part_transcript_path = transcript_paths[idx] if transcript_paths else None
 
+                    # Get keyframe metadata for this part
+                    part_keyframe_metadata = keyframe_metadata_result.get(part_hash_id) if isinstance(keyframe_metadata_result, dict) else None
+
                     self.logger.info(f"Creating task for {part_name}: {os.path.basename(video_path)}")
                     self.logger.info(f"  Hash ID: {part_hash_id}")
                     if part_transcript_path:
                         self.logger.info(f"  Transcript: {os.path.basename(part_transcript_path)}")
+                    if part_keyframe_metadata:
+                        self.logger.info(f"  Keyframes: {len(part_keyframe_metadata)}")
 
                     # Create asyncio task for processing this video part
                     task = asyncio.create_task(
-                        self._process_video_part_parallel(video_path, part_hash_id, part_transcript_path, parent_video_id, parent_video_duration)
+                        self._process_video_part_parallel(video_path, part_hash_id, part_transcript_path, parent_video_id, parent_video_duration, part_keyframe_metadata)
                     )
                     tasks.append(task)
 
@@ -1213,9 +1245,9 @@ class IngestionPipeline:
 
 if __name__ == "__main__":
     # Example usage - replace with your actual values
-    video_path = "video-path"
-    index = "index-name"
-    url = "video-url"
+    video_path = "/home/v-amanpatkar/work/demo/Andrej Karpathy Software Is Changing (Again).mp4" #"video-path"
+    index = "nptel_test" #"index-name"
+    url = "https://www.youtube.com/watch?v=LCEmiRjPEtQ" #"video-url"
     source_language = Languages.ENGLISH_UNITED_STATES
     transcript_path = "transcript-path.srt"
     ingestion = IngestionPipeline(
