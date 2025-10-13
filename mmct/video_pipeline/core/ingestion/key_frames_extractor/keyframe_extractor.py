@@ -358,10 +358,8 @@ async def extract_keyframes_from_video(video_path: str,
 
 
 if __name__ == "__main__":
-    import argparse
     import asyncio
-
-    video_path = "/home/v-amanpatkar/work/chapter_generation_opt/video/sample.mp4"
+    video_path = "video-path"
     motion_threshold = 2.5
 
 

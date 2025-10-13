@@ -1,8 +1,7 @@
 from mmct.utils.error_handler import handle_exceptions, convert_exceptions
-from mmct.exceptions import ProviderException
 from mmct.providers.base import VisionProvider
 from openai import AsyncOpenAI, OpenAI
-from mmct.exceptions import ProviderException, ConfigurationException
+from mmct.utils.error_handler import ProviderException, ConfigurationException
 from loguru import logger
 from typing import Dict, Any
 

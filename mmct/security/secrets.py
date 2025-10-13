@@ -3,7 +3,7 @@ from typing import Optional
 from azure.keyvault.secrets import SecretClient
 from azure.identity import DefaultAzureCredential
 from loguru import logger
-from ..exceptions import AuthenticationException, ConfigurationException
+from ..utils.error_handler import AuthenticationException, ConfigurationException
 
 
 class SecretsManager:

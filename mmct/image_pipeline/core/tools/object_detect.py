@@ -1,6 +1,7 @@
 """
 functionality of this tool is object detection
 """
+
 from mmct.image_pipeline.core.models.object_detect.yolov8s import YOLOs
 from PIL import Image
 import numpy as np
@@ -13,7 +14,8 @@ async def objectDetectTool(img: Annotated[str, "local path of image"]) -> str:
     """
     img = Image.open(img).convert("RGB")
     model = YOLOs()
-    resp = model(img)
+    resp = await model(img)
+
     # Ensure all numpy arrays in the response are converted to lists
     def serialize_response(response):
         if isinstance(response, np.ndarray):
@@ -28,8 +30,3 @@ async def objectDetectTool(img: Annotated[str, "local path of image"]) -> str:
     # Convert the response to a serializable format
     serialized_resp = serialize_response(resp)
     return serialized_resp
-
-
-
-
-

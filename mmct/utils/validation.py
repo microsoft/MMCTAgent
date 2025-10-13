@@ -1,7 +1,7 @@
 import re
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, validator, Field
-from ..exceptions import ValidationException
+from ..utils.error_handler import ValidationException
 
 
 class QueryRequest(BaseModel):

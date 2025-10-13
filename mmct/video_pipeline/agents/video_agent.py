@@ -12,7 +12,6 @@ from mmct.video_pipeline.prompts_and_description import (
 from autogen_agentchat.ui import Console
 from mmct.config.settings import MMCTConfig
 from mmct.providers.factory import provider_factory
-from mmct.utils.logging_config import LoggingConfig
 
 # Load environment variables
 load_dotenv(override=True)
@@ -92,18 +91,9 @@ class VideoAgent:
         self.cache = cache
         # Initialize configuration and logging
         self.config = MMCTConfig()
-        self._setup_logging()
 
         # Initialize LLM provider
         self.llm_provider = llm_provider or self._create_llm_provider()
-
-    def _setup_logging(self) -> None:
-        """Setup logging configuration."""
-        LoggingConfig.setup_logging(
-            level=self.config.logging.level,
-            log_file=self.config.logging.log_file if self.config.logging.enable_file_logging else None,
-            enable_json=self.config.logging.enable_json
-        )
 
     def _create_llm_provider(self) -> object:
         """Create LLM provider from configuration."""

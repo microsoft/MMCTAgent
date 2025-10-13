@@ -18,7 +18,7 @@ The tool can leverage:
 - query (string, required) → Natural language user question.
 - index_name (string, required) → Target video knowledge base index.
 - video_id (string, optional) → Specific video ID to constrain the search.
-- youtube_url (string, optional) → YouTube video source (if available).
+- url (string, optional) → video source (if available).
 - top_n (integer, default=1) → Number of most relevant answers to return.
 - use_computer_vision_tool (boolean, default=True) → Enable/disable frame-level visual analysis.
 - use_critic_agent (boolean, default=True) → Enable/disable critic agent for validation.
@@ -35,7 +35,7 @@ async def video_agent_tool(
     query: str,
     index_name: str,
     video_id: Optional[str] = None,
-    youtube_url: Optional[str] = None,
+    url: Optional[str] = None,
     top_n: int = 1,
     use_computer_vision_tool: bool = True,
     use_critic_agent: Optional[bool] = True,
@@ -46,7 +46,7 @@ async def video_agent_tool(
         query=query,
         index_name=index_name,
         video_id=video_id,
-        youtube_url=youtube_url,
+        url=url,
         top_n=top_n,
         use_computer_vision_tool=use_computer_vision_tool,
         use_critic_agent=use_critic_agent,

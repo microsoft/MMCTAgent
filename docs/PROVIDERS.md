@@ -44,13 +44,10 @@ providers:
 
 ```python
 from mmct.config.settings import MMCTConfig
-from mmct.client_manager import ClientManager
 
 config = MMCTConfig()
 config.llm.provider = "azure"
 config.llm.endpoint = "https://your-resource.openai.azure.com/"
-
-client_manager = ClientManager(config)
 ```
 
 ## Provider-Specific Configuration
@@ -335,15 +332,11 @@ analysis = await client_manager.analyze_image(image_data)
 
 ```python
 from mmct.config.settings import MMCTConfig
-from mmct.client_manager import ClientManager
 
 # Create custom configuration
 config = MMCTConfig()
 config.llm.provider = "openai"
 config.llm.api_key = "your-openai-key"
-
-# Initialize client manager with custom config
-client_manager = ClientManager(config)
 ```
 
 ## Extending and Customizing Providers

@@ -21,7 +21,7 @@ from .openai_providers import (
     OpenAIVisionProvider, 
     OpenAITranscriptionProvider
 )
-from ..exceptions import ConfigurationException
+from ..utils.error_handler import ConfigurationException
 from .custom_providers import (
     CustomSearchProvider
 )

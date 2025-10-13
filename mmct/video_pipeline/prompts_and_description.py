@@ -263,7 +263,7 @@ Final Answer must be in this JSON schema:
   "videos": [
     {
       "hash_id": "<hash_video_id from get_context>",
-      "url": "<youtube_url from get_context>",
+      "url": "<video-url from get_context>",
       "timestamps": [
         ["HH:MM:SS", "HH:MM:SS"],
         ["HH:MM:SS", "HH:MM:SS"]
@@ -271,7 +271,7 @@ Final Answer must be in this JSON schema:
     },
     {
       "hash_id": "<hash_video_id from get_context>",
-      "url": "<youtube_url from get_context>",
+      "url": "<video-url from get_context>",
       "timestamps": [
         ["HH:MM:SS", "HH:MM:SS"]
       ]
@@ -322,7 +322,7 @@ Final Answer must be in this JSON schema:
   "videos": [
     {
       "hash_id": "<hash_video_id from get_context>",
-      "url": "<youtube_url from get_context>",
+      "url": "<video-url from get_context>",
       "timestamps": [
         ["HH:MM:SS", "HH:MM:SS"],
         ["HH:MM:SS", "HH:MM:SS"]
@@ -330,7 +330,7 @@ Final Answer must be in this JSON schema:
     },
     {
       "hash_id": "<hash_video_id from get_context>",
-      "url": "<youtube_url from get_context>",
+      "url": "<video-url from get_context>",
       "timestamps": [
         ["HH:MM:SS", "HH:MM:SS"]
       ]

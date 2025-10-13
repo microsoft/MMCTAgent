@@ -1,7 +1,7 @@
 from loguru import logger
 from typing import Dict, Any
 from azure.identity import DefaultAzureCredential, AzureCliCredential
-from mmct.exceptions import ProviderException, ConfigurationException
+from mmct.utils.error_handler import ProviderException, ConfigurationException
 from mmct.providers.base import TranscriptionProvider
 from azure.cognitiveservices.speech import SpeechConfig
 

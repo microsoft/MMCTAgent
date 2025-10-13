@@ -222,8 +222,7 @@ class SemanticChunking:
         logger.info(f"Chapter Generation Completed! Successfully created {len(self.chapter_responses)} chapters in parallel.")
         
         
-    async def _ingest(self, video_blob_url, youtube_url=None):
-        url_info = f'BLOB={video_blob_url}\nYT_URL={youtube_url}'
+    async def _ingest(self, video_blob_url, url=None):
         doc_objects: List[AISearchDocument] = [] 
         current_time = datetime.now()
         logger.info(f"Creating documents from {len(self.chapter_responses)} chapters")
@@ -238,7 +237,7 @@ class SemanticChunking:
                 category=chapter_response.Category or "None",
                 sub_category=chapter_response.Sub_category or "None",
                 text_from_scene=chapter_response.Text_from_scene or "None",
-                youtube_url=youtube_url or "None",
+                youtube_url=url or "None",
                 time=current_time,
                 chapter_transcript=chapter_transcript,
                 subject=self.subject_data['subject'] or "None",
@@ -261,7 +260,7 @@ class SemanticChunking:
             
         await self.index_client.upload_documents(documents=[doc.model_dump() for doc in doc_objects])
         
-    async def run(self,video_blob_url, youtube_url=None):
+    async def run(self,video_blob_url, url=None):
         try:
             await self._create_search_index() # checking if index is available, if not then creating the same.
         except Exception as e:
@@ -272,7 +271,7 @@ class SemanticChunking:
             logger.info("Document already exists in the index.")
             return None, None, is_exist
         await self._create_chapters()
-        await self._ingest(video_blob_url=video_blob_url, youtube_url=youtube_url)
+        await self._ingest(video_blob_url=video_blob_url, url=url)
         await self.index_client.close()
         return self.chapter_responses, self.chapter_transcripts, is_exist
         

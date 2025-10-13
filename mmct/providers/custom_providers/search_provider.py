@@ -1,6 +1,6 @@
 from mmct.providers.base import SearchProvider
 from typing import Dict, Any, List
-from mmct.exceptions import ProviderException
+from mmct.utils.error_handler import ProviderException
 from mmct.utils.error_handler import handle_exceptions, convert_exceptions
 from loguru import logger
 from mmct.providers.custom_providers.graph_rag.document_graph_handler import DocumentGraph

@@ -24,7 +24,7 @@ Once ingested, the video data is stored in the specified search index, making it
 - index_name (string, required) → Target search index for ingestion.
 - language (enum, required) → Video language (from Languages enum).
 - transcription_service (string, optional) → Transcription service to use (e.g., Whisper, Azure Speech).
-- youtube_url (string, optional) → Source YouTube URL (if available).
+- url (string, optional) → Source URL (if available).
 - transcript_path (string, optional) → Path to an existing transcript file (if bypassing auto-transcription).
 - use_computer_vision_tool (boolean, optional, default=False) → Enable frame-level vision analysis (object detection, scene recognition).
 - disable_console_log (boolean, optional, default=False) → Suppress console logging.
@@ -42,7 +42,7 @@ async def video_ingestion_tool(
     index_name: str,
     language: Languages,
     transcription_service: Optional[str] = None,
-    youtube_url: Optional[str] = None,
+    url: Optional[str] = None,
     transcript_path: Optional[str] = None,
     use_computer_vision_tool: Optional[bool] = False,
     disable_console_log: Annotated[bool, "boolean flag to disable console logs"] = False,
@@ -67,7 +67,7 @@ async def video_ingestion_tool(
             index_name=index_name,
             language=language,
             transcription_service=transcription_service,
-            youtube_url=youtube_url,
+            url=url,
             transcript_path=transcript_path,
             use_computer_vision_tool=use_computer_vision_tool,
             disable_console_log=disable_console_log,

@@ -18,8 +18,7 @@ from mmct.image_pipeline.prompts import (
 )
 from mmct.providers.factory import provider_factory
 from mmct.config.settings import MMCTConfig
-from mmct.exceptions import ProviderException, ConfigurationException
-from mmct.utils.logging_config import LoggingConfig
+from mmct.utils.error_handler import ProviderException, ConfigurationException
 from mmct.utils.error_handler import handle_exceptions
 from mmct.image_pipeline.prompts import IMAGE_AGENT_SYSTEM_PROMPT, ImageAgentResponse
 from loguru import logger
@@ -108,13 +107,6 @@ class ImageAgent:
         try:
             # Initialize configuration
             self.config = MMCTConfig()
-            
-            # Setup logging
-            LoggingConfig.setup_logging(
-                level=self.config.logging.level,
-                log_file=self.config.logging.log_file if self.config.logging.enable_file_logging else None,
-                enable_json=self.config.logging.enable_json
-            )
             
             # Initialize logger for this instance
             self.logger = logger

@@ -6,7 +6,6 @@ from dotenv import load_dotenv
 from typing import Optional
 
 # Suppress autogen internal logging
-from mmct.custom_logger import logger as _
 logging.getLogger("autogen").setLevel(logging.WARNING)
 logging.getLogger("autogen_agentchat").setLevel(logging.WARNING)
 

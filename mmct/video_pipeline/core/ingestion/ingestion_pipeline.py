@@ -52,7 +52,7 @@ from mmct.video_pipeline.core.ingestion.video_compression.video_compression impo
 from mmct.blob_store_manager import BlobStorageManager
 from mmct.video_pipeline.utils.helper import get_media_folder
 from dotenv import load_dotenv, find_dotenv
-from mmct.custom_logger import log_manager
+from mmct.utils.logging_config import log_manager
 from dataclasses import dataclass
 
 # Load environment variables
@@ -121,7 +121,7 @@ class IngestionPipeline:
             Required only when transcript_path is not provided. Defaults to None.
         transcription_service (str, optional): Transcription service to use ("azure-stt" or "whisper"). Defaults to "azure-stt".
             Only used when transcript_path is not provided.
-        youtube_url (str, optional): Optional YouTube URL associated with the video.
+        url (str, optional): Optional URL associated with the video for video metadata.
         transcript_path (str, optional): Path to an existing transcript file (.srt format).
             When provided, transcription is skipped and language parameter is not required.
         disable_console_log (bool):
@@ -142,7 +142,7 @@ class IngestionPipeline:
     >>>         index_name="<ai-search-index-name>",
     >>>         language=Languages.TELUGU_INDIA,
     >>>         transcription_service=TranscriptionServices.AZURE_STT",
-    >>>         youtube_url=None
+    >>>         url=None
     >>>     )
     >>>     await ingestion()
     >>>
@@ -156,7 +156,7 @@ class IngestionPipeline:
         index_name: str,
         language: Optional[Languages] = None,
         transcription_service: Optional[str] = None,
-        youtube_url: Optional[str] = None,
+        url: Optional[str] = None,
         transcript_path: Optional[str] = None,
         disable_console_log: Annotated[
             bool, "boolean flag to disable console logs"
@@ -187,7 +187,7 @@ class IngestionPipeline:
         self.transcript_path = transcript_path
         _, self.video_extension = os.path.splitext(self.video_path)
         self.transcription_service = transcription_service
-        self.youtube_url = youtube_url
+        self.url = url
         self.index_name = index_name
         self.language = language
         self.frame_stacking_grid_size = frame_stacking_grid_size
@@ -572,7 +572,7 @@ class IngestionPipeline:
 
             # Run semantic chunking and chapter generation
             context = await self._semantic_chunking_chapter_generation(
-                context, context.video_url, self.youtube_url
+                context, context.video_url, self.url
             )
     
             if not context.is_already_ingested:
@@ -767,7 +767,7 @@ class IngestionPipeline:
             )
             raise
 
-    async def _semantic_chunking_chapter_generation(self, context: ProcessingContext, video_url: str, youtube_url: Optional[str] = None) -> ProcessingContext:
+    async def _semantic_chunking_chapter_generation(self, context: ProcessingContext, video_url: str, url: Optional[str] = None) -> ProcessingContext:
         """
         This method initializes the semantic chunker and runs chapter generation - functional version.
         """
@@ -791,7 +791,7 @@ class IngestionPipeline:
             
             context.chapter_responses, context.chapter_transcripts, context.is_already_ingested = (
                 await semantic_chunker.run(
-                    video_blob_url=video_url, youtube_url=youtube_url
+                    video_blob_url=video_url, url=url
                 )
             )
             
@@ -996,7 +996,7 @@ class IngestionPipeline:
 
                 # Run semantic chunking and chapter generation
                 context = await self._semantic_chunking_chapter_generation(
-                    context, context.video_url, self.youtube_url
+                    context, context.video_url, self.url
                 )
 
                 if not context.is_already_ingested:
@@ -1061,7 +1061,7 @@ class IngestionPipeline:
         index_name: str,
         language: Optional[Languages] = None,
         transcription_service: Optional[str] = TranscriptionServices.AZURE_STT.value,
-        youtube_urls: Optional[List[str]] = None,
+        urls: Optional[List[str]] = None,
         transcript_paths: Optional[List[str]] = None,
         disable_console_log: bool = False,
         frame_stacking_grid_size: int = 4,
@@ -1075,7 +1075,7 @@ class IngestionPipeline:
             index_name: Azure AI Search index name
             language: Language for transcription (optional if transcript_paths is provided)
             transcription_service: Transcription service to use (only used if transcript_paths not provided)
-            youtube_urls: Optional list of YouTube URLs (must match video_paths length)
+            urls: Optional list of URLs (must match video_paths length)
             transcript_paths: Optional list of transcript file paths (must match video_paths length)
             disable_console_log: Whether to disable console logging
             frame_stacking_grid_size: Grid size for frame stacking
@@ -1084,8 +1084,8 @@ class IngestionPipeline:
         Returns:
             List of hash IDs for successfully processed videos
         """
-        if youtube_urls and len(youtube_urls) != len(video_paths):
-            raise ValueError("youtube_urls length must match video_paths length")
+        if urls and len(urls) != len(video_paths):
+            raise ValueError("urls length must match video_paths length")
 
         if transcript_paths and len(transcript_paths) != len(video_paths):
             raise ValueError("transcript_paths length must match video_paths length")
@@ -1093,7 +1093,7 @@ class IngestionPipeline:
         # Create semaphore to limit concurrent processing
         semaphore = asyncio.Semaphore(max_concurrent)
 
-        async def process_single_video(video_path: str, youtube_url: Optional[str] = None, transcript_path: Optional[str] = None) -> Optional[str]:
+        async def process_single_video(video_path: str, url: Optional[str] = None, transcript_path: Optional[str] = None) -> Optional[str]:
             """Process a single video with semaphore control."""
             async with semaphore:
                 try:
@@ -1103,7 +1103,7 @@ class IngestionPipeline:
                         index_name=index_name,
                         language=language,
                         transcription_service=transcription_service,
-                        youtube_url=youtube_url,
+                        url=url,
                         transcript_path=transcript_path,
                         disable_console_log=disable_console_log,
                         frame_stacking_grid_size=frame_stacking_grid_size
@@ -1123,9 +1123,9 @@ class IngestionPipeline:
         # Create tasks for all videos
         tasks = []
         for i, video_path in enumerate(video_paths):
-            youtube_url = youtube_urls[i] if youtube_urls else None
+            url = urls[i] if urls else None
             transcript_path = transcript_paths[i] if transcript_paths else None
-            task = process_single_video(video_path, youtube_url, transcript_path)
+            task = process_single_video(video_path, url, transcript_path)
             tasks.append(task)
 
         # Execute all tasks in parallel (with semaphore limiting concurrency)
@@ -1174,7 +1174,7 @@ class IngestionPipeline:
 
             # Run semantic chunking and chapter generation
             context = await self._semantic_chunking_chapter_generation(
-                context, context.video_url, self.youtube_url
+                context, context.video_url, self.url
             )
     
             if not context.is_already_ingested:
@@ -1213,15 +1213,15 @@ class IngestionPipeline:
 
 if __name__ == "__main__":
     # Example usage - replace with your actual values
-    video_path = "/home/v-amanpatkar/work/demo/Andrej Karpathy Software Is Changing (Again).mp4"
-    index = "nptel_test"
-    youtube_url = "https://www.youtube.com/watch?v=LCEmiRjPEtQ"
+    video_path = "video-path"
+    index = "index-name"
+    url = "video-url"
     source_language = Languages.ENGLISH_UNITED_STATES
-   # transcript_path = "/home/v-amanpatkar/work/demo/transcript/Vector Spaces Introduction.srt"
+    transcript_path = "transcript-path.srt"
     ingestion = IngestionPipeline(
         video_path=video_path,
         index_name=index,
-        youtube_url=youtube_url,
+        url=url,
         transcription_service=TranscriptionServices.AZURE_STT,
         language=source_language,
         #transcript_path=transcript_path

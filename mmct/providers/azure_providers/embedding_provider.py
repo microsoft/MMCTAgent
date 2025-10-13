@@ -3,7 +3,7 @@ from mmct.providers.base import EmbeddingProvider
 from typing import Dict, Any, List
 from azure.identity import DefaultAzureCredential, AzureCliCredential, get_bearer_token_provider
 from loguru import logger
-from mmct.exceptions import ProviderException, ConfigurationException
+from mmct.utils.error_handler import ProviderException, ConfigurationException
 from openai import AsyncAzureOpenAI, AzureOpenAI
 from mmct.utils.error_handler import handle_exceptions, convert_exceptions
 

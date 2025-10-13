@@ -1,5 +1,5 @@
 from mmct.utils.error_handler import handle_exceptions, convert_exceptions
-from mmct.exceptions import ProviderException
+from mmct.utils.error_handler import ProviderException
 from mmct.providers.base import VisionProvider
 from mmct.providers.azure_providers.llm_provider import AzureLLMProvider
 from loguru import logger
