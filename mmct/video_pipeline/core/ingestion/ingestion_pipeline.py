@@ -332,9 +332,9 @@ class IngestionPipeline:
             self.logger.info(f"Storing {len(context.frame_embeddings)} frame embeddings to search index...")
 
             # Get Azure Search endpoint
-            search_endpoint = os.getenv("SEARCH_SERVICE_ENDPOINT")
+            search_endpoint = os.getenv("SEARCH_ENDPOINT")
             if not search_endpoint:
-                self.logger.error("SEARCH_SERVICE_ENDPOINT environment variable not set")
+                self.logger.error("SEARCH_ENDPOINT environment variable not set")
                 return context
 
             # Create keyframe search index
@@ -357,8 +357,8 @@ class IngestionPipeline:
 
                 if success:
                     self.logger.info("Successfully stored frame embeddings to search index")
-                else:
-                    self.logger.error("Failed to store frame embeddings to search index")
+                # else:
+                    # self.logger.error("Failed to store frame embeddings to search index")
 
             finally:
                 await keyframe_search_index.close()

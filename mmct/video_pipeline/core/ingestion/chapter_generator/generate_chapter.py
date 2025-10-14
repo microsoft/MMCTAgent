@@ -27,7 +27,7 @@ class ChapterGeneration:
         ).get_client()
         self.frame_stacking_grid_size = frame_stacking_grid_size
         self.index_client = SearchClient(
-            endpoint=os.getenv("SEARCH_SERVICE_ENDPOINT"),
+            endpoint=os.getenv("SEARCH_ENDPOINT"),
             index_name=keyframe_index,
             credential=self._get_credential()
         )

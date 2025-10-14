@@ -737,7 +737,7 @@ async def check_video_already_ingested(hash_id: str, index_name: str) -> bool:
         
         # Create AI Search client
         index_client = AISearchClient(
-            endpoint=os.getenv("SEARCH_SERVICE_ENDPOINT"),
+            endpoint=os.getenv("SEARCH_ENDPOINT"),
             index_name=index_name,
             credential=credential
         )

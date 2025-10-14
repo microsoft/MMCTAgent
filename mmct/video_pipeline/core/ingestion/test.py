@@ -18,7 +18,7 @@ async def main():
     token_provider = _get_credential()
 
     index_client = SearchClient(
-        endpoint=os.getenv("SEARCH_SERVICE_ENDPOINT"),
+        endpoint=os.getenv("SEARCH_ENDPOINT"),
         index_name="keyframes-nptel",
         credential=token_provider
     )
