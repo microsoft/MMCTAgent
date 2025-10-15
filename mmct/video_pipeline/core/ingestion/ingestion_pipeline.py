@@ -582,6 +582,10 @@ class IngestionPipeline:
                 # Store embeddings to AI Search index
                 context = await self._store_frame_embeddings_to_search_index(context)
                 self.logger.info(f"Stored frame embeddings to AI Search for part {part_hash_id}")
+
+                # Upload keyframes to blob storage
+                await self._add_keyframes_to_upload_tasks(context, blob_manager)
+                self.logger.info(f"Added keyframes to upload tasks for part {part_hash_id}")
             else:
                 self.logger.warning(f"No keyframe metadata provided for part {part_hash_id}")
 
@@ -1008,6 +1012,10 @@ class IngestionPipeline:
                 # Get blob manager
                 blob_manager = await self._get_blob_manager()
 
+                # Upload keyframes to blob storage
+                await self._add_keyframes_to_upload_tasks(context, blob_manager)
+                self.logger.info("Added keyframes to upload tasks!")
+
                 # Set keyframes blob URL
                 context.blob_urls["keyframes_blob_folder_url"] = blob_manager.get_blob_url(
                     container=self.keyframe_container, blob_name=f"keyframes/{context.hash_id}"
@@ -1245,18 +1253,18 @@ class IngestionPipeline:
 
 if __name__ == "__main__":
     # Example usage - replace with your actual values
-    video_path = "/home/v-amanpatkar/work/demo/Andrej Karpathy Software Is Changing (Again).mp4" #"video-path"
-    index = "nptel_test" #"index-name"
-    url = "https://www.youtube.com/watch?v=LCEmiRjPEtQ" #"video-url"
+    video_path = "video-path"
+    index = "index-name"
+    url = "video-url"
     source_language = Languages.ENGLISH_UNITED_STATES
-    transcript_path = "transcript-path.srt"
+    transcript_path = "transcript.srt"  # Optional: path to existing transcript file
     ingestion = IngestionPipeline(
         video_path=video_path,
         index_name=index,
         url=url,
-        transcription_service=TranscriptionServices.AZURE_STT,
-        language=source_language,
-        #transcript_path=transcript_path
+        #transcription_service=TranscriptionServices.AZURE_STT,
+        #language=source_language,
+        transcript_path=transcript_path
 
     )
     asyncio.run(ingestion())
