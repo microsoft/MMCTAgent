@@ -196,7 +196,7 @@ from mmct.video_pipeline import IngestionPipeline, Languages, TranscriptionServi
 ingestion = IngestionPipeline(
     video_path="path-of-your-video",
     index_name="index-name",
-    transcription_service=TranscriptionServices.WHISPER,
+    transcription_service=TranscriptionServices.WHISPER, #TranscriptionServices.AZURE_STT
     language=Languages.ENGLISH_INDIA,
 )
 
