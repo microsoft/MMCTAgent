@@ -1262,8 +1262,8 @@ if __name__ == "__main__":
         video_path=video_path,
         index_name=index,
         url=url,
-        #transcription_service=TranscriptionServices.AZURE_STT,
-        #language=source_language,
+        transcription_service=TranscriptionServices.AZURE_STT,
+        language=source_language,
         transcript_path=transcript_path
 
     )
