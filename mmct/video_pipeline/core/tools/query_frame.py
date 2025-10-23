@@ -16,7 +16,7 @@ from mmct.config.settings import MMCTConfig
 from mmct.video_pipeline.core.tools.utils.search_keyframes import KeyframeSearcher
 
 # Initialize configuration and providers
-config = MMCTConfig(model_name=os.getenv("LLM_VISION_DEPLOYMENT_NAME", "gpt-4o"))
+config = MMCTConfig(model_name=os.getenv("LLM_VISION_DEPLOYMENT_NAME", "gpt-5-chat"))
 llm_provider = provider_factory.create_llm_provider(
     config.llm.provider,
     config.llm.model_dump()
@@ -33,7 +33,7 @@ def _get_credential():
     except Exception:
         return DefaultAzureCredential()
 
-async def download_and_encode_blob(blob_name: str, container_name: str) -> Optional[str]:
+async def download_and_encode_blob(blob_name: str, container_name: str, save_locally: bool = False, local_dir: str = "./debug_frames") -> Optional[str]:
     """Download JPG blob directly to memory and encode to base64."""
     try:
         credential = _get_credential()
@@ -47,6 +47,16 @@ async def download_and_encode_blob(blob_name: str, container_name: str) -> Optio
             stream = await blob_client.download_blob()
             image_data = await stream.readall()
 
+            # Optionally save to local disk for debugging
+            if save_locally:
+                os.makedirs(local_dir, exist_ok=True)
+                # Create safe filename from blob_name
+                safe_filename = blob_name.replace('/', '_')
+                local_path = os.path.join(local_dir, safe_filename)
+                with open(local_path, 'wb') as f:
+                    f.write(image_data)
+                print(f"Saved frame to: {local_path}")
+
             # Direct base64 encoding (no processing needed for JPG)
             return base64.b64encode(image_data).decode('utf-8')
 
@@ -55,10 +65,10 @@ async def download_and_encode_blob(blob_name: str, container_name: str) -> Optio
         return None
 
 async def query_frame(
-    query: Annotated[str, "user query according to which video content has to be analyzeds. e.g. 'What materials are required to prepare the chilly nursery bed, and what are their uses?'"],
+    query: Annotated[str, "user query according to which video content has to be analyzeds. e.g. 'What materials are required to prepare the chilly nursery bed, and what are their uses?','count the person doing exercise in the video?'"],
     frame_ids: Annotated[Optional[list], "List of specific frame filenames to analyze (e.g., ['video_123.jpg', 'video_456.jpg'])"] = None,
     video_id: Annotated[Optional[str], "Unique video identifier hash for frame retrieval"] = None,
-    timestamps: Annotated[Optional[list], "List of time range pairs in HH:MM:SS format, e.g., [['00:07:45', '00:09:44'], ['00:21:22', '00:23:17']]"] = None
+    timestamps: Annotated[Optional[list], "List of time range pairs in HH:MM:SS format like [start_time, end_time], e.g., [['00:07:45', '00:09:44']]. Only 1 start_time, end)time pair"] = None
 ) -> str:
     """
     This is query_frame tool which takes a user query and either specific frame IDs or
@@ -68,7 +78,7 @@ async def query_frame(
     # Handle video_id validation and truncation for compatibility
     # if video_id and len(video_id) > 64:
     #     video_id = video_id[:64]
-
+    save_frames_locally  = True
     # Get search endpoint from environment
     search_endpoint = os.getenv('SEARCH_ENDPOINT')
 
@@ -100,12 +110,15 @@ async def query_frame(
             combined_filter = f"{time_filter} and {video_filter}"
             print(combined_filter)
 
-            # Search for relevant frames
+            # Search for relevant frames with similarity filtering
             results = await searcher.search_keyframes(
                 query=query,
-                top_k=50,
-                video_filter=combined_filter
+                top_k=5,
+                video_filter=combined_filter,
+                min_similarity_score=0.001  # Filter out noisy/irrelevant frames
             )
+
+            # check for query matching and check fetched frames
 
             for result in results:
                 keyframe_filename = result.get('keyframe_filename', '')
@@ -116,7 +129,10 @@ async def query_frame(
         frame_filenames = [f"{video_id}_{frame_id}" for frame_id in frame_ids if frame_id is not None]
 
     # Make frame_filenames unique
-    frame_filenames = list(dict.fromkeys(frame_filenames))
+    frame_filenames = sorted(
+        list(dict.fromkeys(frame_filenames)),
+        key=lambda x: int(''.join(filter(str.isdigit, os.path.basename(x).split('_')[-1].split('.')[0])) or 0)
+    )
     print(f"Processing {len(frame_filenames)} frames directly from blob storage")
 
     # Prepare blob paths
@@ -127,7 +143,7 @@ async def query_frame(
     print(f"Downloading and encoding {len(blob_paths)} images from blob storage...")
 
     # Process blobs concurrently - direct blob to base64
-    tasks = [download_and_encode_blob(blob_path, container_name) for blob_path in blob_paths]
+    tasks = [download_and_encode_blob(blob_path, container_name, save_locally=save_frames_locally) for blob_path in blob_paths]
     encoded_results = await asyncio.gather(*tasks, return_exceptions=True)
 
     # Filter successful results
@@ -150,30 +166,42 @@ async def query_frame(
             }
         })
 
-
     content.append({
-        "type": "text",
-        "text": f"Query: {query}"
+    "type": "text",
+    "text": f"Query: {query}"
     })
 
     payload = {
-        "messages": [
-            {
-                "role": "system",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": """You are an expert visual analysis assistant specialized in extracting detailed information from video frames. Your task is to analyze the provided frames of a video and answer queries based solely on the visual content observed.
+    "messages": [
+        {
+            "role": "system",
+            "content": [
+                {
+                    "type": "text",
+                    "text": """You are an expert visual analysis assistant trained to extract detailed, visually grounded information from a set of video frames.
 
-                    Instructions:
-                    - Analyze all visual elements present in the images thoroughly.
-                    - The images are ordered sequentially — consider the visual continuity between nearby frames to build a more complete understanding of the scene.
-                    - Use adjacent frames to fill in context or confirm uncertain visual details when possible.
-                    - Provide comprehensive and accurate descriptions based only on what you can see.
-                    - Extract relevant details that would be useful for downstream processing.
-                    - Do not include any information from your training knowledge that is not visible in the images.
-                    - Be specific and detailed in your observations.
-                    - Treat each image as part of a visual sequence rather than isolated frames.""",
+            Your task is to analyze the provided frames — each representing a distinct moment — and answer the **user’s query** based only on what is visible in these frames.
+
+            ### Core Objectives
+            1. Accurately **answer the provided query** using only visible evidence from the frames.
+            2. Identify **key visual elements or events** (e.g., objects, people, actions, materials, or text).
+            3. Focus strictly on **what is visible** — not on assumptions or external knowledge.
+            4. **Ignore irrelevant frames** (blurry, duplicated, or contextually unrelated) and base conclusions only on meaningful visuals.
+            5. If there are conflicting visuals, **weigh clarity and relevance** to the query in your analysis.
+
+            ### Guidelines
+            - Examine **each frame independently**
+            - Highlight **objects, people, actions, or materials** relevant to the query.
+            - When some frames are unclear, **prioritize clarity and relevance** — focus on those that help answer the question.
+            - Ensure your final answer is **fully grounded in visible evidence**.
+            - Do **not** speculate or use any information not directly seen in the frames.
+
+            ### Output Format
+            Provide:
+            1. A short **summary of relevant frames**.
+            2. A **description of key visual observations** from those frames.
+            3. A **final answer to the user’s query**, based solely on what is visually evident.
+            """
                     }
                 ]
             },
@@ -185,6 +213,7 @@ async def query_frame(
         "temperature": 0,
         "top_p": 0.1,
     }
+
 
     response = await llm_provider.chat_completion(
         messages=payload['messages'],

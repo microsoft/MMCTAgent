@@ -54,7 +54,8 @@ class KeyframeSearcher:
                         query: str,
                         top_k: int = 5,
                         video_filter: Optional[str] = None,
-                        min_motion_score: Optional[float] = None) -> List[Dict[str, Any]]:
+                        min_motion_score: Optional[float] = None,
+                        min_similarity_score: Optional[float] = 0.7) -> List[Dict[str, Any]]:
         """
         Search for keyframes using text query.
 
@@ -63,9 +64,10 @@ class KeyframeSearcher:
             top_k: Number of results to return
             video_filter: Optional filter for specific video name/path
             min_motion_score: Optional minimum motion score filter
+            min_similarity_score: Minimum similarity score threshold (0.0-1.0). Default 0.7
 
         Returns:
-            List of search results
+            List of search results filtered by similarity score
         """
         try:
 
@@ -82,6 +84,15 @@ class KeyframeSearcher:
                 top_k=top_k,
                 filters=filters
             )
+
+            # Filter by similarity score to remove noisy/irrelevant frames
+            if min_similarity_score is not None and results:
+                print(results)
+                filtered_results = [
+                    r for r in results
+                    if r.get('@search.score', 0) >= min_similarity_score
+                ]
+                return filtered_results
 
             return results
 
