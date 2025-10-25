@@ -749,7 +749,7 @@ async def check_video_already_ingested(hash_id: str, index_name: str) -> bool:
         return exists
         
     except Exception as e:
-        logger.error(f"Error checking if video already ingested: {e}")
+        logger.warning(f"{e}")
         # In case of error, return False to proceed with ingestion
         return False
 

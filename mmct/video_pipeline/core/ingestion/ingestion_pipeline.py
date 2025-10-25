@@ -208,6 +208,7 @@ class IngestionPipeline:
             self.blob_manager = await BlobStorageManager.create()
         return self.blob_manager
 
+    
     async def _check_and_compress_video(self):
         """
         Check if video file size exceeds 500 MB and compress if needed.
@@ -243,15 +244,16 @@ class IngestionPipeline:
                     compressed_size_mb = os.path.getsize(compressed_path) / (1024 * 1024)
                     self.logger.info(f"Video compressed successfully. New size: {compressed_size_mb:.2f} MB")
                     self.logger.info(f"Using compressed video: {compressed_path}")
+                    return True
                 else:
-                    self.logger.error("Compression failed, compressed file not found")
-                    raise RuntimeError("Video compression failed")
+                    self.logger.warning("Compression failed, compressed file not found")
+                    return False
             else:
                 self.logger.info("Video file size is within acceptable limits, no compression needed")
-
+                return True
         except Exception as e:
-            self.logger.exception(f"Exception occurred during video compression check: {e}")
-            raise
+            self.logger.warning(f"Exception occurred during video compression check: {e}")
+            return False
 
     async def _extract_keyframes(self):
         """
@@ -887,8 +889,11 @@ class IngestionPipeline:
                     raise ValueError(error_msg)
                 self.logger.info("Video has audio stream - proceeding with transcription")
 
-            await self._check_and_compress_video()  # Check file size and compress if needed
-            self.logger.info("Video compression check completed!")
+            compression_flag = await self._check_and_compress_video()  # Check file size and compress if needed
+            if not compression_flag:
+                self.logger.warning("Video Compression could not be performed. Proceeding with further steps.")
+            else:
+                self.logger.info("Video compression check completed!")
 
             # Calculate parent video metadata (original video before any splitting)
             parent_video_id = await get_file_hash(file_path=self.original_video_path)
