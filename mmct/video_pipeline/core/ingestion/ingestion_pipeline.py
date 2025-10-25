@@ -678,7 +678,12 @@ class IngestionPipeline:
                 target_transcript_path = os.path.join(
                     await get_media_folder(), f"transcript_{context.hash_id}.srt"
                 )
-                shutil.copy2(transcript_path_to_use, target_transcript_path)
+
+                # Only copy if source and target are different files
+                if os.path.abspath(transcript_path_to_use) != os.path.abspath(target_transcript_path):
+                    shutil.copy2(transcript_path_to_use, target_transcript_path)
+                else:
+                    self.logger.info(f"Transcript already at target location: {target_transcript_path}")
 
                 # Load transcript content
                 context.transcript = await load_srt(target_transcript_path)
@@ -1005,9 +1010,9 @@ class IngestionPipeline:
                     video_duration=parent_video_duration  # Same as parent for non-split videos
                 )
 
-                # Extract keyframes and generate embeddings early in pipeline
-                context.keyframe_metadata = await self._extract_keyframes()
-                self.logger.info("Keyframes extracted!")
+                # Use keyframes extracted earlier
+                context.keyframe_metadata = keyframe_metadata_result
+                self.logger.info("Keyframes assigned to context!")
 
                 context = await self._generate_embeddings_for_keyframes(context)
                 self.logger.info("Embeddings generated for keyframes!")
