@@ -5,6 +5,7 @@ import aiofiles
 import json
 from typing import List, Optional, Dict, Any
 from loguru import logger
+from MMCTAgent.mmct.custom_token_credential import CustomTokenCredential
 from mmct.video_pipeline.core.ingestion.models import TranslationResponse
 import azure.cognitiveservices.speech as speechsdk
 from azure.identity import DefaultAzureCredential, AzureCliCredential
@@ -93,14 +94,15 @@ class CloudTranscription(Transcription):
 
     async def _get_credential(self):
         """Get Azure credential, trying CLI first, then DefaultAzureCredential."""
-        try:
-            # Try Azure CLI credential first
-            cli_credential = AzureCliCredential()
-            # Test if CLI credential works by getting a token
-            cli_credential.get_token("https://cognitiveservices.azure.com/.default")
-            return cli_credential
-        except Exception:
-            return DefaultAzureCredential()
+        return CustomTokenCredential()
+        # try:
+        #     # Try Azure CLI credential first
+        #     cli_credential = AzureCliCredential()
+        #     # Test if CLI credential works by getting a token
+        #     cli_credential.get_token("https://cognitiveservices.azure.com/.default")
+        #     return cli_credential
+        # except Exception:
+        #     return DefaultAzureCredential()
 
     async def get_transcript(self):
         try:

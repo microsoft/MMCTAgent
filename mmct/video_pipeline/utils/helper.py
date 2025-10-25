@@ -15,6 +15,7 @@ from typing import Dict
 from azure.storage.blob import BlobServiceClient
 from azure.storage.blob.aio import BlobServiceClient as AsyncBlobServiceClient
 from azure.identity import get_bearer_token_provider, DefaultAzureCredential
+from MMCTAgent.mmct.custom_token_credential import CustomTokenCredential
 from mmct.video_pipeline.utils.ai_search_client import AISearchClient
 from dotenv import load_dotenv, find_dotenv
 
@@ -24,15 +25,16 @@ load_dotenv(find_dotenv(), override=True)
 
 def _get_credential():
     """Get Azure credential, trying CLI first, then DefaultAzureCredential."""
-    try:
-        from azure.identity import AzureCliCredential
-        # Try Azure CLI credential first
-        cli_credential = AzureCliCredential()
-        # Test if CLI credential works by getting a token
-        cli_credential.get_token("https://storage.azure.com/.default")
-        return cli_credential
-    except Exception:
-        return DefaultAzureCredential()
+    return CustomTokenCredential()
+    # try:
+    #     from azure.identity import AzureCliCredential
+    #     # Try Azure CLI credential first
+    #     cli_credential = AzureCliCredential()
+    #     # Test if CLI credential works by getting a token
+    #     cli_credential.get_token("https://storage.azure.com/.default")
+    #     return cli_credential
+    # except Exception:
+    #     return DefaultAzureCredential()
 
 
 async def load_images(
@@ -721,13 +723,14 @@ async def check_video_already_ingested(hash_id: str, index_name: str) -> bool:
     try:
         # Get credentials based on environment configuration
         if os.environ.get("MANAGED_IDENTITY", "FALSE").upper() == "TRUE":
-            from azure.identity import AzureCliCredential, DefaultAzureCredential
-            try:
-                cli_credential = AzureCliCredential()
-                cli_credential.get_token("https://search.azure.com/.default")
-                credential = cli_credential
-            except Exception:
-                credential = DefaultAzureCredential()
+            credential = CustomTokenCredential()
+            # from azure.identity import AzureCliCredential, DefaultAzureCredential
+            # try:
+            #     cli_credential = AzureCliCredential()
+            #     cli_credential.get_token("https://search.azure.com/.default")
+            #     credential = cli_credential
+            # except Exception:
+            #     credential = DefaultAzureCredential()
         else:
             from azure.core.credentials import AzureKeyCredential
             key = os.getenv("SEARCH_SERVICE_KEY")

@@ -21,6 +21,8 @@ from urllib.parse import urlparse, unquote
 from azure.storage.blob.aio import BlobServiceClient
 from azure.identity.aio import DefaultAzureCredential, AzureCliCredential
 from loguru import logger
+
+from MMCTAgent.mmct.custom_token_credential import CustomTokenCredential
  
 class BlobStorageManager:
     def __init__(self):
@@ -50,19 +52,20 @@ class BlobStorageManager:
     
     async def _get_credential(self):
         """Get Azure credential, trying CLI first, then DefaultAzureCredential."""
-        try:
-            # Try Azure CLI credential first
-            credential = AzureCliCredential()
-            await credential.get_token("https://storage.azure.com/.default")
+        return CustomTokenCredential()
+        # try:
+        #     # Try Azure CLI credential first
+        #     credential = AzureCliCredential()
+        #     await credential.get_token("https://storage.azure.com/.default")
             
-            logger.info("Using Azure CLI credential for Blob Storage")
-            return credential
-        except Exception as e:
-            logger.warning(f"Azure CLI credential failed: {e}")
-            # Fall back to DefaultAzureCredential
-            credential = DefaultAzureCredential()
-            logger.info("Using DefaultAzureCredential for Blob Storage")
-            return credential
+        #     logger.info("Using Azure CLI credential for Blob Storage")
+        #     return credential
+        # except Exception as e:
+        #     logger.warning(f"Azure CLI credential failed: {e}")
+        #     # Fall back to DefaultAzureCredential
+        #     credential = DefaultAzureCredential()
+        #     logger.info("Using DefaultAzureCredential for Blob Storage")
+        #     return credential
         
     def get_blob_url(self, container: str, blob_name: str) -> str:
         """

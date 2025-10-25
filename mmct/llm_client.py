@@ -4,11 +4,13 @@ from autogen_ext.models.openai import (
     AzureOpenAIChatCompletionClient,
     OpenAIChatCompletionClient,
 )
-from azure.identity import DefaultAzureCredential
+from azure.identity import DefaultAzureCredential, ChainedTokenCredential, ManagedIdentityCredential, AzureCliCredential
 from openai import OpenAI, AzureOpenAI, AsyncAzureOpenAI, AsyncOpenAI
 from azure.identity import get_bearer_token_provider
 
 from dotenv import load_dotenv, find_dotenv
+
+from MMCTAgent.mmct.custom_token_credential import CustomTokenCredential
 load_dotenv(find_dotenv(),override=True)
 
 
@@ -25,7 +27,12 @@ class LLMClient:
         )
         
         # Use Azure CLI credential if available, fallback to DefaultAzureCredential
-        self.credential = self._get_credential()
+        # self.credential = self._get_credential()
+        # self.credential = ChainedTokenCredential(
+        #     AzureCliCredential(),
+        #     ManagedIdentityCredential(),
+        # )
+        self.credential = CustomTokenCredential()
         self.service_provider = service_provider
         self.isAsync = isAsync
         if autogen:
@@ -132,6 +139,7 @@ class LLMClient:
                 raise Exception("Required Azure OpenAI credentials are missing for embedding client!")
             self.azure_managed_identity = managed_identity_setting.upper()
             if self.azure_managed_identity == "TRUE":
+                # azure_ad_token_provider=get_bearer_token_provider(self.credential, "api://trapi/.default")
                 azure_ad_token_provider=get_bearer_token_provider(self.credential, "https://cognitiveservices.azure.com/.default")
                 if self.isAsync:
                     return AsyncAzureOpenAI(
@@ -208,9 +216,10 @@ class LLMClient:
         managed_identity_setting = os.environ.get("LLM_USE_MANAGED_IDENTITY", os.environ.get("MANAGED_IDENTITY", ""))
         self.azure_managed_identity = managed_identity_setting.upper()
         if self.azure_managed_identity == "TRUE":
-            token_provider = get_bearer_token_provider(
-                self.credential, "https://cognitiveservices.azure.com/.default"
-            )
+            # token_provider = get_bearer_token_provider(
+            #     self.credential, "api://trapi/.default"
+            # )
+            token_provider=get_bearer_token_provider(self.credential, "https://cognitiveservices.azure.com/.default")
             if self.isAsync:
                 return AsyncAzureOpenAI(
                     api_version=api_version,
@@ -279,10 +288,11 @@ class LLMClient:
             self.azure_managed_identity = managed_identity_setting.upper()
             if self.azure_managed_identity == "TRUE":
 
-                token_provider = get_bearer_token_provider(
-                    self.credential,
-                    "https://cognitiveservices.azure.com/.default",
-                )
+                # token_provider = get_bearer_token_provider(
+                #     self.credential,
+                #     "api://trapi/.default",
+                # )
+                token_provider=get_bearer_token_provider(self.credential, "https://cognitiveservices.azure.com/.default")
                 return AzureOpenAIChatCompletionClient(
                     azure_deployment=deployment_name,
                     model=deployment_name,
