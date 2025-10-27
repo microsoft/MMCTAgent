@@ -197,17 +197,18 @@ class TranscriptionConfig(BaseSettings):
 
 class StorageConfig(BaseSettings):
     """Storage configuration."""
-    
-    provider: str = Field(default="azure_blob", env="STORAGE_PROVIDER")
+
+    provider: str = Field(default="azure", env="STORAGE_PROVIDER")
     connection_string: Optional[str] = Field(default=None, env="STORAGE_CONNECTION_STRING")
     account_name: Optional[str] = Field(default=None, env="STORAGE_ACCOUNT_NAME")
     container_name: str = Field(default="default", env="STORAGE_CONTAINER_NAME")
+    account_url: Optional[str] = Field(default=None, env="STORAGE_ACCOUNT_URL")
     use_managed_identity: bool = Field(default=True, env="STORAGE_USE_MANAGED_IDENTITY")
 
     model_config = SettingsConfigDict(
-        env_file=".env", 
+        env_file=".env",
         env_file_encoding="utf-8",
-        validate_assignment=True, 
+        validate_assignment=True,
         extra="ignore",
         case_sensitive=False
     )

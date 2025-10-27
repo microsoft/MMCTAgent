@@ -24,7 +24,7 @@ load_dotenv(find_dotenv(),override=True)
 
 
 class SemanticChunking:
-    def __init__(self, hash_id:str, index_name:str, transcript:str,blob_urls, frame_stacking_grid_size: int = 4, parent_id: Optional[str] = None, parent_duration: Optional[float] = None, video_duration: Optional[float] = None)->None:
+    def __init__(self, hash_id:str, index_name:str, transcript:str, keyframe_blob_url, frame_stacking_grid_size: int = 4, parent_id: Optional[str] = None, parent_duration: Optional[float] = None, video_duration: Optional[float] = None)->None:
         if os.environ.get("MANAGED_IDENTITY", None) is None:
             raise Exception(
                 "MANAGED_IDENTITY requires boolean value for selecting authorization either with Managed Identity or API Key"
@@ -57,6 +57,7 @@ class SemanticChunking:
         self.parent_id = parent_id
         self.parent_duration = parent_duration
         self.video_duration = video_duration
+        self.keyframe_blob_url = keyframe_blob_url
         self.chapter_generator = ChapterGeneration(frame_stacking_grid_size=frame_stacking_grid_size, keyframe_index=f"keyframes-{index_name}")
         self.embed_client = LLMClient(service_provider=os.getenv("LLM_PROVIDER", "azure"), isAsync=True, embedding=True).get_client()
         self.index_client = AISearchClient(
@@ -64,7 +65,6 @@ class SemanticChunking:
             index_name=self.index_name,
             credential=self.token_provider
         )
-        self.blob_urls = blob_urls
         #self.index_client = SearchClient(endpoint=os.getenv("SEARCH_SERVICE_ENDPOINT"), index_name=self.index_name, credential=self.token_provider)
     async def _create_search_index(self):
         created = await self.index_client.check_and_create_index()
@@ -222,7 +222,7 @@ class SemanticChunking:
         logger.info(f"Chapter Generation Completed! Successfully created {len(self.chapter_responses)} chapters in parallel.")
         
         
-    async def _ingest(self, video_blob_url, url=None):
+    async def _ingest(self, video_blob_url=None, url=None):
         doc_objects: List[AISearchDocument] = [] 
         current_time = datetime.now()
         logger.info(f"Creating documents from {len(self.chapter_responses)} chapters")
@@ -245,10 +245,10 @@ class SemanticChunking:
                 parent_id=self.parent_id or "None",
                 parent_duration=str(self.parent_duration) if self.parent_duration is not None else "None",
                 video_duration=str(self.video_duration) if self.video_duration is not None else "None",
-                blob_audio_url=self.blob_urls['audio_blob_url'].split(".net")[-1][1:] or "None",
-                blob_video_url=video_blob_url.split(".net")[-1][1:] or "None",
-                blob_transcript_file_url=self.blob_urls['transcript_blob_url'].split(".net")[-1][1:] or "None",
-                blob_frames_folder_path=self.blob_urls['keyframes_blob_folder_url'].split(".net")[-1][1:] or "None",
+                blob_audio_url="None",
+                blob_video_url="None",
+                blob_transcript_file_url="None",
+                blob_frames_folder_path=self.keyframe_blob_url or "None",
                 embeddings=await self._create_embedding_normal(chapter_content_str)
             )
             doc_objects.append(obj)
@@ -260,7 +260,7 @@ class SemanticChunking:
             
         await self.index_client.upload_documents(documents=[doc.model_dump() for doc in doc_objects])
         
-    async def run(self,video_blob_url, url=None):
+    async def run(self, url=None):
         try:
             await self._create_search_index() # checking if index is available, if not then creating the same.
         except Exception as e:
@@ -271,7 +271,7 @@ class SemanticChunking:
             logger.info("Document already exists in the index.")
             return None, None, is_exist
         await self._create_chapters()
-        await self._ingest(video_blob_url=video_blob_url, url=url)
+        await self._ingest(url=url)
         await self.index_client.close()
         return self.chapter_responses, self.chapter_transcripts, is_exist
         

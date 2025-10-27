@@ -2,24 +2,18 @@
 from mmct.utils.error_handler import handle_exceptions, convert_exceptions
 from mmct.utils.error_handler import ProviderException, ConfigurationException
 from loguru import logger
-from azure.identity import DefaultAzureCredential, AzureCliCredential
 from typing import Dict, Any, List
-from azure.search.documents import SearchClient
+from azure.search.documents.aio import SearchClient
 from azure.search.documents.models import VectorizedQuery
 from mmct.providers.base import SearchProvider
+from mmct.providers.credentials import AzureCredentials
 
 class AzureSearchProvider(SearchProvider):
     """Azure AI Search provider implementation."""
-    
+
     def __init__(self, config: Dict[str, Any]):
         self.config = config
-        try:
-            self.credential = AzureCliCredential()
-            self.credential.get_token("https://search.azure.com/.default")
-        except Exception as e:
-            logger.info(f"Azure CLI credential not available: {e}. Using DefaultAzureCredential")
-            # Fallback to DefaultAzureCredential if CLI credential is not available
-            self.credential = DefaultAzureCredential()
+        self.credential = AzureCredentials.get_credentials_async()
         self.client = self._initialize_client()
     
     def _initialize_client(self):
@@ -61,7 +55,7 @@ class AzureSearchProvider(SearchProvider):
             semantic_configuration_name=None
 
             search_text = kwargs.pop("search_text", query)
-            top = kwargs.pop("top", 10)
+            top = kwargs.pop("top", None)
             embedding = kwargs.pop("embedding", [])
             query_type = kwargs.pop("query_type", None)
             vector_queries = kwargs.pop("vector_queries",None)
@@ -87,7 +81,7 @@ class AzureSearchProvider(SearchProvider):
             else:
                 client = self.client
             
-            results = client.search(
+            results = await client.search(
                 search_text=search_text,
                 top=top,
                 query_type=query_type,
@@ -96,7 +90,7 @@ class AzureSearchProvider(SearchProvider):
                 **kwargs
             )
             
-            return [dict(result) for result in results]
+            return [dict(result) async for result in results]
         except Exception as e:
             logger.error(f"Azure AI Search failed: {e}")
             raise ProviderException(f"Azure AI Search failed: {e}")
@@ -114,7 +108,7 @@ class AzureSearchProvider(SearchProvider):
             else:
                 client = self.client
             
-            result = client.upload_documents(documents=[document])
+            result = await client.upload_documents(documents=[document])
             return result[0].succeeded
         except Exception as e:
             logger.error(f"Azure AI Search indexing failed: {e}")
@@ -133,7 +127,7 @@ class AzureSearchProvider(SearchProvider):
             else:
                 client = self.client
             
-            result = client.delete_documents(documents=[{"id": doc_id}])
+            result = await client.delete_documents(documents=[{"id": doc_id}])
             return result[0].succeeded
         except Exception as e:
             logger.error(f"Azure AI Search deletion failed: {e}")
