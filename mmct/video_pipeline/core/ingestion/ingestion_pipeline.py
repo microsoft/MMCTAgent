@@ -202,14 +202,7 @@ class IngestionPipeline:
         self.blob_manager = None  # Will be initialized async when first needed
         self.keyframe_search_index = None  # Will be initialized async when first needed
         self.original_video_path = video_path
-
-    async def _get_blob_manager(self):
-        """Initialize blob manager if not already initialized."""
-        if self.blob_manager is None:
-            self.blob_manager = await BlobStorageManager.create()
-        return self.blob_manager
-
-    
+ 
     async def _check_and_compress_video(self):
         """
         Check if video file size exceeds 500 MB and compress if needed.
@@ -561,7 +554,7 @@ class IngestionPipeline:
             )
             
             # Get blob manager
-            blob_manager = await self._get_blob_manager()
+            blob_manager = await BlobStorageManager.create()
 
             # Set keyframes blob URL
             context.blob_urls["keyframes_blob_folder_url"] = blob_manager.get_blob_url(
@@ -1045,7 +1038,7 @@ class IngestionPipeline:
                 self.logger.info("Frame embeddings stored to search index!")
 
                 # Get blob manager
-                blob_manager = await self._get_blob_manager()
+                blob_manager = await BlobStorageManager.create()
 
                 # Upload keyframes to blob storage
                 await self._add_keyframes_to_upload_tasks(context, blob_manager)
@@ -1241,7 +1234,7 @@ class IngestionPipeline:
         """
         try:
             # Get blob manager
-            blob_manager = await self._get_blob_manager()
+            blob_manager = await BlobStorageManager.create()
 
             # Set keyframes blob URL
             context.blob_urls["keyframes_blob_folder_url"] = blob_manager.get_blob_url(

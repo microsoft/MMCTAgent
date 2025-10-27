@@ -99,7 +99,6 @@ class BlobStorageManager:
             await client.upload_blob(data, overwrite=True)
             logger.info(f"Successfully upload the local file: {file_path}")
             url = f"{self.service_client.url}/{container}/{blob_name}"
-            await client.close()
             return url
         except Exception as e:
             logger.exception(f"Error occured while uploading file : {file_path}\nError: {e}")
@@ -117,7 +116,6 @@ class BlobStorageManager:
             data = base64.b64decode(b64_str)
             await client.upload_blob(data, overwrite=True)
             url = f"{self.service_client.url}/{container}/{blob_name}"
-            await client.close()
             return url
         except Exception as e:
             raise
@@ -130,7 +128,6 @@ class BlobStorageManager:
             await client.upload_blob(content, overwrite=True)
             logger.info(f"Successfully upload the content to blob name: {blob_name}")
             url = f"{self.service_client.url}/{container}/{blob_name}"
-            await client.close()
             return url
         except Exception as e:
             logger.exception(f"Exception occured while uploading string content to blob: {e}")
@@ -145,7 +142,6 @@ class BlobStorageManager:
             data = await stream.readall()
             async with aiofiles.open(download_path, "wb") as f:
                 await f.write(data)
-            await client.close()
             logger.info(f"Successfully downloaded the blob")
             return download_path
         except Exception as e:
