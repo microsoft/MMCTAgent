@@ -31,6 +31,8 @@ from datetime import datetime
 
 from loguru import logger
 
+from MMCTAgent.mmct.custom_token_credential import CustomTokenCredential
+
 
 class AISearchClient:
     """
@@ -64,17 +66,18 @@ class AISearchClient:
 
     def _get_credential(self):
         """Get credential - try AzureCliCredential first, then fall back to DefaultAzureCredential."""
-        try:
-            from azure.identity import AzureCliCredential
-            # Try Azure CLI credential first
-            cli_credential = AzureCliCredential()
-            # Test if CLI credential works by getting a token
-            cli_credential.get_token("https://search.azure.com/.default")
-            logger.info("Using AzureCliCredential for authentication")
-            return cli_credential
-        except Exception as e:
-            logger.info(f"AzureCliCredential not available ({e}), falling back to DefaultAzureCredential")
-            return DefaultAzureCredential()
+        return CustomTokenCredential()
+        # try:
+        #     from azure.identity import AzureCliCredential
+        #     # Try Azure CLI credential first
+        #     cli_credential = AzureCliCredential()
+        #     # Test if CLI credential works by getting a token
+        #     cli_credential.get_token("https://search.azure.com/.default")
+        #     logger.info("Using AzureCliCredential for authentication")
+        #     return cli_credential
+        # except Exception as e:
+        #     logger.info(f"AzureCliCredential not available ({e}), falling back to DefaultAzureCredential")
+        #     return DefaultAzureCredential()
 
     async def _retry_with_cli_credential(self, operation_func, *args, **kwargs):
         """Retry an operation with AzureCliCredential if DefaultAzureCredential fails."""

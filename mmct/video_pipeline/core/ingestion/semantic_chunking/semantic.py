@@ -5,6 +5,7 @@ import asyncio
 from datetime import datetime
 from typing import List, Dict, Any, Union, Optional
 from azure.search.documents import SearchClient
+from MMCTAgent.mmct.custom_token_credential import CustomTokenCredential
 from mmct.video_pipeline.utils.ai_search_client import AISearchClient, AISearchDocument
 from azure.identity import DefaultAzureCredential
 from azure.core.credentials import AzureKeyCredential
@@ -75,16 +76,17 @@ class SemanticChunking:
     
     def _get_credential(self):
         """Get Azure credential, trying CLI first, then DefaultAzureCredential."""
-        try:
-            from azure.identity import AzureCliCredential
-            # Try Azure CLI credential first
-            cli_credential = AzureCliCredential()
-            # Test if CLI credential works by getting a token
-            cli_credential.get_token("https://search.azure.com/.default")
-            return cli_credential
-        except Exception:
-            from azure.identity import DefaultAzureCredential
-            return DefaultAzureCredential()
+        return CustomTokenCredential()
+        # try:
+        #     from azure.identity import AzureCliCredential
+        #     # Try Azure CLI credential first
+        #     cli_credential = AzureCliCredential()
+        #     # Test if CLI credential works by getting a token
+        #     cli_credential.get_token("https://search.azure.com/.default")
+        #     return cli_credential
+        # except Exception:
+        #     from azure.identity import DefaultAzureCredential
+        #     return DefaultAzureCredential()
     
     async def _create_embedding_normal(self,text:str) -> List[float]:
         try:
