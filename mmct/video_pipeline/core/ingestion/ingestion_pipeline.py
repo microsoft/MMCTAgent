@@ -16,6 +16,9 @@ from mmct.video_pipeline.utils.helper import (
     get_file_hash,
     chunked,
     remove_file,
+    get_media_folder,
+)
+from mmct.video_pipeline.core.ingestion.utils.helper import (
     check_video_already_ingested,
     split_video_if_needed,
     load_srt,
@@ -49,7 +52,6 @@ from mmct.video_pipeline.core.ingestion.merge_summary_n_transcript.merge_visual_
 )
 from mmct.video_pipeline.core.ingestion.video_compression.video_compression import VideoCompressor
 from mmct.blob_store_manager import BlobStorageManager
-from mmct.video_pipeline.utils.helper import get_media_folder
 from dotenv import load_dotenv, find_dotenv
 from mmct.utils.logging_config import log_manager
 from dataclasses import dataclass
@@ -311,10 +313,6 @@ class IngestionPipeline:
             )
 
             self.logger.info(f"Successfully extracted {len(keyframe_metadata)} keyframes")
-            for frame in keyframe_metadata:
-                self.logger.debug(
-                    f"  Frame {frame.frame_number}: {frame.timestamp_seconds:.2f}s (motion: {frame.motion_score:.3f})"
-                )
 
             return keyframe_metadata
 
@@ -392,7 +390,7 @@ class IngestionPipeline:
                 video_path=context.video_path,
                 parent_id=context.parent_id,
                 parent_duration=context.parent_duration,
-                video_duration=context.video_duration
+                video_duration=context.video_duration,
             )
 
             if success:
@@ -440,37 +438,24 @@ class IngestionPipeline:
 
     async def _perform_keyframe_extraction(self, video_paths: list, hash_suffixes: list):
         """
-        Orchestrate keyframe extraction based on video configuration.
-        Handles both single video and multi-part video scenarios.
-        Returns keyframe metadata (dict for split videos, list for single video, None otherwise).
+        Extract keyframes from video parts.
+        Handles both single video and multi-part video scenarios uniformly.
+        Returns keyframe metadata as dict mapping hash_id to keyframe metadata list.
         """
         try:
-            if len(video_paths) > 1:
-                # Video was split - extract keyframes from each part
-                self.logger.info(
-                    f"Video was split into {len(video_paths)} parts. Extracting keyframes from each part..."
-                )
-                keyframe_metadata_map = await self._extract_keyframes_from_video_parts(
-                    video_paths, hash_suffixes
-                )
-                return keyframe_metadata_map
-            else:
-                # Single video - extract keyframes from original
-                self.logger.info(
-                    "Single video detected. Extracting keyframes from original video..."
-                )
-                keyframe_metadata = await self._extract_keyframes()
-                return keyframe_metadata
+            self.logger.info(f"Extracting keyframes from {len(video_paths)} video part(s)...")
+            keyframe_metadata_map = await self._extract_keyframes_from_video_parts(
+                video_paths, hash_suffixes
+            )
+            return keyframe_metadata_map
 
         except Exception as e:
-            self.logger.exception(
-                f"Exception occurred during keyframe extraction orchestration: {e}"
-            )
+            self.logger.exception(f"Exception occurred during keyframe extraction: {e}")
             raise
 
     async def _extract_keyframes_from_video_parts(self, video_paths: list, hash_suffixes: list):
         """
-        Extract keyframes from multiple video parts with consistent naming.
+        Extract keyframes from multiple video parts.
         Returns a dictionary mapping hash_id to keyframe metadata list.
         """
         try:
@@ -525,9 +510,55 @@ class IngestionPipeline:
             )
             raise
 
-    async def _add_keyframes_to_upload_tasks(self, context: ProcessingContext, blob_manager):
+    async def _prepare_transcript_paths(
+        self, video_paths: list, hash_suffixes: list, base_hash_id: str
+    ) -> list:
         """
-        Add keyframes to pending upload tasks instead of all frames.
+        Prepare transcript paths for video parts.
+        Splits transcript if needed when video is split into multiple parts.
+
+        Args:
+            video_paths: List of video part paths
+            hash_suffixes: List of hash suffixes for each part
+            base_hash_id: Base hash ID for the video
+
+        Returns:
+            list: List of transcript paths corresponding to each video part
+        """
+        transcript_paths = []
+
+        # If no transcript provided, return empty list
+        if not self.transcript_path:
+            return [None] * len(video_paths)
+
+        # Single video case - return transcript as-is
+        if len(video_paths) == 1:
+            return [self.transcript_path]
+
+        # Multiple video parts - split transcript
+        self.logger.info(
+            "Video was split and transcript_path provided. Splitting transcript into parts..."
+        )
+        transcript_content = await load_srt(self.transcript_path)
+        transcript_chunks = split_transcript_by_segments(transcript_content, len(video_paths))
+
+        # Save transcript chunks to temporary files
+        media_folder = await get_media_folder()
+
+        for transcript_chunk, hash_suffix in zip(transcript_chunks, hash_suffixes):
+            part_hash_id = base_hash_id + hash_suffix
+            transcript_chunk_path = os.path.join(media_folder, f"transcript_{part_hash_id}.srt")
+            async with aiofiles.open(transcript_chunk_path, "w", encoding="utf-8") as f:
+                await f.write(transcript_chunk)
+            transcript_paths.append(transcript_chunk_path)
+            self.logger.info(f"Created transcript chunk: {transcript_chunk_path}")
+
+        return transcript_paths
+
+    async def _queue_keyframe_uploads(self, context: ProcessingContext, blob_manager):
+        """
+        Queue keyframe files for upload to blob storage.
+        Adds upload tasks to the context's pending upload queue.
         """
         try:
             # Get media folder and keyframes directory
@@ -573,7 +604,7 @@ class IngestionPipeline:
             self.logger.exception(f"Exception occurred during keyframe upload: {e}")
             raise
 
-    async def _process_video_part_parallel(
+    async def _process_single_video_part(
         self,
         video_path: str,
         part_hash_id: str,
@@ -583,7 +614,8 @@ class IngestionPipeline:
         keyframe_metadata: Optional[List] = None,
     ) -> None:
         """
-        Process a single video part in parallel - used for split videos.
+        Process a single video part with full ingestion pipeline.
+        Handles keyframe processing, transcription, semantic chunking, and file uploads.
 
         Args:
             video_path: Path to the video part file
@@ -591,6 +623,7 @@ class IngestionPipeline:
             transcript_path: Optional path to the transcript file for this part
             parent_id: Hash ID of the original video (before splitting)
             parent_duration: Duration of the original video in seconds
+            keyframe_metadata: Pre-extracted keyframe metadata for this part
         """
         try:
             self.logger.info(f"Starting processing of video part: {os.path.basename(video_path)}")
@@ -648,9 +681,9 @@ class IngestionPipeline:
                 context = await self._store_frame_embeddings_to_search_index(context)
                 self.logger.info(f"Stored frame embeddings to AI Search for part {part_hash_id}")
 
-                # Upload keyframes to blob storage
-                await self._add_keyframes_to_upload_tasks(context, blob_manager)
-                self.logger.info(f"Added keyframes to upload tasks for part {part_hash_id}")
+                # Queue keyframes for upload to blob storage
+                await self._queue_keyframe_uploads(context, blob_manager)
+                self.logger.info(f"Queued keyframes for upload for part {part_hash_id}")
             else:
                 self.logger.warning(f"No keyframe metadata provided for part {part_hash_id}")
 
@@ -658,10 +691,8 @@ class IngestionPipeline:
             context = await self.get_transcription(context, blob_manager)
             self.logger.info(f"Transcript generated for part {part_hash_id}")
 
-            # Run semantic chunking and chapter generation
-            context = await self._semantic_chunking_chapter_generation(
-                context, self.url
-            )
+            # Generate semantic chapters from transcript
+            context = await self._generate_semantic_chapters(context, self.url)
 
             if not context.is_already_ingested:
                 self.logger.info(f"Chapter generated for part {part_hash_id}")
@@ -789,12 +820,12 @@ class IngestionPipeline:
             self.logger.exception(f"Exception occured while performing transcription: {e}")
             raise
 
-
-    async def _semantic_chunking_chapter_generation(
+    async def _generate_semantic_chapters(
         self, context: ProcessingContext, url: Optional[str] = None
     ) -> ProcessingContext:
         """
-        This method initializes the semantic chunker and runs chapter generation - functional version.
+        Generate semantic chapters from transcript using semantic chunking.
+        Creates chapters and indexes them for search and retrieval.
         """
         try:
             self.logger.info(
@@ -823,10 +854,15 @@ class IngestionPipeline:
             )
             raise
 
-    async def _check_video_has_audio(self, video_path: str) -> bool:
+    async def _validate_audio_stream_exists(self, video_path: str) -> bool:
         """
-        Check if video file has an audio stream.
-        Returns True if audio exists, False otherwise.
+        Validate that the video file contains an audio stream.
+
+        Args:
+            video_path: Path to the video file
+
+        Returns:
+            bool: True if audio stream exists, False otherwise
         """
         try:
             process = await asyncio.create_subprocess_exec(
@@ -864,8 +900,7 @@ class IngestionPipeline:
             # Create keyframe search index instance
             keyframe_index_name = f"keyframes-{self.index_name}"
             self.keyframe_search_index = KeyframeSearchIndex(
-                search_endpoint=search_endpoint,
-                index_name=keyframe_index_name
+                search_endpoint=search_endpoint, index_name=keyframe_index_name
             )
 
             # Create the index if it doesn't exist
@@ -873,7 +908,9 @@ class IngestionPipeline:
             self.logger.info(f"Keyframe search index initialized: {keyframe_index_name}")
 
         except Exception as e:
-            self.logger.exception(f"Exception occurred during keyframe search index initialization: {e}")
+            self.logger.exception(
+                f"Exception occurred during keyframe search index initialization: {e}"
+            )
             raise
 
     async def __call__(self):
@@ -881,16 +918,16 @@ class IngestionPipeline:
         try:
             # Initialize keyframe search index
             await self._initialize_keyframe_search_index()
-            
+
             # Early ingestion check - exit immediately if already processed
             should_continue = await self._perform_early_ingestion_check()
             if not should_continue:
                 return
 
-            # Check if video has audio stream BEFORE processing (only if transcript_path not provided)
+            # Validate audio stream exists (only if transcript_path not provided)
             if not self.transcript_path:
-                self.logger.info("Checking if video has audio stream...")
-                has_audio = await self._check_video_has_audio(self.video_path)
+                self.logger.info("Validating video has audio stream...")
+                has_audio = await self._validate_audio_stream_exists(self.video_path)
                 if not has_audio:
                     error_msg = (
                         "ERROR: Video does not have an audio stream!\n"
@@ -934,196 +971,68 @@ class IngestionPipeline:
             if len(video_paths) > 1:
                 split_video_cleanup_paths.extend(video_paths)
 
-            # If transcript_path is provided and video was split, split the transcript
-            transcript_paths = []
-            if self.transcript_path and len(video_paths) > 1:
-                self.logger.info(
-                    "Video was split and transcript_path provided. Splitting transcript into two parts..."
-                )
-                transcript_content = await load_srt(self.transcript_path)
-                transcript_chunks = split_transcript_by_segments(
-                    transcript_content, len(video_paths)
-                )
+            # Generate base hash ID from first video part for consistent naming
+            base_hash_id = await get_file_hash(file_path=video_paths[0])
 
-                # Save transcript chunks to temporary files
-                media_folder = await get_media_folder()
-                base_hash_id = await get_file_hash(file_path=video_paths[0])
+            # Prepare transcript paths (handles both single and split scenarios)
+            transcript_paths = await self._prepare_transcript_paths(
+                video_paths, hash_suffixes, base_hash_id
+            )
 
-                for transcript_chunk, hash_suffix in zip(transcript_chunks, hash_suffixes):
-                    part_hash_id = base_hash_id + hash_suffix
-                    transcript_chunk_path = os.path.join(
-                        media_folder, f"transcript_{part_hash_id}.srt"
+            # Process all video parts using unified approach (works for both single and multiple parts)
+            self.logger.info(f"Processing {len(video_paths)} video part(s)...")
+
+            # Create tasks for parallel processing with consistent hash IDs
+            tasks = []
+            for idx, (video_path, hash_suffix) in enumerate(zip(video_paths, hash_suffixes)):
+                part_name = "Part A" if hash_suffix == "" else f"Part {hash_suffix}"
+                part_hash_id = base_hash_id + hash_suffix
+                part_transcript_path = transcript_paths[idx] if transcript_paths[idx] else None
+
+                # Get keyframe metadata for this part (now always returns dict)
+                part_keyframe_metadata = keyframe_metadata_result.get(part_hash_id)
+
+                self.logger.info(f"Creating task for {part_name}: {os.path.basename(video_path)}")
+                self.logger.info(f"  Hash ID: {part_hash_id}")
+                if part_transcript_path:
+                    self.logger.info(f"  Transcript: {os.path.basename(part_transcript_path)}")
+                if part_keyframe_metadata:
+                    self.logger.info(f"  Keyframes: {len(part_keyframe_metadata)}")
+
+                # Create asyncio task for processing this video part
+                task = asyncio.create_task(
+                    self._process_single_video_part(
+                        video_path,
+                        part_hash_id,
+                        part_transcript_path,
+                        parent_video_id,
+                        parent_video_duration,
+                        part_keyframe_metadata,
                     )
-                    async with aiofiles.open(transcript_chunk_path, "w", encoding="utf-8") as f:
-                        await f.write(transcript_chunk)
-                    transcript_paths.append(transcript_chunk_path)
-                    self.logger.info(f"Created transcript chunk: {transcript_chunk_path}")
-            elif self.transcript_path:
-                # Single video with transcript
-                transcript_paths = [self.transcript_path]
-
-            # Process video parts in parallel if split, otherwise process single video
-            if len(video_paths) > 1:
-                self.logger.info("Processing video parts in parallel for faster execution...")
-
-                # Generate base hash ID from Part A video for consistent hash IDs
-                part_a_path = video_paths[0]  # Part A is always first
-                base_hash_id = await get_file_hash(file_path=part_a_path)
-                self.logger.info(f"Generated base hash ID from Part A: {base_hash_id}")
-
-                # Create tasks for parallel processing with consistent hash IDs
-                tasks = []
-                for idx, (video_path, hash_suffix) in enumerate(zip(video_paths, hash_suffixes)):
-                    part_name = "Part A" if hash_suffix == "" else f"Part {hash_suffix}"
-
-                    # Use base hash ID + suffix for consistent naming
-                    part_hash_id = base_hash_id + hash_suffix
-
-                    # Get corresponding transcript path if available
-                    part_transcript_path = transcript_paths[idx] if transcript_paths else None
-
-                    # Get keyframe metadata for this part
-                    part_keyframe_metadata = (
-                        keyframe_metadata_result.get(part_hash_id)
-                        if isinstance(keyframe_metadata_result, dict)
-                        else None
-                    )
-
-                    self.logger.info(
-                        f"Creating task for {part_name}: {os.path.basename(video_path)}"
-                    )
-                    self.logger.info(f"  Hash ID: {part_hash_id}")
-                    if part_transcript_path:
-                        self.logger.info(f"  Transcript: {os.path.basename(part_transcript_path)}")
-                    if part_keyframe_metadata:
-                        self.logger.info(f"  Keyframes: {len(part_keyframe_metadata)}")
-
-                    # Create asyncio task for processing this video part
-                    task = asyncio.create_task(
-                        self._process_video_part_parallel(
-                            video_path,
-                            part_hash_id,
-                            part_transcript_path,
-                            parent_video_id,
-                            parent_video_duration,
-                            part_keyframe_metadata,
-                        )
-                    )
-                    tasks.append(task)
-
-                # Execute all video parts in parallel
-                self.logger.info(f"Starting parallel processing of {len(tasks)} video parts...")
-                await asyncio.gather(*tasks)
-
-                # Clean up transcript chunk files
-                for transcript_path in transcript_paths:
-                    try:
-                        if transcript_path != self.transcript_path and os.path.exists(
-                            transcript_path
-                        ):
-                            os.remove(transcript_path)
-                            self.logger.info(f"Removed transcript chunk: {transcript_path}")
-                    except Exception as e:
-                        self.logger.warning(
-                            f"Failed to remove transcript chunk {transcript_path}: {e}"
-                        )
-
-                self.logger.info("All video parts processed successfully!")
-
-            else:
-                # Single video processing (no split) - original logic
-                self.logger.info("Processing single video (no split required)")
-
-                # Generate hash ID
-                hash_id = await get_file_hash(file_path=self.video_path)
-                self.logger.info(f"Generated hash ID: {hash_id}")
-
-                # Get transcript path if available
-                single_transcript_path = transcript_paths[0] if transcript_paths else None
-                if single_transcript_path:
-                    self.logger.info(
-                        f"Using transcript: {os.path.basename(single_transcript_path)}"
-                    )
-
-                # Create processing context
-                context = ProcessingContext(
-                    hash_id=hash_id,
-                    video_path=self.video_path,
-                    video_extension=self.video_extension,
-                    transcript_path=single_transcript_path,
-                    parent_id=parent_video_id,  # Same as hash_id for non-split videos
-                    parent_duration=parent_video_duration,
-                    video_duration=parent_video_duration,  # Same as parent for non-split videos
                 )
+                tasks.append(task)
 
-                # Use keyframes extracted earlier
-                context.keyframe_metadata = keyframe_metadata_result
-                self.logger.info("Keyframes assigned to context!")
+            # Execute all video parts (single or multiple) in parallel
+            processing_mode = "parallel" if len(video_paths) > 1 else "single"
+            self.logger.info(
+                f"Starting {processing_mode} processing of {len(tasks)} video part(s)..."
+            )
+            await asyncio.gather(*tasks)
 
-                context = await self._generate_embeddings_for_keyframes(context)
-                self.logger.info("Embeddings generated for keyframes!")
+            # Clean up transcript chunk files (only for split transcripts)
+            for transcript_path in transcript_paths:
+                try:
+                    if (
+                        transcript_path
+                        and transcript_path != self.transcript_path
+                        and os.path.exists(transcript_path)
+                    ):
+                        os.remove(transcript_path)
+                        self.logger.info(f"Removed transcript chunk: {transcript_path}")
+                except Exception as e:
+                    self.logger.warning(f"Failed to remove transcript chunk {transcript_path}: {e}")
 
-                # Store frame embeddings to search index
-                context = await self._store_frame_embeddings_to_search_index(context)
-                self.logger.info("Frame embeddings stored to search index!")
-
-                # Get blob manager
-                blob_manager = await self._get_blob_manager()
-
-                # Upload keyframes to blob storage
-                await self._add_keyframes_to_upload_tasks(context, blob_manager)
-                self.logger.info("Added keyframes to upload tasks!")
-
-                # Set keyframes blob URL
-                context.keyframes_blob_folder_url = await blob_manager.get_blob_url(
-                    container=self.keyframe_container, blob_name=f"{context.hash_id}"
-                )
-
-                # Run functional pipeline methods
-                context = await self.get_transcription(context, blob_manager)
-                self.logger.info("Transcript Generated!")
-
-                # Run semantic chunking and chapter generation
-                context = await self._semantic_chunking_chapter_generation(
-                    context, self.url
-                )
-
-                if not context.is_already_ingested:
-                    self.logger.info(
-                        "Chapter generated for the visual summary and successfully ingested to index!"
-                    )
-
-                # Upload files in batches
-                for batch in chunked(context.pending_upload_tasks, 5):
-                    upload_results = await asyncio.gather(*batch)
-                    # Free completed upload tasks to prevent memory buildup
-                    del upload_results
-                    gc.collect()
-                self.logger.info(
-                    "Successfully uploaded the files to blob present in the pending upload tasks list!"
-                )
-
-                await blob_manager.close()
-
-                # Clean up local files after successful ingestion
-                await remove_file(context.hash_id)
-
-                # Clean up local resources (including copied video file)
-                for resource_path in context.local_resources:
-                    try:
-                        if os.path.exists(resource_path):
-                            if os.path.isfile(resource_path):
-                                os.remove(resource_path)
-                                self.logger.info(f"Removed local file: {resource_path}")
-                            elif os.path.isdir(resource_path):
-                                shutil.rmtree(resource_path)
-                                self.logger.info(f"Removed local directory: {resource_path}")
-                    except Exception as e:
-                        self.logger.warning(f"Failed to remove local resource {resource_path}: {e}")
-
-                # Clean up context variables
-                del context.video_url
-                gc.collect()
+            self.logger.info("All video parts processed successfully!")
 
             # Clean up split video files if any were created
             for split_video_path in split_video_cleanup_paths:
@@ -1137,12 +1046,12 @@ class IngestionPipeline:
                     )
 
             self.logger.info("Local files cleaned up successfully!")
-            
+
             # Cleanup keyframe search index
             if self.keyframe_search_index:
                 await self.keyframe_search_index.close()
                 self.logger.info("Keyframe search index closed successfully!")
-            
+
             self.logger.info("Ingestion pipeline ran successfully!")
 
         except Exception as e:
@@ -1152,10 +1061,8 @@ class IngestionPipeline:
                     await self.keyframe_search_index.close()
                 except:
                     pass  # Ignore cleanup errors during exception handling
-            
-            self.logger.exception(
-                f"Exception occurred while running Ingestion pipeline: {e}"
-            )
+
+            self.logger.exception(f"Exception occurred while running Ingestion pipeline: {e}")
             raise
 
     @classmethod
@@ -1270,10 +1177,8 @@ class IngestionPipeline:
             context = await self.get_transcription(context, blob_manager)
             self.logger.info("Transcript Generated!")
 
-            # Run semantic chunking and chapter generation
-            context = await self._semantic_chunking_chapter_generation(
-                context, self.url
-            )
+            # Generate semantic chapters from transcript
+            context = await self._generate_semantic_chapters(context, self.url)
 
             if not context.is_already_ingested:
                 self.logger.info(
@@ -1311,9 +1216,9 @@ class IngestionPipeline:
 
 if __name__ == "__main__":
     # Example usage - replace with your actual values
-    video_path = "/home/v-amanpatkar/work/demo/videoplayback.mp4" #"video-path"
+    video_path = "/home/v-amanpatkar/work/demo/What Makes People Engage With Math  Grant Sanderson  TEDxBerkeley.mp4"  # "video-path"
     index = "aaaa-index-name"
-    url = "video-url"
+    url = "video-url-2"
     source_language = Languages.ENGLISH_UNITED_STATES
     transcript_path = "transcript.srt"  # Optional: path to existing transcript file
     keyframe_config = {"motion_threshold": 1.5, "sample_fps": 2}
@@ -1323,7 +1228,7 @@ if __name__ == "__main__":
         url=url,
         transcription_service=TranscriptionServices.WHISPER,
         language=source_language,
-        #transcript_path=transcript_path,
+        # transcript_path=transcript_path,
         keyframe_config=keyframe_config,
     )
     asyncio.run(ingestion())

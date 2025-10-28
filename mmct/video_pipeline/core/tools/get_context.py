@@ -79,8 +79,6 @@ async def get_context(
         ],
         embedding=embedding
     )
-    # await search_provider.close()
-    # await embed_provider.close()
     return search_results
 
 
