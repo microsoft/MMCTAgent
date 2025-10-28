@@ -217,7 +217,6 @@ video_agent = VideoAgent(
     url=None,  # Optional: URL to filter out the search results for given url
     use_critic_agent=True,  # Enable critic agent
     stream=False,  # Stream response
-    use_graph_rag=False,  # Optional: use graph RAG
     cache=False  # Optional: enable caching
 )
 
