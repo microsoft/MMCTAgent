@@ -64,8 +64,8 @@ async def get_planner_system_prompt(tools_string, criticFlag, includeMetaGuideli
     - You will execute first and perform all your actions.
     - **No repetition**: Do not repeat questions or subtasks. Each repetition incurs a $500 penalty.
     - **Tool usage limits**:
-    - `QueryObjectDetectTool`, `QueryOCRTool`, and `QueryRECOGTool` may only be used once per conversation. Exceeding this limit incurs a $1000 penalty.
-    - `QueryVITTool` can be used multiple times, but only for distinct queries.
+    - `QueryObjectDetectTool`, `QueryocrTool`, and `QueryrecogTool` may only be used once per conversation. Exceeding this limit incurs a $1000 penalty.
+    - `QueryvitTool` can be used multiple times, but only for distinct queries.
     - **No hallucinations**: Do not generate answers yourself. Only use tool outputs or conversation history. Hallucinations result in a $1000 penalty.
     - If multiple tools are required, all must be called.
     """

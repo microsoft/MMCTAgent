@@ -113,10 +113,10 @@
 
                             <p>Image-focused agent with support for:</p>
                             <ul>
-                                <li><strong>OBJECT_DETECTION:</strong> Detects objects in the image.</li>
-                                <li><strong>OCR:</strong> Extracts embedded text.</li>
-                                <li><strong>RECOG:</strong> Recognizes scenes, faces, etc.</li>
-                                <li><strong>VIT:</strong> Uses GPT-4V for visual reasoning.</li>
+                                <li><strong>object_detection:</strong> Detects objects in the image.</li>
+                                <li><strong>ocr:</strong> Extracts embedded text.</li>
+                                <li><strong>recog:</strong> Recognizes scenes, faces, etc.</li>
+                                <li><strong>vit:</strong> Uses GPT-4V for visual reasoning.</li>
                             </ul>
                         </div>
 
@@ -375,7 +375,7 @@
     query = ""
 
     # Define the tools (refer to ImageQnaTools Enum)
-    tools = [ImageQnaTools.OBJECT_DETECTION, ImageQnaTools.VIT]
+    tools = [ImageQnaTools.object_detection, ImageQnaTools.vit]
 
     # Flags
     use_critic_agent = True

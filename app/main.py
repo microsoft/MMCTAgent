@@ -37,7 +37,7 @@ def custom_openapi():
         
         This API provides endpoints for multi-modal AI analysis including:
         
-        - **Image Analysis**: Object detection, OCR, image recognition
+        - **Image Analysis**: Object detection, ocr, image recognition
         - **Video Analysis**: Frame extraction, video summarization, content search
         - **Document Ingestion**: Process and index documents for search
         - **Query Processing**: Natural language queries against indexed content

@@ -5,7 +5,7 @@ class ImageQueryRequest(BaseModel):
     query: str = Field(..., min_length=1, example="Describe the image")
     tools: list[str] = Field(
         ...,
-        example=["OBJECT_DETECTION", "VIT", "OCR", "RECOG"],
+        example=["object_detection", "vit", "ocr", "recog"],
     )
     use_critic_agent: bool = Field(..., example=True)
     stream: bool = Field(..., example=False)
@@ -24,10 +24,10 @@ class ImageQueryRequest(BaseModel):
             "examples": [
                 {
                     "summary": "Simple usage",
-                    "description": "Query text with OCR tool",
+                    "description": "Query text with ocr tool",
                     "value": {
                         "query": "What is written here?",
-                        "tools": ["OCR"],
+                        "tools": ["ocr"],
                         "use_critic_agent": False,
                         "stream": False
                     }
@@ -37,7 +37,7 @@ class ImageQueryRequest(BaseModel):
                     "description": "Use object detection and recognition",
                     "value": {
                         "query": "Identify objects",
-                        "tools": ["OBJECT_DETECTION","RECOG"],
+                        "tools": ["object_detection","recog"],
                         "use_critic_agent": True,
                         "stream": False
                     }

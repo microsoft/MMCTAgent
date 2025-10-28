@@ -12,7 +12,7 @@ from loguru import logger
     name="image_agent_tool",
     description="""The Image Agent Tool (image_agent_tool) enables agents to perform question answering and analysis over images using the MMCT Image Agent Framework.
 
-It accepts an image URL and a natural language query, applies one or more specialized ImageQnaTools (such as OCR, recognition, object detection, or visual transformers), and optionally leverages a critic agent to validate and refine the responses.
+It accepts an image URL and a natural language query, applies one or more specialized ImageQnaTools (such as ocr, recognition, object detection, or visual transformers), and optionally leverages a critic agent to validate and refine the responses.
 
 This tool internally handles:
 - Downloading and preprocessing the image.
@@ -26,10 +26,10 @@ This tool internally handles:
 - query (string, required) → Natural language question about the image (e.g., “What text is written on the board?”).
 - use_critic_agent (boolean, required) → Whether to enable critic agent for improved reasoning depth.
 - tools (list of strings, required) → List of image analysis tools to use. Supported values:
-    - VIT → Visual Transformer for image embeddings.
-    - OCR → Optical Character Recognition (extracts text).
-    - RECOG → Image recognition (entities, scenes).
-    - OBJECT_DETECTION → Detects objects in the image.
+    - vit → Visual Transformer for image embeddings.
+    - ocr → Optical Character Recognition (extracts text).
+    - recog → Image recognition (entities, scenes).
+    - object_detection → Detects objects in the image.
 - stream (boolean, optional, default=False) → Stream intermediate reasoning steps if enabled.
 - disable_console_log (boolean, optional, default=False) → Suppress console logs during execution.
 
@@ -37,7 +37,7 @@ This tool internally handles:
 
 A structured answer to the query about the image, which may include:
 - Detected objects or entities.
-- Extracted text (OCR results).
+- Extracted text (ocr results).
 - Scene or content recognition.
 - Refined reasoning (if critic agent is enabled).
 """
@@ -46,7 +46,7 @@ async def image_agent_tool(
     image_url: Annotated[str, "Image URL"],
     query: Annotated[str, "query related to image"],
     use_critic_agent: Annotated[bool, "Include critic agent"],
-    tools: Annotated[list[str], "ImageQnaTools such as VIT, OCR, RECOG, OBJECT_DETECTION"],
+    tools: Annotated[list[str], "ImageQnaTools such as vit, ocr, recog, object_detection"],
     stream: Annotated[bool, "Enable streaming response (True/False)"] = False,
     disable_console_log: Annotated[bool, "boolean flag to disable console logs"] = False,
 ):

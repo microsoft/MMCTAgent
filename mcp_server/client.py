@@ -110,7 +110,7 @@ async def main(tools_to_validate: List[str] = None) -> None:
                     {
                         "query": "user-query",
                         "image_url": "image-url",
-                        "tools": ["OBJECT_DETECTION", "VIT"],   # valid image agent tools
+                        "tools": ["object_detection", "vit"],   # valid image agent tools
                         "use_critic_agent": True,
                         "stream": True,
                     },

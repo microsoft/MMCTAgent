@@ -48,10 +48,10 @@
                 The planner supports the following tools via the <code>ImageQnaTools</code> enum:
             </p>
             <ul>
-                <li><strong>ImageQnaTools.OBJECT_DETECTION:</strong> This tool detects the object in the image.</li>
-                <li><strong>ImageQnaTools.OCR:</strong> For extracting text content.</li>
-                <li><strong>ImageQnaTools.RECOG:</strong> This tool recognises the objects in the image.</li>
-                <li><strong>ImageQnaTools.VIT:</strong> For high-level visual understanding using vision transformers (e.g., GPT-4V).</li>
+                <li><strong>ImageQnaTools.object_detection:</strong> This tool detects the object in the image.</li>
+                <li><strong>ImageQnaTools.ocr:</strong> For extracting text content.</li>
+                <li><strong>ImageQnaTools.recog:</strong> This tool recognises the objects in the image.</li>
+                <li><strong>ImageQnaTools.vit:</strong> For high-level visual understanding using vision transformers (e.g., GPT-4V).</li>
             </ul>
             <p>
                 Users can pass a list of tools via the <code>tools</code> parameter to override the defaults.
@@ -72,10 +72,10 @@
                 <li>The <strong>Planner</strong> is the core agent that first analyzes the input.</li>
                 <li>It selects appropriate tools from <code>ImageQnaTools</code> based on the task:
                 <ul>
-                    <li><code>OBJECT_DETECTION</code>: Detects objects in the image.</li>
-                    <li><code>OCR</code>: Extracts textual information.</li>
-                    <li><code>RECOG</code>: Recognizes objects/entities.</li>
-                    <li><code>VIT</code>: Performs high-level visual reasoning (e.g., GPT-4V).</li>
+                    <li><code>object_detection</code>: Detects objects in the image.</li>
+                    <li><code>ocr</code>: Extracts textual information.</li>
+                    <li><code>recog</code>: Recognizes objects/entities.</li>
+                    <li><code>vit</code>: Performs high-level visual reasoning (e.g., GPT-4V).</li>
                 </ul>
                 </li>
                 <li>It generates an initial response using the selected tools.</li>
@@ -122,7 +122,7 @@
 
     # define the tools, you can refer to the Enum definition of Tools to get the idea for 
     available tools
-    tools = [ImageQnaTools.OBJECT_DETECTION, ImageQnaTools.VIT]
+    tools = [ImageQnaTools.object_detection, ImageQnaTools.vit]
 
     # flag variable whether you want to initialize Critic Agent or not
     use_critic_agent = True

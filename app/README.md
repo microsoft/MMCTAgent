@@ -10,7 +10,7 @@ A modular **FastAPI** application for querying images and videos, ingesting vide
 
 #### **/query-on-images**  
 
-Process an uploaded image and tools list (e.g., `"OCR,RECOG,OBJECT_DETECTION,VIT"` or `["OCR","RECOG","OBJECT_DETECTION","VIT"]`) via `ImageAgent`.  
+Process an uploaded image and tools list (e.g., `"ocr,recog,object_detection,vit"` or `["ocr","recog","object_detection","vit"]`) via `ImageAgent`.  
 - **Schema**: `ImageQueryRequest` (has query, tools, flags)  
 - **Response**: `{ "result": ... }`
 

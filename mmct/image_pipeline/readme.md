@@ -17,10 +17,10 @@ By default, the critic agent is enabled. Users can disable it by setting `use_cr
 
 The planner supports the following tools via the `ImageQnaTools` enum:
 
-- `ImageQnaTools.OBJECT_DETECTION` – This tool detects the object in the image.
-- `ImageQnaTools.OCR` – for extracting text content.
-- `ImageQnaTools.RECOG` – This tool recognise the objects in the image.
-- `ImageQnaTools.VIT` – for high-level visual understanding using vision transformers(GPT-4V).
+- `ImageQnaTools.object_detection` – This tool detects the object in the image.
+- `ImageQnaTools.ocr` – for extracting text content.
+- `ImageQnaTools.recog` – This tool recognise the objects in the image.
+- `ImageQnaTools.vit` – for high-level visual understanding using vision transformers.
 
 Users can pass a list of tools via the `tools` parameter to override the defaults.
 ---
@@ -36,10 +36,10 @@ Users can pass a list of tools via the `tools` parameter to override the default
 
    - The **Planner** is the core agent that first analyzes the input.
    - It selects appropriate tools from the `ImageQnaTools` enum based on the task:
-     - `OBJECT_DETECTION`: Detects objects in the image.
-     - `OCR`: Extracts textual information.
-     - `RECOG`: Recognizes objects/entities.
-     - `VIT`: Performs high-level visual reasoning using vision transformers (e.g., GPT-4V).
+     - `object_detection`: Detects objects in the image.
+     - `ocr`: Extracts textual information.
+     - `recog`: Recognizes objects/entities.
+     - `vit`: Performs high-level visual reasoning using vision transformers.
    - The planner generates an initial response based on these tools.
 
 3. **Critic Agent Feedback (Optional)**
@@ -71,7 +71,7 @@ import ast
 # user query
 query = ""
 # define the tools, you can refer to the Enum definition of Tools to get the idea for available tools
-tools = [ImageQnaTools.OBJECT_DETECTION, ImageQnaTools.VIT]
+tools = [ImageQnaTools.object_detection, ImageQnaTools.vit]
 # flag variable whether you want to initialize Critic Agent or not.
 use_critic_agent = True
 # flag variable whether you have to stream or not.

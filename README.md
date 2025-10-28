@@ -69,10 +69,10 @@ MMCTAgent includes two specialized agents:
 A reasoning engine tailored for static image understanding.  
 It supports a configurable set of tools via the `ImageQnaTools` enum:
 
-- `OBJECT_DETECTION` – Detects objects in an image.
-- `OCR` – Extracts embedded text content.
-- `RECOG` – Recognizes scenes, faces, or objects.
-- `VIT` – Applies GPT-4V for high-level visual reasoning.
+- `object_detection` – Detects objects in an image.
+- `ocr` – Extracts embedded text content.
+- `recog` – Recognizes scenes, faces, or objects.
+- `vit` – Applies vision llm for high-level visual reasoning.
 
 > The Critic can be toggled via the `use_critic_agent` flag.
 
@@ -176,7 +176,7 @@ import asyncio
 image_agent = ImageAgent(
     query="What objects are visible in this image and what text can you read?",
     image_path="path/to/your/image.jpg",
-    tools=[ImageQnaTools.OBJECT_DETECTION, ImageQnaTools.OCR, ImageQnaTools.VIT],
+    tools=[ImageQnaTools.object_detection, ImageQnaTools.ocr, ImageQnaTools.vit],
     use_critic_agent=True,  # Enable critical thinking
     stream=False
 )

@@ -86,7 +86,7 @@ python client.py
 **Purpose**: Analyze images and answer questions about visual content  
 **Key Features**:
 
-- Multiple analysis modes (OCR, Object Detection, VIT, Recognition)
+- Multiple analysis modes (ocr, Object Detection, vit, Recognition)
 - Optional critic agent validation
 - Automatic image download and cleanup
 
@@ -95,7 +95,7 @@ python client.py
 {
     "image_url": "https://example.com/image.jpg",
     "query": "What text is visible in this image?",
-    "tools": ["OCR", "OBJECT_DETECTION"],
+    "tools": ["ocr", "object_detection"],
     "use_critic_agent": True
 }
 ```

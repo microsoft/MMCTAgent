@@ -380,36 +380,25 @@ class IngestionPipeline:
                 f"Storing {len(context.frame_embeddings)} frame embeddings to search index..."
             )
 
-            # Get Azure Search endpoint
-            search_endpoint = os.getenv("SEARCH_ENDPOINT")
-            if not search_endpoint:
-                self.logger.error("SEARCH_ENDPOINT environment variable not set")
+            # Check if keyframe search index is initialized
+            if not self.keyframe_search_index:
+                self.logger.error("Keyframe search index not initialized")
                 return context
 
-            # Create keyframe search index
-            keyframe_index_name = f"keyframes-{self.index_name}"
-            keyframe_search_index = KeyframeSearchIndex(
-                search_endpoint=search_endpoint, index_name=keyframe_index_name
+            # Upload frame embeddings to search index
+            success = await self.keyframe_search_index.upload_frame_embeddings(
+                frame_embeddings=context.frame_embeddings,
+                video_id=context.hash_id,
+                video_path=context.video_path,
+                parent_id=context.parent_id,
+                parent_duration=context.parent_duration,
+                video_duration=context.video_duration
             )
 
-            try:
-                # Upload frame embeddings to search index
-                success = await keyframe_search_index.upload_frame_embeddings(
-                    frame_embeddings=context.frame_embeddings,
-                    video_id=context.hash_id,
-                    video_path=context.video_path,
-                    parent_id=context.parent_id,
-                    parent_duration=context.parent_duration,
-                    video_duration=context.video_duration,
-                )
-
-                if success:
-                    self.logger.info("Successfully stored frame embeddings to search index")
-                else:
-                    self.logger.error("Failed to store frame embeddings to search index")
-
-            finally:
-                await keyframe_search_index.close()
+            if success:
+                self.logger.info("Successfully stored frame embeddings to search index")
+            else:
+                self.logger.error("Failed to store frame embeddings to search index")
 
             return context
 
@@ -635,7 +624,7 @@ class IngestionPipeline:
             )
 
             # Get blob manager
-            blob_manager = await self._get_blob_manager()
+            blob_manager = await BlobStorageManager.create()
 
             # Set keyframes blob URL
             context.keyframes_blob_folder_url = await blob_manager.get_blob_url(
@@ -861,9 +850,38 @@ class IngestionPipeline:
             self.logger.warning(f"Could not check for audio stream: {e}")
             return False
 
+    async def _initialize_keyframe_search_index(self):
+        """
+        Initialize the keyframe search index instance and create the index if it doesn't exist.
+        """
+        try:
+            # Get Azure Search endpoint
+            search_endpoint = os.getenv("SEARCH_ENDPOINT")
+            if not search_endpoint:
+                self.logger.error("SEARCH_ENDPOINT environment variable not set")
+                return
+
+            # Create keyframe search index instance
+            keyframe_index_name = f"keyframes-{self.index_name}"
+            self.keyframe_search_index = KeyframeSearchIndex(
+                search_endpoint=search_endpoint,
+                index_name=keyframe_index_name
+            )
+
+            # Create the index if it doesn't exist
+            await self.keyframe_search_index.create_keyframe_index_if_not_exists()
+            self.logger.info(f"Keyframe search index initialized: {keyframe_index_name}")
+
+        except Exception as e:
+            self.logger.exception(f"Exception occurred during keyframe search index initialization: {e}")
+            raise
+
     async def __call__(self):
         """Main ingestion pipeline method - now supports video splitting and parallel processing."""
         try:
+            # Initialize keyframe search index
+            await self._initialize_keyframe_search_index()
+            
             # Early ingestion check - exit immediately if already processed
             should_continue = await self._perform_early_ingestion_check()
             if not should_continue:
@@ -1050,7 +1068,7 @@ class IngestionPipeline:
                 self.logger.info("Frame embeddings stored to search index!")
 
                 # Get blob manager
-                blob_manager = await self._get_blob_manager()
+                blob_manager = await BlobStorageManager.create()
 
                 # Upload keyframes to blob storage
                 await self._add_keyframes_to_upload_tasks(context, blob_manager)
@@ -1119,10 +1137,25 @@ class IngestionPipeline:
                     )
 
             self.logger.info("Local files cleaned up successfully!")
+            
+            # Cleanup keyframe search index
+            if self.keyframe_search_index:
+                await self.keyframe_search_index.close()
+                self.logger.info("Keyframe search index closed successfully!")
+            
             self.logger.info("Ingestion pipeline ran successfully!")
 
         except Exception as e:
-            self.logger.exception(f"Exception occurred while running Ingestion pipeline: {e}")
+            # Cleanup keyframe search index in case of exception
+            if self.keyframe_search_index:
+                try:
+                    await self.keyframe_search_index.close()
+                except:
+                    pass  # Ignore cleanup errors during exception handling
+            
+            self.logger.exception(
+                f"Exception occurred while running Ingestion pipeline: {e}"
+            )
             raise
 
     @classmethod
@@ -1226,7 +1259,7 @@ class IngestionPipeline:
         """
         try:
             # Get blob manager
-            blob_manager = await self._get_blob_manager()
+            blob_manager = await BlobStorageManager.create()
 
             # Set keyframes blob URL
             context.keyframes_blob_folder_url = await blob_manager.get_blob_url(

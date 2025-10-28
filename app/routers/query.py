@@ -7,7 +7,7 @@ router = APIRouter()
 @router.post(
     "/query-on-images",
     summary="Query image with specified tools",
-    description="Upload an image and specify which tools to run. Tools: OBJECT_DETECTION, OCR, RECOG, VIT.",
+    description="Upload an image and specify which tools to run. Tools: object_detection, ocr, recog, vit.",
 )
 async def query_images(file: UploadFile = File(...), data: ImageQueryRequest = Depends()):
     return {"result": await process_image_query(file, data.model_dump())}

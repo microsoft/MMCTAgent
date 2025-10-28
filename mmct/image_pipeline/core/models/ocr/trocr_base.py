@@ -11,7 +11,7 @@ class TROCRBase:
             self.device = device or "cuda" if torch.cuda.is_available() else "cpu"
             self.device_map = device or "auto"
             self.model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-base-printed").to(self.device) #, device_map = self.device_map)
-            self.processor = TrOCRProcessor.from_pretrained("microsoft/trocr-base-printed")
+            self.processor = TrOCRProcessor.from_pretrained("microsoft/trocr-base-printed",use_fast=True)
         except Exception as e:
             raise Exception(f"Exception occured when loading TROCR Base model {e}")
         

@@ -7,11 +7,11 @@ from autogen_agentchat.teams import SelectorGroupChat, RoundRobinGroupChat
 from autogen_agentchat.conditions import MaxMessageTermination, TextMentionTermination
 from autogen_agentchat.base import TaskResult
 from autogen_agentchat.ui import Console
-from mmct.image_pipeline.core.tools.vit import vitTool
-from mmct.image_pipeline.core.tools.recog import recogTool
-from mmct.image_pipeline.core.tools.object_detect import objectDetectTool
-from mmct.image_pipeline.core.tools.ocr import ocrTool
-from mmct.image_pipeline.core.tools.critic import criticTool
+from mmct.image_pipeline.core.tools.vit import vit_tool
+from mmct.image_pipeline.core.tools.recog import recog_tool
+from mmct.image_pipeline.core.tools.object_detect import object_detect_tool
+from mmct.image_pipeline.core.tools.ocr import ocr_tool
+from mmct.image_pipeline.core.tools.critic import critic_tool
 from mmct.image_pipeline.prompts import (
     get_planner_system_prompt,
     get_critic_system_prompt,
@@ -26,16 +26,16 @@ from dotenv import load_dotenv, find_dotenv
 load_dotenv(find_dotenv(),override=True)
 
 class ImageQnaTools(Enum):
-    VIT = (vitTool,)
-    RECOG = (recogTool,)
-    OBJECT_DETECTION = (objectDetectTool,)
-    OCR = (ocrTool,)
+    vit = (vit_tool,)
+    recog = (recog_tool,)
+    object_detection = (object_detect_tool,)
+    ocr = (ocr_tool,)
 
 
 class ImageAgent:
     """
     ImageAgent handles image-based queries using MMCT's modular architecture that integrates a planner agent,
-    an optional critic agent, and a configurable set of image-processing tools (e.g., OCR, object detection, VIT, etc.).    
+    an optional critic agent, and a configurable set of image-processing tools (e.g., ocr, object detection, vit, etc.).    
 
     Key Features:
     -------------
@@ -54,7 +54,7 @@ class ImageAgent:
     stream (bool, optional):
         Enable or disable streaming response mode. Defaults to False.
     tools (List[ImageQnaTools]):
-        List of tools to use, defined via the ImageQnaTools Enum. Defaults to all tools (OCR, VIT, Object Detection, Recog).
+        List of tools to use, defined via the ImageQnaTools Enum. Defaults to all tools (ocr, vit, object detection, recog).
     disable_console_log (bool):
         Boolean flag to disable console logs. Default set to False.
     Example Usage:
@@ -66,7 +66,7 @@ class ImageAgent:
     >>>     image_qna = ImageAgent(
     >>>         image_path="path/to/image.jpg",
     >>>         query="What dishes are listed under House Special?",
-    >>>         tools=[ImageQnaTools.OCR, ImageQnaTools.VIT],
+    >>>         tools=[ImageQnaTools.ocr, ImageQnaTools.vit],
     >>>         use_critic_agent=True,
     >>>         stream=False
     >>>     )
@@ -80,7 +80,7 @@ class ImageAgent:
     >>>     image_qna = ImageAgent(
     >>>         image_path="path/to/image.jpg",
     >>>         query="What is the total price for House Special and Crab Curry?",
-    >>>         tools=[ImageQnaTools.VIT, ImageQnaTools.OBJECT_DETECTION],
+    >>>         tools=[ImageQnaTools.vit, ImageQnaTools.object_detection],
     >>>         use_critic_agent=True,
     >>>         stream=True
     >>>     )
@@ -97,10 +97,10 @@ class ImageAgent:
         use_critic_agent: Annotated[bool, "Include critic agent"],
         stream: Annotated[bool, "Enable streaming response (True/False)"] = False,
         tools: Annotated[List[ImageQnaTools], "Enum name and value as Enum value"] = [
-            ImageQnaTools.OBJECT_DETECTION,
-            ImageQnaTools.OCR,
-            ImageQnaTools.RECOG,
-            ImageQnaTools.VIT,
+            ImageQnaTools.object_detection,
+            ImageQnaTools.ocr,
+            ImageQnaTools.recog,
+            ImageQnaTools.vit,
         ],
         disable_console_log: Annotated[bool, "boolean flag to disable console logs"] = False
     ):
@@ -213,7 +213,7 @@ class ImageAgent:
                     model_client=self.model_client,
                     model_client_stream=False,
                     system_message=critic_prompt,
-                    tools=[criticTool],
+                    tools=[critic_tool],
                     reflect_on_tool_use=False,
                 )
                 logger.info("Initialized the Critic Agent")
@@ -407,10 +407,10 @@ if __name__ == "__main__":
     image_path = "path/to/your/image.png"
     query = "example question about the image"
     tools = [
-        # ImageQnaTools.OBJECT_DETECTION,
-        # ImageQnaTools.OCR,
-        # ImageQnaTools.RECOG,
-        ImageQnaTools.VIT,
+        # ImageQnaTools.object_detection,
+        # ImageQnaTools.ocr,
+        # ImageQnaTools.recog,
+        ImageQnaTools.vit,
     ]
     use_critic_agent = True
     stream = True

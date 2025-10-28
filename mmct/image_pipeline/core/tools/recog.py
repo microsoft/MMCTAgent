@@ -8,7 +8,7 @@ from PIL import Image
 from typing_extensions import Annotated
 
 
-async def recogTool(img: Annotated[str, "path of image"],priority: Annotated[str,'There are 3 models of recognization tool which one to pick - 1 for small, 2 for Base,3 for Large']="3") -> str:
+async def recog_tool(img: Annotated[str, "path of image"],priority: Annotated[str,'There are 3 models of recognization tool which one to pick - 1 for small, 2 for Base,3 for Large']="3") -> str:
     """
     You can use this tool to analyze the given image, The tool should be used when
     you require to understand the scene in the image, and get a descriptive text

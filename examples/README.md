@@ -8,7 +8,7 @@ This directory contains example notebooks demonstrating how to use the MMCT Agen
 Demonstrates how to use the `ImageAgent` for image analysis tasks.
 
 **Features:**
-- Image analysis using multiple tools (OCR, Object Detection, VIT, RECOG)
+- Image analysis using multiple tools (ocr, Object Detection, vit, recog)
 - Optional critic agent for improved accuracy
 - Configurable tool selection
 
@@ -19,7 +19,7 @@ from mmct.image_pipeline import ImageAgent, ImageQnaTools
 agent = ImageAgent(
     query="describe the image",
     image_path="path/to/image.jpg",
-    tools=[ImageQnaTools.OCR, ImageQnaTools.VIT],
+    tools=[ImageQnaTools.ocr, ImageQnaTools.vit],
     use_critic_agent=True
 )
 response = await agent()

@@ -11,7 +11,7 @@ class TROCRSmall:
             self.device = device or "cuda" if torch.cuda.is_available() else "cpu"
             self.device_map = device or "auto"
             self.model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-small-printed").to(self.device) #, device_map = self.device_map)
-            self.processor = TrOCRProcessor.from_pretrained("microsoft/trocr-small-printed")
+            self.processor = TrOCRProcessor.from_pretrained("microsoft/trocr-small-printed",use_fast=True)
         except Exception as e:
             raise Exception(f"Exception occured wihle loading TrOCR Small Model: {e}")
 
