@@ -3,7 +3,8 @@ import re
 import base64
 from datetime import time
 from typing import List, Dict, Any, Union, Optional
-from PIL import Image
+from mmct.config.settings import MMCTConfig
+from mmct.providers.factory import provider_factory
 from mmct.llm_client import LLMClient
 from mmct.video_pipeline.core.ingestion.models import (
     ChapterCreationResponse,
@@ -26,19 +27,12 @@ class ChapterGeneration:
             service_provider=os.getenv("LLM_PROVIDER", "azure"), isAsync=True
         ).get_client()
         self.frame_stacking_grid_size = frame_stacking_grid_size
-        self.index_client = SearchClient(
-            endpoint=os.getenv("SEARCH_ENDPOINT"),
-            index_name=keyframe_index,
-            credential=self._get_credential()
+        self.config = MMCTConfig()
+        self.search_provider = provider_factory.create_search_provider(
+            self.config.search.provider, self.config.search.model_dump()
         )
-
-    def _get_credential(self):
-        try:
-            cli_credential = AzureCliCredential()
-            cli_credential.get_token("https://search.azure.com/.default")
-            return cli_credential
-        except Exception:
-            return DefaultAzureCredential()
+        self.index_name = keyframe_index
+      
 
     async def _get_frames(self, transcript_seg:str, video_id: str) -> List[str]:
         """
@@ -67,13 +61,14 @@ class ChapterGeneration:
         time_filter = f"timestamp_seconds ge {start_seconds} and timestamp_seconds le {end_seconds}"
         video_filter = f"video_id eq '{video_id}'"
         combined_filter = f"{time_filter} and {video_filter}"
-
-        results = await self.index_client.search(
-        search_text="*",
-        filter=combined_filter,
-        order_by=["created_at asc"])
-
-        async for result in results:
+        results = await self.search_provider.search(
+            query=None,
+            search_text="*",
+            filter=combined_filter,
+            order_by=["created_at asc"],
+            index_name=self.index_name
+        )
+        for result in results:
             frames_file_name.append(result['keyframe_filename'])
 
         # Load the keyframes from local

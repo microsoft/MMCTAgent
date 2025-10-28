@@ -1,33 +1,21 @@
 
 from mmct.providers.base import EmbeddingProvider
 from typing import Dict, Any, List
-from azure.identity import DefaultAzureCredential, AzureCliCredential, get_bearer_token_provider
+from azure.identity import get_bearer_token_provider
 from loguru import logger
 from mmct.utils.error_handler import ProviderException, ConfigurationException
 from openai import AsyncAzureOpenAI, AzureOpenAI
 from mmct.utils.error_handler import handle_exceptions, convert_exceptions
+from mmct.providers.credentials import AzureCredentials
 
 
 class AzureEmbeddingProvider(EmbeddingProvider):
     """Azure OpenAI embedding provider implementation."""
-    
+
     def __init__(self, config: Dict[str, Any]):
         self.config = config
-        self.credential = self._get_credential()
+        self.credential = AzureCredentials.get_async_credentials()
         self.client = self._initialize_client()
-    
-    def _get_credential(self):
-        """Get Azure credential, trying CLI first, then DefaultAzureCredential."""
-        try:
-            # Try Azure CLI credential first
-            cli_credential = AzureCliCredential()
-            # Test if CLI credential works by getting a token
-            cli_credential.get_token("https://cognitiveservices.azure.com/.default")
-            logger.info("Using Azure CLI credential")
-            return cli_credential
-        except Exception as e:
-            logger.info(f"Azure CLI credential not available: {e}. Using DefaultAzureCredential")
-            return DefaultAzureCredential()
     
     def _initialize_client(self):
         """Initialize Azure OpenAI client."""

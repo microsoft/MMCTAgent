@@ -1,22 +1,16 @@
 from loguru import logger
 from typing import Dict, Any
-from azure.identity import DefaultAzureCredential, AzureCliCredential
 from mmct.utils.error_handler import ProviderException, ConfigurationException
 from mmct.providers.base import TranscriptionProvider
 from azure.cognitiveservices.speech import SpeechConfig
+from mmct.providers.credentials import AzureCredentials
 
 class AzureTranscriptionProvider(TranscriptionProvider):
     """Azure Speech Service transcription provider implementation."""
-    
+
     def __init__(self, config: Dict[str, Any]):
         self.config = config
-        try:
-            self.credential = AzureCliCredential()
-            self.credential.get_token("https://cognitiveservices.azure.com/.default")
-        except Exception as e:
-            logger.info(f"Azure CLI credential not available: {e}. Using DefaultAzureCredential")
-            # Fallback to DefaultAzureCredential if CLI credential is not available
-            self.credential = DefaultAzureCredential()
+        self.credential = AzureCredentials.get_async_credentials()
         self.speech_config = self._initialize_speech_config()
     
     def _initialize_speech_config(self):

@@ -11,7 +11,6 @@ from mmct.config.settings import MMCTConfig
 from mmct.providers.factory import provider_factory
 from loguru import logger
 from mmct.config.settings import SearchConfig
-from mmct.providers.factory import provider_factory
 
 try:
     config = MMCTConfig()

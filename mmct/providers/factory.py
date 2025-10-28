@@ -2,18 +2,20 @@ from typing import Dict, Type, Any
 from loguru import logger
 
 from .base import (
-    LLMProvider, 
-    EmbeddingProvider, 
-    SearchProvider, 
-    VisionProvider, 
-    TranscriptionProvider
+    LLMProvider,
+    EmbeddingProvider,
+    SearchProvider,
+    VisionProvider,
+    TranscriptionProvider,
+    StorageProvider
 )
 from .azure_providers import (
     AzureLLMProvider,
     AzureEmbeddingProvider,
     AzureSearchProvider,
     AzureTranscriptionProvider,
-    AzureVisionProvider
+    AzureVisionProvider,
+    AzureStorageProvider
 )
 from .openai_providers import (
     OpenAILLMProvider, 
@@ -54,7 +56,11 @@ class ProviderFactory:
         'azure': AzureTranscriptionProvider,
         'openai': OpenAITranscriptionProvider,
     }
-    
+
+    _storage_providers: Dict[str, Type[StorageProvider]] = {
+        'azure': AzureStorageProvider,
+    }
+
     @classmethod
     def create_llm_provider(cls, provider_name: str, config: Dict[str, Any]) -> LLMProvider:
         """
@@ -159,14 +165,14 @@ class ProviderFactory:
     def create_transcription_provider(cls, provider_name: str, config: Dict[str, Any]) -> TranscriptionProvider:
         """
         Create transcription provider instance.
-        
+
         Args:
             provider_name: Name of the provider
             config: Provider configuration
-            
+
         Returns:
             TranscriptionProvider instance
-            
+
         Raises:
             ConfigurationException: If provider is not supported
         """
@@ -175,11 +181,36 @@ class ProviderFactory:
                 f"Unknown transcription provider: {provider_name}. "
                 f"Supported providers: {list(cls._transcription_providers.keys())}"
             )
-        
+
         provider_class = cls._transcription_providers[provider_name]
         logger.info(f"Creating transcription provider: {provider_name}")
         return provider_class(config)
-    
+
+    @classmethod
+    def create_storage_provider(cls, provider_name: str, config: Dict[str, Any]) -> StorageProvider:
+        """
+        Create storage provider instance.
+
+        Args:
+            provider_name: Name of the provider
+            config: Provider configuration
+
+        Returns:
+            StorageProvider instance
+
+        Raises:
+            ConfigurationException: If provider is not supported
+        """
+        if provider_name not in cls._storage_providers:
+            raise ConfigurationException(
+                f"Unknown storage provider: {provider_name}. "
+                f"Supported providers: {list(cls._storage_providers.keys())}"
+            )
+
+        provider_class = cls._storage_providers[provider_name]
+        logger.info(f"Creating storage provider: {provider_name}")
+        return provider_class(config)
+
     @classmethod
     def get_supported_providers(cls) -> Dict[str, list]:
         """Get list of supported providers by type."""
@@ -188,7 +219,8 @@ class ProviderFactory:
             "embedding": list(cls._embedding_providers.keys()),
             "search": list(cls._search_providers.keys()),
             "vision": list(cls._vision_providers.keys()),
-            "transcription": list(cls._transcription_providers.keys())
+            "transcription": list(cls._transcription_providers.keys()),
+            "storage": list(cls._storage_providers.keys())
         }
     
     @classmethod
@@ -220,6 +252,12 @@ class ProviderFactory:
         """Register a new transcription provider."""
         cls._transcription_providers[name] = provider_class
         logger.info(f"Registered transcription provider: {name}")
+
+    @classmethod
+    def register_storage_provider(cls, name: str, provider_class: Type[StorageProvider]):
+        """Register a new storage provider."""
+        cls._storage_providers[name] = provider_class
+        logger.info(f"Registered storage provider: {name}")
 
 
 # Global provider factory instance

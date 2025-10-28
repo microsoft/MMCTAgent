@@ -3,6 +3,7 @@ from .embedding_provider import EmbeddingProvider
 from .search_provider import SearchProvider
 from .transcription_provider import TranscriptionProvider
 from .vision_provider import VisionProvider
+from .storage_provider import StorageProvider
 
 __all__ = [
     'LLMProvider',
@@ -10,4 +11,5 @@ __all__ = [
     'SearchProvider',
     'VisionProvider',
     'TranscriptionProvider',
+    'StorageProvider',
 ]
