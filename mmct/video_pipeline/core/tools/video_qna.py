@@ -79,7 +79,6 @@ class VideoQnA:
         use_critic_agent: bool = True,
         index_name: str = None,
         llm_provider: Optional[object] = None,
-        use_graph_rag: bool = False,
         cache: bool = True
     ):
         self.query = query
@@ -87,7 +86,6 @@ class VideoQnA:
         self.use_critic_agent = use_critic_agent
         self.index_name = index_name
         self.url = url
-        self.use_graph_rag = use_graph_rag
         self.cache = cache
 
         # Initialize providers if not provided
@@ -131,7 +129,6 @@ class VideoQnA:
             + (f"\nInstruction:video id:{self.video_id}" if self.video_id is not None else "")
             + (f"\nurl:{self.url}" if self.url is not None else "")
             + (f"\nUse the index name:{self.index_name} to retrieve context.")
-            + (f"\n Set the use_graph_rag as True" if self.use_graph_rag else "")
         )
 
     async def _initialize_agents(self):
@@ -231,7 +228,6 @@ async def video_qna(
     ] = "education-video-index-v2",
     stream: Annotated[bool, "Set to True to return the response as a stream."] = False,
     llm_provider: Optional[object] = None,
-    use_graph_rag: Annotated[bool, "Set to True to use GraphRAG for context retrieval."] = False,
     cache: Annotated[bool, "Set to True to enable cache for model responses."] = True
 ):
     """
@@ -253,7 +249,6 @@ async def video_qna(
         query=query,
         use_critic_agent=use_critic_agent,
         index_name=index_name,
-        use_graph_rag=use_graph_rag,
         llm_provider=llm_provider,
         cache=cache,
     )
@@ -285,7 +280,6 @@ if __name__ == "__main__":
             use_critic_agent=use_critic_agent,
             stream=stream,
             index_name=index_name,
-            use_graph_rag=False,
             cache = False
         )
     )
