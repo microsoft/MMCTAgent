@@ -12,7 +12,8 @@ from mmct.video_pipeline.core.tools.utils.search_keyframes import KeyframeSearch
 async def get_relevant_frames(
     query: Annotated[str, 'query to be look for frames'], 
     video_id: Annotated[str, 'video id'],
-    top_k: Annotated[int, 'number of relevant frames to fetch'] = 10
+    index_name: Annotated[str, 'search index name'],
+    top_k: Annotated[int, 'number of relevant frames to fetch'] = 10,
 ) -> List[str]:
     """
     Fetch relevant frames for a query and return keyframe filenames.
@@ -27,9 +28,6 @@ async def get_relevant_frames(
         List of keyframe filenames
     """
     try:
-        # temporary setup for part B of the video, take only the first 64 characters of video_id
-        # if len(video_id)>64:
-        #     video_id = video_id[:64]
         
         # Get search endpoint from environment
         search_endpoint = os.getenv('SEARCH_ENDPOINT')
@@ -37,7 +35,7 @@ async def get_relevant_frames(
         # Initialize searcher
         searcher = KeyframeSearcher(
             search_endpoint=search_endpoint,
-            index_name=os.getenv("KEYFRAME_INDEX_NAME")
+            index_name=f"keyframes-{index_name}",
         )
         
         video_filter = f"video_id eq '{video_id}'"
@@ -45,8 +43,7 @@ async def get_relevant_frames(
         results = await searcher.search_keyframes(
             query=query,
             top_k=top_k,
-            video_filter=video_filter,
-            min_similarity_score=0.0001
+            video_filter=video_filter
         )
         
         if not results:

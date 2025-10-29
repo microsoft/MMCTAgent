@@ -37,9 +37,9 @@ from mmct.video_pipeline.core.ingestion.key_frames_extractor.keyframe_extractor 
 )
 from mmct.video_pipeline.core.ingestion.key_frames_extractor.clip_embeddings import (
     CLIPEmbeddingsGenerator,
-    EmbeddingConfig,
     FrameEmbedding,
 )
+from mmct.config.settings import ImageEmbeddingConfig
 from mmct.video_pipeline.core.ingestion.key_frames_extractor.keyframe_search_index import (
     KeyframeSearchIndex,
 )
@@ -335,10 +335,8 @@ class IngestionPipeline:
                 f"Starting embedding generation for {len(context.keyframe_metadata)} keyframes..."
             )
 
-            # Configure embedding generation
-            embedding_config = EmbeddingConfig(
-                clip_model_name="openai/clip-vit-base-patch32", batch_size=8
-            )
+            # Configure embedding generation - use settings from config
+            embedding_config = ImageEmbeddingConfig()
 
             # Initialize embeddings generator
             embeddings_generator = CLIPEmbeddingsGenerator(embedding_config)
@@ -355,7 +353,7 @@ class IngestionPipeline:
 
             finally:
                 # Clean up embeddings generator resources
-                embeddings_generator.cleanup()
+                await embeddings_generator.cleanup()
 
             return context
 

@@ -175,6 +175,62 @@ class EmbeddingConfig(BaseSettings):
         super().__init__(**kwargs)
 
 
+class ImageEmbeddingConfig(BaseSettings):
+    """Image embedding provider configuration for CLIP models."""
+
+    model_name: str = Field(default="openai/clip-vit-base-patch32", env="IMAGE_EMBEDDING_MODEL_NAME")
+    device: str = Field(default="auto", env="IMAGE_EMBEDDING_DEVICE")
+    max_image_size: int = Field(default=224, env="IMAGE_EMBEDDING_MAX_SIZE")
+    normalize_embeddings: bool = Field(default=True, env="IMAGE_EMBEDDING_NORMALIZE")
+    batch_size: int = Field(default=8, env="IMAGE_EMBEDDING_BATCH_SIZE")
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        validate_assignment=True,
+        extra="ignore",
+        case_sensitive=False
+    )
+
+    def __init__(self, **kwargs):
+        # Force load environment variables before validation
+        from dotenv import load_dotenv, find_dotenv
+        import os
+
+        # Try to find and load .env file
+        env_file = find_dotenv()
+        if env_file:
+            load_dotenv(env_file, override=True)
+        else:
+            # If find_dotenv fails, try relative paths
+            for path in [".env", "../.env", "../../.env"]:
+                if os.path.exists(path):
+                    load_dotenv(path, override=True)
+                    break
+
+        # If no explicit values provided, use environment variables with defaults
+        if not kwargs:
+            kwargs = {
+                'model_name': os.getenv("IMAGE_EMBEDDING_MODEL_NAME", "openai/clip-vit-base-patch32"),
+                'device': os.getenv("IMAGE_EMBEDDING_DEVICE", "auto"),
+                'max_image_size': int(os.getenv("IMAGE_EMBEDDING_MAX_SIZE", "224")),
+                'normalize_embeddings': os.getenv("IMAGE_EMBEDDING_NORMALIZE", "true").lower() == "true",
+                'batch_size': int(os.getenv("IMAGE_EMBEDDING_BATCH_SIZE", "8")),
+            }
+
+        super().__init__(**kwargs)
+
+    def to_provider_config(self) -> dict:
+        """Convert to provider configuration dictionary."""
+        return {
+            "model_name": self.model_name,
+            "device": self.device,
+            "max_image_size": self.max_image_size,
+            "normalize_embeddings": self.normalize_embeddings,
+            "batch_size": self.batch_size
+        }
+
+
 class TranscriptionConfig(BaseSettings):
     """Transcription provider configuration."""
     

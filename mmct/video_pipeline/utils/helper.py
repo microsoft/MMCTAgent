@@ -943,16 +943,49 @@ def split_transcript_by_segments(srt_content: str, segment_count: int = 2) -> li
     
     return transcript_chunks
 
+def get_video_properties(video_path: str) -> Dict:
+    """
+    Quick probe of basic video properties.
+
+    Args:
+        video_path: Path to the video file
+
+    Returns:
+        Dictionary with video properties: width, height, fps, frame_count, duration_seconds
+
+    Raises:
+        ValueError: If video cannot be opened
+    """
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        raise ValueError(f"Cannot open video: {video_path}")
+
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = float(cap.get(cv2.CAP_PROP_FPS)) or 0.0
+    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    duration_seconds = (frame_count / fps) if fps > 0 else 0.0
+    cap.release()
+
+    return {
+        "width": width,
+        "height": height,
+        "fps": fps,
+        "frame_count": frame_count,
+        "duration_seconds": duration_seconds,
+    }
+
+
 def seconds_to_hms(duration_seconds):
     """
     Convert duration in seconds to HH:MM:SS format string.
-    
+
     Args:
         duration_seconds (int or float): Duration in seconds to convert
-        
+
     Returns:
         str: Time formatted as "HH:MM:SS" with leading zeros
-        
+
     Example:
         >>> seconds_to_hms(3661)
         '01:01:01'
@@ -963,13 +996,13 @@ def seconds_to_hms(duration_seconds):
     """
     # Convert to integer to handle float inputs
     duration_seconds = int(duration_seconds)
-    
+
     # Calculate hours, minutes, and seconds
     hours = duration_seconds // 3600
     remaining_seconds = duration_seconds % 3600
     minutes = remaining_seconds // 60
     seconds = remaining_seconds % 60
-    
+
     # Format with leading zeros
     return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 

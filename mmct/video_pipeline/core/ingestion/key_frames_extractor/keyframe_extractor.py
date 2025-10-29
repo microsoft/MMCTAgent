@@ -8,7 +8,7 @@ from typing import List, Dict, Any, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor
 import asyncio
 
-from mmct.video_pipeline.utils.helper import get_media_folder, get_file_hash
+from mmct.video_pipeline.utils.helper import get_media_folder, get_file_hash, get_video_properties
 
 logger = logging.getLogger(__name__)
 
@@ -244,25 +244,10 @@ class KeyframeExtractor:
     def get_video_properties(video_path: str) -> Dict[str, Any]:
         """
         Quick probe of basic video properties.
+
+        Deprecated: Use mmct.video_pipeline.utils.helper.get_video_properties instead.
         """
-        cap = cv2.VideoCapture(video_path)
-        if not cap.isOpened():
-            raise ValueError(f"Cannot open video: {video_path}")
-
-        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        fps = float(cap.get(cv2.CAP_PROP_FPS)) or 0.0
-        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        duration_seconds = (frame_count / fps) if fps > 0 else 0.0
-        cap.release()
-
-        return {
-            "width": width,
-            "height": height,
-            "fps": fps,
-            "frame_count": frame_count,
-            "duration_seconds": duration_seconds,
-        }
+        return get_video_properties(video_path)
 
     async def extract_keyframes(
         self,

@@ -49,6 +49,7 @@ async def download_and_encode_blob(blob_name: str, container_name: str, save_loc
 
 async def query_frame(
     query: Annotated[str, "user query according to which video content has to be analyzeds. e.g. 'What materials are required to prepare the chilly nursery bed, and what are their uses?','count the person doing exercise in the video?'"],
+    index_name: Annotated[str, "search index name"],
     frame_ids: Annotated[Optional[list], "List of specific frame filenames to analyze (e.g., ['video_123.jpg', 'video_456.jpg'])"] = None,
     video_id: Annotated[Optional[str], "Unique video identifier hash for frame retrieval"] = None,
     timestamps: Annotated[Optional[list], "List of time range pairs in HH:MM:SS format like [start_time, end_time], e.g., [['00:07:45', '00:09:44']]. Only 1 start_time, end)time pair"] = None
@@ -68,7 +69,7 @@ async def query_frame(
     # Initialize searcher
     searcher = KeyframeSearcher(
         search_endpoint=search_endpoint,
-        index_name=os.getenv("KEYFRAME_INDEX_NAME")
+        index_name=f"keyframes-{index_name}",
     )
 
     # Determine which frames to use
@@ -97,8 +98,7 @@ async def query_frame(
             results = await searcher.search_keyframes(
                 query=query,
                 top_k=5,
-                video_filter=combined_filter,
-                min_similarity_score=0.001  # Filter out noisy/irrelevant frames
+                video_filter=combined_filter
             )
 
             # check for query matching and check fetched frames
