@@ -182,74 +182,68 @@ def parse_srt_timestamps(srt_content: str) -> list:
     return segments
 
 
-def split_transcript_by_segments(srt_content: str, segment_count: int = 2) -> list:
+def split_transcript_by_time(srt_content: str, split_time_seconds: float) -> tuple[str, str]:
     """
-    Split transcript content into segments for parallel processing.
-    Resets timestamps for each chunk to start from 0 (matching video chunks created with FFmpeg).
+    Split transcript content into two parts at a specific time point.
+    Splits at the exact time where the video is split, ensuring alignment.
+    Resets timestamps for Part B to start from 0 (matching video chunks created with FFmpeg).
 
     Args:
         srt_content: Original SRT content
-        segment_count: Number of segments to split into (default: 2)
+        split_time_seconds: Time in seconds where to split the transcript (matches video split point)
 
     Returns:
-        list: List of SRT content strings for each segment
+        tuple: (Part A SRT content, Part B SRT content)
     """
     segments = parse_srt_timestamps(srt_content)
 
     if not segments:
-        return [srt_content]
+        return srt_content, ""
 
-    # Split segments into chunks
-    chunk_size = len(segments) // segment_count
-    transcript_chunks = []
+    # Split segments based on time
+    part_a_segments = []
+    part_b_segments = []
 
-    for i in range(segment_count):
-        start_idx = i * chunk_size
-        if i == segment_count - 1:
-            # Last chunk gets remaining segments
-            end_idx = len(segments)
+    for segment in segments:
+        # If segment starts before split time, it goes to Part A
+        # If segment starts at or after split time, it goes to Part B
+        if segment['start_time'] < split_time_seconds:
+            part_a_segments.append(segment)
         else:
-            end_idx = (i + 1) * chunk_size
+            part_b_segments.append(segment)
 
-        chunk_segments = segments[start_idx:end_idx]
+    # Helper to convert seconds to SRT timestamp format
+    def seconds_to_timestamp(seconds):
+        seconds = max(0, seconds)
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = seconds % 60
+        return f"{hours:02d}:{minutes:02d}:{secs:06.3f}".replace('.', ',')
 
-        if not chunk_segments:
-            continue
+    # Build Part A SRT (keep original timestamps)
+    part_a_srt = ""
+    for i, segment in enumerate(part_a_segments, 1):
+        start_timestamp = seconds_to_timestamp(segment['start_time'])
+        end_timestamp = seconds_to_timestamp(segment['end_time'])
+        part_a_srt += f"{i}\n{start_timestamp} --> {end_timestamp}\n{segment['text']}\n\n"
 
-        # Calculate time offset for chunks after the first one (Part B, C, etc.)
-        # Part A (i == 0) keeps original timestamps, others reset to start from 0
-        if i == 0:
-            # Part A: Keep original timestamps
-            time_offset = 0
-        else:
-            # Part B and beyond: Reset timestamps to start from 0
-            # This matches what FFmpeg does with -avoid_negative_ts make_zero
-            time_offset = chunk_segments[0]['start_time']
+    # Build Part B SRT (reset timestamps to start from 0)
+    part_b_srt = ""
+    if part_b_segments:
+        # Calculate time offset to reset Part B timestamps to 0
+        time_offset = part_b_segments[0]['start_time']
 
-        # Rebuild SRT format for this chunk
-        chunk_srt = ""
-        for j, segment in enumerate(chunk_segments, 1):
-            # Convert seconds back to SRT timestamp format
-            def seconds_to_timestamp(seconds):
-                # Ensure non-negative seconds
-                seconds = max(0, seconds)
-                hours = int(seconds // 3600)
-                minutes = int((seconds % 3600) // 60)
-                secs = seconds % 60
-                return f"{hours:02d}:{minutes:02d}:{secs:06.3f}".replace('.', ',')
-
-            # Apply offset (0 for Part A, calculated offset for Part B+)
+        for i, segment in enumerate(part_b_segments, 1):
             adjusted_start_time = segment['start_time'] - time_offset
             adjusted_end_time = segment['end_time'] - time_offset
 
             start_timestamp = seconds_to_timestamp(adjusted_start_time)
             end_timestamp = seconds_to_timestamp(adjusted_end_time)
+            part_b_srt += f"{i}\n{start_timestamp} --> {end_timestamp}\n{segment['text']}\n\n"
+    else:
+        logger.warning(f"No transcript segments found after split time {split_time_seconds}s")
 
-            chunk_srt += f"{j}\n{start_timestamp} --> {end_timestamp}\n{segment['text']}\n\n"
-
-        transcript_chunks.append(chunk_srt.strip())
-
-    return transcript_chunks
+    return part_a_srt.strip(), part_b_srt.strip()
 
 
 async def check_video_already_ingested(hash_id: str, index_name: str) -> bool:

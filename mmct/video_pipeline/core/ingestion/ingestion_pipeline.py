@@ -22,7 +22,7 @@ from mmct.video_pipeline.core.ingestion.utils.helper import (
     check_video_already_ingested,
     split_video_if_needed,
     load_srt,
-    split_transcript_by_segments,
+    split_transcript_by_time,
     get_video_duration,
 )
 
@@ -511,7 +511,8 @@ class IngestionPipeline:
             raise
 
     async def _prepare_transcript_paths(
-        self, video_paths: list, hash_suffixes: list, base_hash_id: str
+        self, video_paths: list, hash_suffixes: list, base_hash_id: str,
+        video_split_time: Optional[float] = None
     ) -> list:
         """
         Prepare transcript paths for video parts.
@@ -521,6 +522,7 @@ class IngestionPipeline:
             video_paths: List of video part paths
             hash_suffixes: List of hash suffixes for each part
             base_hash_id: Base hash ID for the video
+            video_split_time: Time in seconds where video was split (required if len(video_paths) == 2)
 
         Returns:
             list: List of transcript paths corresponding to each video part
@@ -535,12 +537,15 @@ class IngestionPipeline:
         if len(video_paths) == 1:
             return [self.transcript_path]
 
-        # Multiple video parts - split transcript
+        # Multiple video parts - split transcript at same time as video
         self.logger.info(
-            "Video was split and transcript_path provided. Splitting transcript into parts..."
+            "Video was split and transcript_path provided. Splitting transcript at time-based boundary..."
         )
         transcript_content = await load_srt(self.transcript_path)
-        transcript_chunks = split_transcript_by_segments(transcript_content, len(video_paths))
+
+        # Split transcript by time to match video split
+        part_a_srt, part_b_srt = split_transcript_by_time(transcript_content, video_split_time)
+        transcript_chunks = [part_a_srt, part_b_srt]
 
         # Save transcript chunks to temporary files
         media_folder = await get_media_folder()
@@ -974,9 +979,12 @@ class IngestionPipeline:
             # Generate base hash ID from first video part for consistent naming
             base_hash_id = await get_file_hash(file_path=video_paths[0])
 
+            # Calculate video split time (only needed if video was split into 2 parts)
+            video_split_time = parent_video_duration / 2 if len(video_paths) == 2 else None
+
             # Prepare transcript paths (handles both single and split scenarios)
             transcript_paths = await self._prepare_transcript_paths(
-                video_paths, hash_suffixes, base_hash_id
+                video_paths, hash_suffixes, base_hash_id, video_split_time
             )
 
             # Process all video parts using unified approach (works for both single and multiple parts)
@@ -1063,154 +1071,6 @@ class IngestionPipeline:
                     pass  # Ignore cleanup errors during exception handling
 
             self.logger.exception(f"Exception occurred while running Ingestion pipeline: {e}")
-            raise
-
-    @classmethod
-    async def process_videos_parallel(
-        cls,
-        video_paths: List[str],
-        index_name: str,
-        language: Optional[Languages] = None,
-        transcription_service: Optional[str] = TranscriptionServices.AZURE_STT.value,
-        urls: Optional[List[str]] = None,
-        transcript_paths: Optional[List[str]] = None,
-        disable_console_log: bool = False,
-        frame_stacking_grid_size: int = 4,
-        max_concurrent: int = 3,
-    ) -> List[str]:
-        """
-        Process multiple videos in parallel using separate pipeline instances.
-
-        Args:
-            video_paths: List of video file paths to process
-            index_name: Azure AI Search index name
-            language: Language for transcription (optional if transcript_paths is provided)
-            transcription_service: Transcription service to use (only used if transcript_paths not provided)
-            urls: Optional list of URLs (must match video_paths length)
-            transcript_paths: Optional list of transcript file paths (must match video_paths length)
-            disable_console_log: Whether to disable console logging
-            frame_stacking_grid_size: Grid size for frame stacking
-            max_concurrent: Maximum number of concurrent video processing tasks
-
-        Returns:
-            List of hash IDs for successfully processed videos
-        """
-        if urls and len(urls) != len(video_paths):
-            raise ValueError("urls length must match video_paths length")
-
-        if transcript_paths and len(transcript_paths) != len(video_paths):
-            raise ValueError("transcript_paths length must match video_paths length")
-
-        # Create semaphore to limit concurrent processing
-        semaphore = asyncio.Semaphore(max_concurrent)
-
-        async def process_single_video(
-            video_path: str, url: Optional[str] = None, transcript_path: Optional[str] = None
-        ) -> Optional[str]:
-            """Process a single video with semaphore control."""
-            async with semaphore:
-                try:
-                    # Create separate instance for each video
-                    pipeline = cls(
-                        video_path=video_path,
-                        index_name=index_name,
-                        language=language,
-                        transcription_service=transcription_service,
-                        url=url,
-                        transcript_path=transcript_path,
-                        disable_console_log=disable_console_log,
-                        frame_stacking_grid_size=frame_stacking_grid_size,
-                    )
-
-                    # Process the video
-                    await pipeline()
-
-                    # Return hash ID for tracking
-                    hash_id = await get_file_hash(file_path=video_path)
-                    return hash_id
-
-                except Exception as e:
-                    pipeline.logger.error(f"Failed to process video {video_path}: {e}")
-                    return None
-
-        # Create tasks for all videos
-        tasks = []
-        for i, video_path in enumerate(video_paths):
-            url = urls[i] if urls else None
-            transcript_path = transcript_paths[i] if transcript_paths else None
-            task = process_single_video(video_path, url, transcript_path)
-            tasks.append(task)
-
-        # Execute all tasks in parallel (with semaphore limiting concurrency)
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-
-        # Filter successful results
-        successful_hash_ids = []
-        for i, result in enumerate(results):
-            if isinstance(result, Exception):
-                print(f"Error processing {video_paths[i]}: {result}")
-            elif result is not None:
-                successful_hash_ids.append(result)
-
-        return successful_hash_ids
-
-    async def process_with_context(self, context: ProcessingContext) -> ProcessingContext:
-        """
-        Process a video using an existing context - useful for advanced parallel scenarios.
-
-        Args:
-            context: Pre-initialized ProcessingContext
-
-        Returns:
-            Updated ProcessingContext with processing results
-        """
-        try:
-            # Get blob manager
-            blob_manager = await self._get_blob_manager()
-
-            # Set keyframes blob URL
-            context.keyframes_blob_folder_url = await blob_manager.get_blob_url(
-                container=self.keyframe_container, blob_name=f"{context.hash_id}"
-            )
-
-            # Run functional pipeline methods
-            context = await self.get_transcription(context, blob_manager)
-            self.logger.info("Transcript Generated!")
-
-            # Generate semantic chapters from transcript
-            context = await self._generate_semantic_chapters(context, self.url)
-
-            if not context.is_already_ingested:
-                self.logger.info(
-                    "Chapter generated for the visual summary and successfully ingested to index!"
-                )
-
-            # Upload files in batches
-            for batch in chunked(context.pending_upload_tasks, 5):
-                upload_results = await asyncio.gather(*batch)
-                del upload_results
-                gc.collect()
-
-            await blob_manager.close()
-
-            # Clean up local files
-            await remove_file(context.hash_id)
-
-            # Clean up local resources
-            for resource_path in context.local_resources:
-                try:
-                    if os.path.exists(resource_path):
-                        if os.path.isfile(resource_path):
-                            os.remove(resource_path)
-                        elif os.path.isdir(resource_path):
-                            shutil.rmtree(resource_path)
-                except Exception as e:
-                    self.logger.warning(f"Failed to remove local resource {resource_path}: {e}")
-
-            return context
-
-        except Exception as e:
-            self.logger.exception(f"Exception occurred while processing with context: {e}")
             raise
 
 
