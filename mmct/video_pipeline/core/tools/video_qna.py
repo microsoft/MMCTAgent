@@ -30,7 +30,7 @@ from mmct.video_pipeline.prompts_and_description import (
 from autogen_ext.models.cache import ChatCompletionCache, CHAT_CACHE_VALUE_TYPE
 from autogen_ext.cache_store.diskcache import DiskCacheStore
 from diskcache import Cache as DiskCache
-from mmct.llm_client import LLMClient  # Keep for backward compatibility
+from mmct.providers.factory import provider_factory
 
 load_dotenv(override=True)
 
@@ -92,16 +92,9 @@ class VideoQnA:
 
         # Initialize providers if not provided
         if llm_provider is None:
-            # Fall back to old pattern for backward compatibility
-            service_provider = os.getenv("LLM_PROVIDER", "azure")
-            self.model_client = LLMClient(
-                autogen=True, service_provider=service_provider
-            ).get_client()
-        else:
-            # Use provider pattern - note: this would need autogen client wrapper
-            self.model_client = LLMClient(
-                autogen=True, service_provider=os.getenv("LLM_PROVIDER", "azure")
-            ).get_client()
+            llm_provider = provider_factory.create_llm_provider()
+
+        self.model_client = llm_provider.get_autogen_client()
 
         # Only enable caching if cache parameter is True
         if self.cache:

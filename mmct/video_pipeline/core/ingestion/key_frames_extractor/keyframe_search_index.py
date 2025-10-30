@@ -1,4 +1,4 @@
-from typing import List, Dict, Any, Optional
+from typing import List, Optional
 import logging
 
 from mmct.providers.azure_providers.search_provider import AzureSearchProvider
@@ -14,8 +14,6 @@ from azure.search.documents.indexes.models import (
     HnswAlgorithmConfiguration,
     VectorSearchProfile
 )
-from azure.search.documents.indexes.aio import SearchIndexClient
-from mmct.providers.credentials import AzureCredentials
 
 logger = logging.getLogger(__name__)
 
@@ -42,10 +40,6 @@ class KeyframeSearchIndex:
         }
         self.provider = AzureSearchProvider(config)
 
-        # Initialize index client for schema management
-        self.credential = AzureCredentials.get_async_credentials()
-        self.index_client = SearchIndexClient(endpoint=search_endpoint, credential=self.credential)
-
     async def create_keyframe_index_if_not_exists(self) -> bool:
         """
         Create the keyframe index with the proper schema if it doesn't exist.
@@ -55,19 +49,9 @@ class KeyframeSearchIndex:
         """
         try:
             # Check if index exists
-            try:
-                existing_index = await self.index_client.get_index(self.index_name)
-                if existing_index:
-                    logger.info(f"Keyframe index '{self.index_name}' already exists")
-                    return False
-            except Exception as e:
-                # Check if it's specifically a "not found" error vs other errors
-                if "ResourceNotFound" in str(e) or "NotFound" in str(e) or "does not exist" in str(e):
-                    logger.info(f"Keyframe index '{self.index_name}' does not exist, will create")
-                else:
-                    logger.error(f"Error checking if index exists: {e}")
-                    # If we can't determine if index exists, try to create and handle the error below
-                    pass
+            if await self.provider.index_exists(self.index_name):
+                logger.info(f"Keyframe index '{self.index_name}' already exists")
+                return False
 
             # Define keyframe-specific fields (matching reference schema)
             fields = [
@@ -77,7 +61,7 @@ class KeyframeSearchIndex:
                 SearchableField(name="keyframe_filename", type=SearchFieldDataType.String,
                               filterable=True, facetable=True),
                 SearchField(name="clip_embedding", type=SearchFieldDataType.Collection(SearchFieldDataType.Single),
-                           searchable=True, retrievable=False, vector_search_dimensions=512,
+                           searchable=True, vector_search_dimensions=512,
                            vector_search_profile_name="clip-profile"),
                 SimpleField(name="created_at", type=SearchFieldDataType.DateTimeOffset,
                            filterable=True, sortable=True),
@@ -85,14 +69,13 @@ class KeyframeSearchIndex:
                            filterable=True, sortable=True),
                 SimpleField(name="timestamp_seconds", type=SearchFieldDataType.Double,
                            filterable=True, sortable=True),
-                SimpleField(name="blob_url", type=SearchFieldDataType.String,
-                           retrievable=True),
+                SimpleField(name="blob_url", type=SearchFieldDataType.String),
                 SimpleField(name="parent_id", type=SearchFieldDataType.String,
-                           filterable=True, retrievable=True),
+                           filterable=True),
                 SimpleField(name="parent_duration", type=SearchFieldDataType.Double,
-                           filterable=True, sortable=True, retrievable=True),
+                           filterable=True, sortable=True),
                 SimpleField(name="video_duration", type=SearchFieldDataType.Double,
-                           filterable=True, sortable=True, retrievable=True)
+                           filterable=True, sortable=True)
             ]
 
             # Configure vector search for CLIP embeddings
@@ -123,36 +106,11 @@ class KeyframeSearchIndex:
                 vector_search=vector_search
             )
 
-            try:
-                await self.index_client.create_index(index)
-                logger.info(f"Successfully created keyframe index '{self.index_name}'")
-            except Exception as create_error:
-                if "ResourceNameAlreadyInUse" in str(create_error) or "already exists" in str(create_error):
-                    logger.info(f"Keyframe index '{self.index_name}' already exists (detected during creation)")
-                    return False  # Index exists, that's fine
-                else:
-                    raise  # Re-raise other errors
-
-            return True
+            return await self.provider.create_index(self.index_name, index)
 
         except Exception as e:
             logger.error(f"Failed to create keyframe index: {e}")
             raise
-
-    def create_frame_documents(self, frame_embeddings: List[FrameEmbedding],
-                             video_id: str, video_path: str,
-                             parent_id: Optional[str] = None,
-                             parent_duration: Optional[float] = None,
-                             video_duration: Optional[float] = None) -> List[Dict[str, Any]]:
-        """
-        Create search documents from frame embeddings.
-
-        Deprecated: Use mmct.video_pipeline.utils.video_frame_search.create_frame_documents_from_embeddings instead.
-        """
-        return create_frame_documents_from_embeddings(
-            frame_embeddings, video_id, video_path,
-            parent_id, parent_duration, video_duration
-        )
 
     async def upload_frame_embeddings(self, frame_embeddings: List[FrameEmbedding],
                                     video_id: str, video_path: str,
@@ -186,7 +144,7 @@ class KeyframeSearchIndex:
                 # Continue with upload anyway - index might already exist
 
             # Create documents
-            documents = self.create_frame_documents(
+            documents = create_frame_documents_from_embeddings(
                 frame_embeddings, video_id, video_path,
                 parent_id, parent_duration, video_duration
             )
@@ -210,8 +168,6 @@ class KeyframeSearchIndex:
             return False
 
     async def close(self):
-        """Close the provider and index client."""
+        """Close the provider."""
         if self.provider:
             await self.provider.close()
-        if self.index_client:
-            await self.index_client.close()

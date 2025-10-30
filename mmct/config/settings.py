@@ -1,6 +1,8 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
 from typing import Optional
+from dotenv import load_dotenv, find_dotenv
+import os
 
 
 class LLMConfig(BaseSettings):
@@ -30,19 +32,7 @@ class LLMConfig(BaseSettings):
     
     def __init__(self, **kwargs):
         # Force load environment variables before validation
-        from dotenv import load_dotenv, find_dotenv
-        import os
-        
-        # Try to find and load .env file
-        env_file = find_dotenv()
-        if env_file:
-            load_dotenv(env_file, override=True)
-        else:
-            # If find_dotenv fails, try relative paths
-            for path in [".env", "../.env", "../../.env"]:
-                if os.path.exists(path):
-                    load_dotenv(path, override=True)
-                    break
+        load_dotenv(find_dotenv())
         
         # If no explicit values provided, use environment variables
         if not kwargs:
@@ -87,19 +77,7 @@ class SearchConfig(BaseSettings):
     
     def __init__(self, **kwargs):
         # Force load environment variables before validation
-        from dotenv import load_dotenv, find_dotenv
-        import os
-        
-        # Try to find and load .env file
-        env_file = find_dotenv()
-        if env_file:
-            load_dotenv(env_file, override=True)
-        else:
-            # If find_dotenv fails, try relative paths
-            for path in [".env", "../.env", "../../.env"]:
-                if os.path.exists(path):
-                    load_dotenv(path, override=True)
-                    break
+        load_dotenv(find_dotenv())
         
         # If no explicit values provided, use environment variables
         if not kwargs:
@@ -138,19 +116,7 @@ class EmbeddingConfig(BaseSettings):
     
     def __init__(self, **kwargs):
         # Force load environment variables before validation
-        from dotenv import load_dotenv, find_dotenv
-        import os
-        
-        # Try to find and load .env file
-        env_file = find_dotenv()
-        if env_file:
-            load_dotenv(env_file, override=True)
-        else:
-            # If find_dotenv fails, try relative paths
-            for path in [".env", "../.env", "../../.env"]:
-                if os.path.exists(path):
-                    load_dotenv(path, override=True)
-                    break
+        load_dotenv(find_dotenv())
         
         # If no explicit values provided, use environment variables with fallbacks to LLM config
         if not kwargs:
@@ -197,16 +163,7 @@ class ImageEmbeddingConfig(BaseSettings):
         from dotenv import load_dotenv, find_dotenv
         import os
 
-        # Try to find and load .env file
-        env_file = find_dotenv()
-        if env_file:
-            load_dotenv(env_file, override=True)
-        else:
-            # If find_dotenv fails, try relative paths
-            for path in [".env", "../.env", "../../.env"]:
-                if os.path.exists(path):
-                    load_dotenv(path, override=True)
-                    break
+        load_dotenv(find_dotenv())
 
         # If no explicit values provided, use environment variables with defaults
         if not kwargs:
@@ -233,19 +190,44 @@ class ImageEmbeddingConfig(BaseSettings):
 
 class TranscriptionConfig(BaseSettings):
     """Transcription provider configuration."""
-    
+
     provider: str = Field(default="azure", env="TRANSCRIPTION_PROVIDER")
-    endpoint: str = Field(..., env="SPEECH_SERVICE_ENDPOINT")
+    # Whisper API settings
+    endpoint: Optional[str] = Field(default=None, env="WHISPER_ENDPOINT")
     deployment_name: Optional[str] = Field(default=None, env="SPEECH_SERVICE_DEPLOYMENT_NAME")
     api_version: str = Field(default="2024-08-01-preview", env="SPEECH_SERVICE_API_VERSION")
     api_key: Optional[str] = Field(default=None, env="SPEECH_SERVICE_KEY")
+    # Azure Speech SDK (STT) settings
+    region: Optional[str] = Field(default=None, env="SPEECH_SERVICE_REGION")
+    resource_id: Optional[str] = Field(default=None, env="SPEECH_SERVICE_RESOURCE_ID")
+    # Common settings
     use_managed_identity: bool = Field(default=True, env="SPEECH_USE_MANAGED_IDENTITY")
     timeout: int = Field(default=200, env="SPEECH_TIMEOUT")
 
+    def __init__(self, **kwargs):
+        # Force load environment variables before validation
+        load_dotenv(find_dotenv())
+
+        # If no explicit values provided, use environment variables
+        if not kwargs:
+            kwargs = {
+                'provider': os.getenv("TRANSCRIPTION_PROVIDER", "azure"),
+                'endpoint': os.getenv("WHISPER_ENDPOINT"),
+                'deployment_name': os.getenv("SPEECH_SERVICE_DEPLOYMENT_NAME"),
+                'api_version': os.getenv("SPEECH_SERVICE_API_VERSION", "2024-08-01-preview"),
+                'api_key': os.getenv("SPEECH_SERVICE_KEY"),
+                'region': os.getenv("SPEECH_SERVICE_REGION"),
+                'resource_id': os.getenv("SPEECH_SERVICE_RESOURCE_ID"),
+                'use_managed_identity': os.getenv("SPEECH_USE_MANAGED_IDENTITY", "true").lower() == "true",
+                'timeout': int(os.getenv("SPEECH_TIMEOUT", "200")),
+            }
+
+        super().__init__(**kwargs)
+
     model_config = SettingsConfigDict(
-        env_file=".env", 
+        env_file=".env",
         env_file_encoding="utf-8",
-        validate_assignment=True, 
+        validate_assignment=True,
         extra="ignore",
         case_sensitive=False
     )
@@ -324,19 +306,7 @@ class MMCTConfig(BaseSettings):
     
     def __init__(self, **kwargs):
         # Force load environment variables before initializing
-        from dotenv import load_dotenv, find_dotenv
-        import os
-        
-        # Try to find and load .env file
-        env_file = find_dotenv()
-        if env_file:
-            load_dotenv(env_file, override=True)
-        else:
-            # If find_dotenv fails, try relative paths
-            for path in [".env", "../.env", "../../.env"]:
-                if os.path.exists(path):
-                    load_dotenv(path, override=True)
-                    break
+        load_dotenv(find_dotenv())
         
         super().__init__(**kwargs)
         # Initialize cached configurations
@@ -352,7 +322,6 @@ class MMCTConfig(BaseSettings):
     def llm(self) -> LLMConfig:
         if self._llm is None:
             # Force load environment variables first
-            from dotenv import load_dotenv, find_dotenv
             load_dotenv(find_dotenv(), override=True)
             self._llm = LLMConfig()
         return self._llm
@@ -360,7 +329,6 @@ class MMCTConfig(BaseSettings):
     @property
     def search(self) -> SearchConfig:
         if self._search is None:
-            from dotenv import load_dotenv, find_dotenv
             load_dotenv(find_dotenv(), override=True)
             self._search = SearchConfig()
         return self._search
@@ -368,7 +336,6 @@ class MMCTConfig(BaseSettings):
     @property
     def embedding(self) -> EmbeddingConfig:
         if self._embedding is None:
-            from dotenv import load_dotenv, find_dotenv
             load_dotenv(find_dotenv(), override=True)
             self._embedding = EmbeddingConfig()
         return self._embedding
@@ -376,7 +343,6 @@ class MMCTConfig(BaseSettings):
     @property
     def transcription(self) -> TranscriptionConfig:
         if self._transcription is None:
-            from dotenv import load_dotenv, find_dotenv
             load_dotenv(find_dotenv(), override=True)
             self._transcription = TranscriptionConfig()
         return self._transcription
@@ -384,7 +350,6 @@ class MMCTConfig(BaseSettings):
     @property
     def storage(self) -> StorageConfig:
         if self._storage is None:
-            from dotenv import load_dotenv, find_dotenv
             load_dotenv(find_dotenv(), override=True)
             self._storage = StorageConfig()
         return self._storage
@@ -392,7 +357,6 @@ class MMCTConfig(BaseSettings):
     @property
     def security(self) -> SecurityConfig:
         if self._security is None:
-            from dotenv import load_dotenv, find_dotenv
             load_dotenv(find_dotenv(), override=True)
             self._security = SecurityConfig()
         return self._security
@@ -400,7 +364,6 @@ class MMCTConfig(BaseSettings):
     @property
     def logging(self) -> LoggingConfig:
         if self._logging is None:
-            from dotenv import load_dotenv, find_dotenv
             load_dotenv(find_dotenv(), override=True)
             self._logging = LoggingConfig()
         return self._logging

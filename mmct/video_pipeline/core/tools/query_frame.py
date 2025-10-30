@@ -10,19 +10,12 @@ from datetime import time
 from typing import Annotated, Optional
 
 from mmct.providers.factory import provider_factory
-from mmct.config.settings import MMCTConfig
 from mmct.video_pipeline.core.tools.utils.search_keyframes import KeyframeSearcher
 
-# Initialize configuration and providers
-config = MMCTConfig(model_name=os.getenv("LLM_VISION_DEPLOYMENT_NAME", "gpt-4o"))
-llm_provider = provider_factory.create_llm_provider(
-    config.llm.provider,
-    config.llm.model_dump()
-)
+# Initialize providers
+llm_provider = provider_factory.create_llm_provider()
 
-storage_provider = provider_factory.create_storage_provider(
-                config.storage.provider, config.storage.model_dump()
-            )
+storage_provider = provider_factory.create_storage_provider()
 
 async def download_and_encode_blob(blob_name: str, container_name: str, save_locally: bool = False, local_dir: str = "./debug_frames") -> Optional[str]:
     """Download JPG blob using storage_provider and encode to base64."""

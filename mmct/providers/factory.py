@@ -1,4 +1,4 @@
-from typing import Dict, Type, Any
+from typing import Dict, Type
 from loguru import logger
 
 from .base import (
@@ -14,19 +14,21 @@ from .azure_providers import (
     AzureEmbeddingProvider,
     AzureSearchProvider,
     AzureTranscriptionProvider,
+    AzureSpeechServiceProvider,
     AzureVisionProvider,
     AzureStorageProvider
 )
 from .openai_providers import (
-    OpenAILLMProvider, 
-    OpenAIEmbeddingProvider, 
-    OpenAIVisionProvider, 
+    OpenAILLMProvider,
+    OpenAIEmbeddingProvider,
+    OpenAIVisionProvider,
     OpenAITranscriptionProvider
 )
 from ..utils.error_handler import ConfigurationException
 from .custom_providers import (
     CustomSearchProvider
 )
+from ..config.settings import MMCTConfig
 
 class ProviderFactory:
     """Factory class for creating provider instances."""
@@ -54,6 +56,7 @@ class ProviderFactory:
     
     _transcription_providers: Dict[str, Type[TranscriptionProvider]] = {
         'azure': AzureTranscriptionProvider,
+        'azure_speech': AzureSpeechServiceProvider,
         'openai': OpenAITranscriptionProvider,
     }
 
@@ -62,113 +65,124 @@ class ProviderFactory:
     }
 
     @classmethod
-    def create_llm_provider(cls, provider_name: str, config: Dict[str, Any]) -> LLMProvider:
+    def create_llm_provider(cls, provider_name: str = None) -> LLMProvider:
         """
         Create LLM provider instance.
-        
+
         Args:
-            provider_name: Name of the provider
-            config: Provider configuration
-            
+            provider_name: Name of the provider (optional, defaults to config)
+
         Returns:
             LLMProvider instance
-            
+
         Raises:
             ConfigurationException: If provider is not supported
         """
+        config = MMCTConfig()
+        if provider_name is None:
+            provider_name = config.llm.provider
+
         if provider_name not in cls._llm_providers:
             raise ConfigurationException(
                 f"Unknown LLM provider: {provider_name}. "
                 f"Supported providers: {list(cls._llm_providers.keys())}"
             )
-        
+
         provider_class = cls._llm_providers[provider_name]
         logger.info(f"Creating LLM provider: {provider_name}")
-        return provider_class(config)
+        return provider_class(config.llm.model_dump())
     
     @classmethod
-    def create_embedding_provider(cls, provider_name: str, config: Dict[str, Any]) -> EmbeddingProvider:
+    def create_embedding_provider(cls, provider_name: str = None) -> EmbeddingProvider:
         """
         Create embedding provider instance.
-        
+
         Args:
-            provider_name: Name of the provider
-            config: Provider configuration
-            
+            provider_name: Name of the provider (optional, defaults to config)
+
         Returns:
             EmbeddingProvider instance
-            
+
         Raises:
             ConfigurationException: If provider is not supported
         """
+        config = MMCTConfig()
+        if provider_name is None:
+            provider_name = config.embedding.provider
+
         if provider_name not in cls._embedding_providers:
             raise ConfigurationException(
                 f"Unknown embedding provider: {provider_name}. "
                 f"Supported providers: {list(cls._embedding_providers.keys())}"
             )
-        
+
         provider_class = cls._embedding_providers[provider_name]
         logger.info(f"Creating embedding provider: {provider_name}")
-        return provider_class(config)
+        return provider_class(config.embedding.model_dump())
     
     @classmethod
-    def create_search_provider(cls, provider_name: str, config: Dict[str, Any]) -> SearchProvider:
+    def create_search_provider(cls, provider_name: str = None) -> SearchProvider:
         """
         Create search provider instance.
-        
+
         Args:
-            provider_name: Name of the provider
-            config: Provider configuration
-            
+            provider_name: Name of the provider (optional, defaults to config)
+
         Returns:
             SearchProvider instance
-            
+
         Raises:
             ConfigurationException: If provider is not supported
         """
+        config = MMCTConfig()
+        if provider_name is None:
+            provider_name = config.search.provider
+
         if provider_name not in cls._search_providers:
             raise ConfigurationException(
                 f"Unknown search provider: {provider_name}. "
                 f"Supported providers: {list(cls._search_providers.keys())}"
             )
-        
+
         provider_class = cls._search_providers[provider_name]
         logger.info(f"Creating search provider: {provider_name}")
-        return provider_class(config)
+        return provider_class(config.search.model_dump())
     
     @classmethod
-    def create_vision_provider(cls, provider_name: str, config: Dict[str, Any]) -> VisionProvider:
+    def create_vision_provider(cls, provider_name: str = None) -> VisionProvider:
         """
         Create vision provider instance.
-        
+
         Args:
-            provider_name: Name of the provider
-            config: Provider configuration
-            
+            provider_name: Name of the provider (optional, defaults to config)
+
         Returns:
             VisionProvider instance
-            
+
         Raises:
             ConfigurationException: If provider is not supported
         """
+        config = MMCTConfig()
+        if provider_name is None:
+            provider_name = config.vision.provider
+
         if provider_name not in cls._vision_providers:
             raise ConfigurationException(
                 f"Unknown vision provider: {provider_name}. "
                 f"Supported providers: {list(cls._vision_providers.keys())}"
             )
-        
+
         provider_class = cls._vision_providers[provider_name]
         logger.info(f"Creating vision provider: {provider_name}")
-        return provider_class(config)
+        return provider_class(config.vision.model_dump())
     
     @classmethod
-    def create_transcription_provider(cls, provider_name: str, config: Dict[str, Any]) -> TranscriptionProvider:
+    def create_transcription_provider(cls, provider_name: str = None) -> TranscriptionProvider:
         """
         Create transcription provider instance.
 
         Args:
-            provider_name: Name of the provider
-            config: Provider configuration
+            provider_name: Name of the provider (optional, defaults to config)
 
         Returns:
             TranscriptionProvider instance
@@ -176,6 +190,10 @@ class ProviderFactory:
         Raises:
             ConfigurationException: If provider is not supported
         """
+        config = MMCTConfig()
+        if provider_name is None:
+            provider_name = config.transcription.provider
+
         if provider_name not in cls._transcription_providers:
             raise ConfigurationException(
                 f"Unknown transcription provider: {provider_name}. "
@@ -184,16 +202,15 @@ class ProviderFactory:
 
         provider_class = cls._transcription_providers[provider_name]
         logger.info(f"Creating transcription provider: {provider_name}")
-        return provider_class(config)
+        return provider_class(config.transcription.model_dump())
 
     @classmethod
-    def create_storage_provider(cls, provider_name: str, config: Dict[str, Any]) -> StorageProvider:
+    def create_storage_provider(cls, provider_name: str = None) -> StorageProvider:
         """
         Create storage provider instance.
 
         Args:
-            provider_name: Name of the provider
-            config: Provider configuration
+            provider_name: Name of the provider (optional, defaults to config)
 
         Returns:
             StorageProvider instance
@@ -201,6 +218,10 @@ class ProviderFactory:
         Raises:
             ConfigurationException: If provider is not supported
         """
+        config = MMCTConfig()
+        if provider_name is None:
+            provider_name = config.storage.provider
+
         if provider_name not in cls._storage_providers:
             raise ConfigurationException(
                 f"Unknown storage provider: {provider_name}. "
@@ -209,7 +230,7 @@ class ProviderFactory:
 
         provider_class = cls._storage_providers[provider_name]
         logger.info(f"Creating storage provider: {provider_name}")
-        return provider_class(config)
+        return provider_class(config.storage.model_dump())
 
     @classmethod
     def get_supported_providers(cls) -> Dict[str, list]:
