@@ -5,7 +5,6 @@ from datetime import time
 from typing import List, Dict, Any, Union, Optional
 from mmct.config.settings import MMCTConfig
 from mmct.providers.factory import provider_factory
-from mmct.llm_client import LLMClient
 from mmct.video_pipeline.core.ingestion.models import (
     ChapterCreationResponse,
     SubjectVarietyResponse,
@@ -23,14 +22,10 @@ load_dotenv(find_dotenv(), override=True)
 
 class ChapterGeneration:
     def __init__(self, keyframe_index, frame_stacking_grid_size=4):
-        self.llm_client = LLMClient(
-            service_provider=os.getenv("LLM_PROVIDER", "azure"), isAsync=True
-        ).get_client()
-        self.frame_stacking_grid_size = frame_stacking_grid_size
         self.config = MMCTConfig()
-        self.search_provider = provider_factory.create_search_provider(
-            self.config.search.provider, self.config.search.model_dump()
-        )
+        self.llm_provider = provider_factory.create_llm_provider()
+        self.frame_stacking_grid_size = frame_stacking_grid_size
+        self.search_provider = provider_factory.create_search_provider()
         self.index_name = keyframe_index
       
 
@@ -120,18 +115,13 @@ class ChapterGeneration:
                 },
             ]
 
-            response = await self.llm_client.beta.chat.completions.parse(
-                model=os.getenv(
-                    "LLM_MODEL_NAME"
-                    if os.getenv("LLM_PROVIDER") == "azure"
-                    else "OPENAI_MODEL_NAME"
-                ),
+            result = await self.llm_provider.chat_completion(
                 messages=prompt,
                 temperature=0,
                 response_format=SubjectVarietyResponse,
             )
             # Get the parsed Pydantic model from the response
-            parsed_response: SubjectVarietyResponse = response.choices[0].message.parsed
+            parsed_response: SubjectVarietyResponse = result['content']
             # Return the model as JSON string
             return parsed_response.model_dump_json()
         except Exception as e:
@@ -272,20 +262,13 @@ class ChapterGeneration:
                         ]
 
                     try:
-                        batch_response = await self.llm_client.beta.chat.completions.parse(
-                            model=os.getenv(
-                                "LLM_MODEL_NAME"
-                                if os.getenv("LLM_PROVIDER") == "azure"
-                                else "OPENAI_MODEL_NAME"
-                            ),
+                        batch_response = await self.llm_provider.chat_completion(
                             messages=batch_prompt,
                             temperature=0,
                             response_format=ChapterCreationResponse,
                         )
 
-                        batch_result: ChapterCreationResponse = batch_response.choices[
-                            0
-                        ].message.parsed
+                        batch_result: ChapterCreationResponse = batch_response['content']
                         results.append(batch_result)
                         logger.info(f"single batch result:{batch_result}")
                         # Update previous analyses for next batch
@@ -320,21 +303,14 @@ class ChapterGeneration:
                         },
                     ]
 
-                    combined_response = await self.llm_client.beta.chat.completions.parse(
-                        model=os.getenv(
-                            "LLM_MODEL_NAME"
-                            if os.getenv("LLM_PROVIDER") == "azure"
-                            else "OPENAI_MODEL_NAME"
-                        ),
+                    combined_response = await self.llm_provider.chat_completion(
                         messages=summary_prompt,
                         temperature=0,
                         response_format=ChapterCreationResponse,
                     )
 
                     logger.info(f"combined batch response:{combined_response}")
-                    final_result: ChapterCreationResponse = combined_response.choices[
-                        0
-                    ].message.parsed
+                    final_result: ChapterCreationResponse = combined_response['content']
 
                 else:
                     final_result: ChapterCreationResponse = results[0]
@@ -362,18 +338,13 @@ class ChapterGeneration:
                 },
             ]
 
-            response = await self.llm_client.beta.chat.completions.parse(
-                model=os.getenv(
-                    "LLM_MODEL_NAME"
-                    if os.getenv("LLM_PROVIDER") == "azure"
-                    else "OPENAI_MODEL_NAME"
-                ),
+            response = await self.llm_provider.chat_completion(
                 messages=prompt,
                 temperature=0,
                 response_format=ChapterCreationResponse,
             )
 
-            response_object: ChapterCreationResponse = response.choices[0].message.parsed
+            response_object: ChapterCreationResponse = response['content']
 
             # Return ChapterCreationResponse instance directly
             return response_object

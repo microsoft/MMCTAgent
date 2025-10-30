@@ -16,7 +16,7 @@ from mmct.video_pipeline.core.ingestion.semantic_chunking.process_transcript imp
 )
 from loguru import logger
 from mmct.video_pipeline.core.ingestion.chapter_generator.generate_chapter import ChapterGeneration
-from mmct.llm_client import LLMClient
+from mmct.providers.factory import provider_factory
 
 from dotenv import load_dotenv, find_dotenv
 # Load environment variables
@@ -59,7 +59,7 @@ class SemanticChunking:
         self.video_duration = video_duration
         self.keyframe_blob_url = keyframe_blob_url
         self.chapter_generator = ChapterGeneration(frame_stacking_grid_size=frame_stacking_grid_size, keyframe_index=f"keyframes-{index_name}")
-        self.embed_client = LLMClient(service_provider=os.getenv("LLM_PROVIDER", "azure"), isAsync=True, embedding=True).get_client()
+        self.embedding_provider = provider_factory.create_embedding_provider()
         self.index_client = AISearchClient(
             endpoint=os.getenv("SEARCH_ENDPOINT"),
             index_name=self.index_name,
@@ -88,11 +88,7 @@ class SemanticChunking:
     
     async def _create_embedding_normal(self,text:str) -> List[float]:
         try:
-            response = await self.embed_client.embeddings.create(
-                input=[text], 
-                model= os.getenv("EMBEDDING_SERVICE_MODEL_NAME" if os.getenv("LLM_PROVIDER")=="azure" else "OPENAI_EMBEDDING_MODEL_NAME")
-            )
-            return response.data[0].embedding
+            return await self.embedding_provider.embedding(text)
         except Exception as e:
             raise Exception(f'Failed to create embedding:{e}',)
 

@@ -3,38 +3,20 @@ from PIL import Image
 import requests
 from mmct.providers.factory import provider_factory
 from mmct.config.settings import MMCTConfig
-from mmct.llm_client import LLMClient  # Keep for backward compatibility
-import os
 import io
 import base64
-import re
-import asyncio
 from dotenv import load_dotenv, find_dotenv
 
 load_dotenv(find_dotenv(), override=True)
 
 
 class GPT4V:
-    def __init__(self, llm_provider=None, vision_provider=None):
+    def __init__(self):
         # Initialize configuration
         self.config = MMCTConfig()
-        
-        # Initialize providers
-        if llm_provider is None:
-            # Fall back to old pattern for backward compatibility
-            service_provider = os.getenv("LLM_PROVIDER", "azure")
-            self.client = LLMClient(service_provider=service_provider, isAsync=True).get_client()
-            self.model_name = os.getenv(
-                "LLM_MODEL_NAME"
-                if os.getenv("LLM_PROVIDER") == "azure"
-                else "OPENAI_MODEL_NAME"
-            )
-        else:
-            # Use provider pattern
-            self.llm_provider = llm_provider
-            self.vision_provider = vision_provider or llm_provider
-            self.model_name = self.config.llm.model_name
-            self.client = LLMClient(service_provider=self.config.llm.provider, isAsync=True).get_client()
+
+        # Initialize vision provider
+        self.llm_provider = provider_factory.create_llm_provider()
 
     def convert_image(self, img_pil):
         # Convert the image to base64
@@ -76,7 +58,7 @@ class GPT4V:
                     im = self.get_concat_h_resize(*images)
             else:
                 im = images
-            response = await self.client.chat.completions.create(
+            result = await self.llm_provider.chat_completion(
                 messages=[
                     {
                         "role": "user",
@@ -94,10 +76,9 @@ class GPT4V:
                         ],
                     }
                 ],
-                model=self.model_name,
                 temperature=0,
             )
-            generated_text = response.choices[0].message.content
+            generated_text = result['content']
             return generated_text.strip()
         except Exception as e:
             raise Exception(f"Exception occured while performing GPT 4v call: {e}")

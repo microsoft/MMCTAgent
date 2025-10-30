@@ -13,7 +13,7 @@ from .azure_providers import (
     AzureLLMProvider,
     AzureEmbeddingProvider,
     AzureSearchProvider,
-    AzureTranscriptionProvider,
+    WhisperTranscriptionProvider,
     AzureSpeechServiceProvider,
     AzureVisionProvider,
     AzureStorageProvider
@@ -55,7 +55,7 @@ class ProviderFactory:
     }
     
     _transcription_providers: Dict[str, Type[TranscriptionProvider]] = {
-        'azure': AzureTranscriptionProvider,
+        'azure': WhisperTranscriptionProvider,
         'azure_speech': AzureSpeechServiceProvider,
         'openai': OpenAITranscriptionProvider,
     }
