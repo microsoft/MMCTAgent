@@ -39,7 +39,7 @@ MMCTAgent is a state-of-the-art multi-modal AI framework that brings human-like 
 
 <p align="center">
   <a href="https://arxiv.org/abs/2405.18358">
-    <img src="docs/multimedia/VideoPipeline.webp" alt="Video Pipeline - Main Architecture" width="60%" />
+    <img src="docs/multimedia/VideoPipeline.png" alt="Video Pipeline - Main Architecture" width="80%" />
   </a>
 </p>
 
@@ -261,7 +261,7 @@ Recommended (for decent speed / batching):
 - GPU: NVIDIA with ≥ 4-6 GB VRAM (e.g. RTX 2060/3060)
 - PyTorch + CUDA installed, with mixed precision support
 
-High-throughput / production (fast, large batches):
+High-throughput (fast, large batches):
 
 - 16+ cores CPU, 32+ GB RAM
 - GPU: 8-16 GB+ VRAM, fast memory bandwidth (e.g. RTX 3090, A100)
@@ -276,9 +276,6 @@ MMCTAgent uses a flexible configuration system that supports multiple cloud prov
 ```bash
 # For development
 cp config/environments/development.env .env
-
-# For production
-cp config/environments/production.env .env
 ```
 
 Then edit `.env` with your specific values.
@@ -342,15 +339,12 @@ MMCTAgent
 
 ## **Contributing**
 
-We welcome contributions from the community! MMCTAgent is an open-source project, and we encourage you to help make it better.
+This project welcomes contributions and suggestions. Most contributions require you to agree to a Contributor License Agreement (CLA) declaring that you have the right to, and actually do, grant us the rights to use your contribution. For details, visit https://cla.microsoft.com.
+When you submit a pull request, a CLA-bot will automatically determine whether you need to provide a CLA and decorate the PR appropriately (e.g., label, comment). Simply follow the instructions provided by the bot. You will only need to do this once across all repositories using our CLA.
+This project has adopted the [Microsoft Open Source Code of Conduct](https://opensource.microsoft.com/codeofconduct/). For more information see the [Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/) or contact opencode@microsoft.com with any additional questions or comments.
 
-#### Steps to Contribute
 
-1. **Fork the Repository**: Click the "Fork" button on GitHub.
-2. **Create a Feature Branch**: `git checkout -b feature/your-feature-name`
-3. **Make Changes**: Implement your improvements.
-4. **Add Tests**: Ensure your changes are well-tested.
-5. **Submit a Pull Request**: Describe your changes and submit them for review.
+> *Note:* This project is currently under active research and continuous development. While contributions are encouraged, please note that the codebase may evolve as the project matures.
 
 ## **Citation**
 

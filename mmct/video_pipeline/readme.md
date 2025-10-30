@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="https://arxiv.org/abs/2405.18358">
-    <img src="/docs/multimedia/VideoPipeline.webp" alt="Video Pipeline - Main Architecture" width="70%" />
+    <img src="/docs/multimedia/VideoPipeline.png" alt="Video Pipeline - Main Architecture" width="80%" />
   </a>
 </p>
 
@@ -24,7 +24,7 @@ MMCTAgent's Video Pipeline is a state-of-the-art multi-modal AI framework that b
 The pipeline processes videos through ingestion, then applies the **Multi-Modal Critical Thinking (MMCT)** framework for sophisticated video understanding and question answering. The **Video Agent** leverages structured reasoning with planner and critic components to deliver superior performance in complex video analysis tasks.
 
 ## **1. Video Ingestion**
-[![](/docs/multimedia/ingestionpipeline.png)](https://arxiv.org/pdf/2405.18358)
+
 The **IngestionPipeline** performs comprehensive processing of video file to extract transcript, frames, chapters, ai search index creation for downstream applications like `VideoAgent`. It includes the following steps:
 
 1. **Audio Extraction** – Extracts the audio from the input video.
