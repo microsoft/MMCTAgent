@@ -226,14 +226,11 @@ class IngestionPipeline:
         self.language = language
         self.frame_stacking_grid_size = frame_stacking_grid_size
         self.keyframe_config = keyframe_config
-        self.blob_manager = None
         self.original_video_path = video_path
 
-    async def _get_blob_manager(self):
-        """method to get blob manager instance."""
-        if self.blob_manager is None:
-            self.blob_manager = provider_factory.create_storage_provider()
-        return self.blob_manager
+    def _get_blob_manager(self):
+        """method to get a new blob manager instance."""
+        return provider_factory.create_storage_provider()
 
     async def _check_and_compress_video(self):
         """
@@ -657,7 +654,7 @@ class IngestionPipeline:
             )
 
             # Get blob manager
-            blob_manager = await self._get_blob_manager()
+            blob_manager = self._get_blob_manager()
 
             # Set keyframes blob URL
             context.keyframes_blob_folder_url = await blob_manager.get_blob_url(
