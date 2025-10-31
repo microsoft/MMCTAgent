@@ -631,17 +631,6 @@ class IngestionPipeline:
             if transcript_path:
                 self.logger.info(f"Using transcript: {os.path.basename(transcript_path)}")
 
-            # Check if this video part already exists in the index
-            is_already_ingested = await check_video_already_ingested(
-                hash_id=part_hash_id, index_name=self.index_name
-            )
-
-            if is_already_ingested:
-                self.logger.info(
-                    f"Video part with hash_id {part_hash_id} already exists in index {self.index_name}. Skipping."
-                )
-                return
-
             # Create processing context for this video part
             _, video_extension = os.path.splitext(video_path)
             # Calculate duration of this video part
@@ -971,8 +960,8 @@ class IngestionPipeline:
             if len(video_paths) > 1:
                 split_video_cleanup_paths.extend(video_paths)
 
-            # Generate base hash ID from first video part for consistent naming
-            base_hash_id = await get_file_hash(file_path=video_paths[0])
+            # Use parent_video_id as base hash ID (no need to rehash Part A)
+            base_hash_id = parent_video_id
 
             # Calculate video split time (only needed if video was split into 2 parts)
             video_split_time = parent_video_duration / 2 if len(video_paths) == 2 else None
