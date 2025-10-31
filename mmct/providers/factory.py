@@ -26,7 +26,8 @@ from .openai_providers import (
 )
 from ..utils.error_handler import ConfigurationException
 from .custom_providers import (
-    CustomSearchProvider
+    CustomSearchProvider,
+    LocalStorageProvider
 )
 from ..config.settings import MMCTConfig
 
@@ -62,6 +63,7 @@ class ProviderFactory:
 
     _storage_providers: Dict[str, Type[StorageProvider]] = {
         'azure': AzureStorageProvider,
+        'local': LocalStorageProvider
     }
 
     @classmethod

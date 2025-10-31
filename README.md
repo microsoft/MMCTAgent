@@ -298,7 +298,7 @@ SEARCH_USE_MANAGED_IDENTITY=true
 SEARCH_INDEX_NAME=your-index-name
 
 # Storage Configuration
-STORAGE_PROVIDER=azure_blob
+STORAGE_PROVIDER=azure # use `local` to store items to local storage
 STORAGE_ACCOUNT_NAME=your-storage-account
 STORAGE_USE_MANAGED_IDENTITY=true
 ```

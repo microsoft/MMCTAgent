@@ -23,6 +23,8 @@ The `base/` folder contains abstract base classes that define the interface for 
 - **`search_provider.py`** - Base class for Search Index provider
 - **`vision_provider.py`** - Base class for Vision/Image Understanding providers
 - **`transcription_provider.py`** - Base class for Audio Transcription providers
+- **`image_embedding_provider`** - Base class for image embedding generation providers
+- **`storage_provider`** - Base class for the storage providers.
 
 ### Azure Providers
 
