@@ -8,14 +8,10 @@ from typing import List, Dict, Any, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor
 import asyncio
 
-from mmct.video_pipeline.utils.helper import get_media_folder, get_file_hash
+from mmct.video_pipeline.utils.helper import get_media_folder, get_file_hash, get_video_properties
 
 logger = logging.getLogger(__name__)
 
-
-# ============================================================
-# Data classes / config
-# ============================================================
 
 @dataclass(frozen=True)
 class FrameMetadata:
@@ -220,10 +216,7 @@ def _process_segment(
     cap.release()
     return results
 
-
-# ============================================================
 # Main extractor class
-# ============================================================
 
 class KeyframeExtractor:
     """
@@ -240,29 +233,6 @@ class KeyframeExtractor:
     def __init__(self, config: Optional[KeyframeExtractionConfig] = None) -> None:
         self.config = config or KeyframeExtractionConfig()
 
-    @staticmethod
-    def get_video_properties(video_path: str) -> Dict[str, Any]:
-        """
-        Quick probe of basic video properties.
-        """
-        cap = cv2.VideoCapture(video_path)
-        if not cap.isOpened():
-            raise ValueError(f"Cannot open video: {video_path}")
-
-        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        fps = float(cap.get(cv2.CAP_PROP_FPS)) or 0.0
-        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        duration_seconds = (frame_count / fps) if fps > 0 else 0.0
-        cap.release()
-
-        return {
-            "width": width,
-            "height": height,
-            "fps": fps,
-            "frame_count": frame_count,
-            "duration_seconds": duration_seconds,
-        }
 
     async def extract_keyframes(
         self,
@@ -289,7 +259,7 @@ class KeyframeExtractor:
         os.makedirs(keyframes_dir, exist_ok=True)
 
         # Probe video metadata (frame count etc)
-        props = self.get_video_properties(video_path)
+        props = get_video_properties(video_path)
         total_frames = props["frame_count"]
         fps = props["fps"] if props["fps"] > 0 else 30.0
 
@@ -374,9 +344,8 @@ class KeyframeExtractor:
                 logger.warning(f"Could not remove {filename}: {e}")
 
 
-# ============================================================
+
 # Convenience top-level async helper
-# ============================================================
 
 async def extract_keyframes_from_video(
     video_path: str,

@@ -64,4 +64,29 @@ class CustomSearchProvider(SearchProvider):
     @handle_exceptions(retries=3, exceptions=(Exception,))
     @convert_exceptions({Exception: ProviderException})
     async def delete_document(self, doc_id: str, index_name: str = None) -> bool:
-        pass
+        """Delete a document from GraphRAG."""
+        logger.warning("Delete document not implemented for CustomSearchProvider (GraphRAG)")
+        return False
+
+    async def create_index(self, index_name: str, index_schema: Any) -> bool:
+        """
+        Index creation not applicable for GraphRAG.
+        GraphRAG manages its own internal graph structure.
+        """
+        logger.info("Index creation not applicable for GraphRAG - using internal graph structure")
+        return True
+
+    async def index_exists(self, index_name: str) -> bool:
+        """
+        Index existence check not applicable for GraphRAG.
+        GraphRAG manages its own internal graph structure.
+        """
+        return True
+
+    async def delete_index(self, index_name: str) -> bool:
+        """
+        Index deletion not applicable for GraphRAG.
+        GraphRAG manages its own internal graph structure.
+        """
+        logger.warning("Index deletion not applicable for GraphRAG")
+        return False

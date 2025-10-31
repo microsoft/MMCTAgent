@@ -13,7 +13,7 @@ from .azure_providers import (
     AzureEmbeddingProvider,
     AzureSearchProvider,
     AzureVisionProvider,
-    AzureTranscriptionProvider
+    WhisperTranscriptionProvider
 )
 from .openai_providers import (
     OpenAILLMProvider,
@@ -37,7 +37,7 @@ __all__ = [
     'AzureEmbeddingProvider',
     'AzureSearchProvider',
     'AzureVisionProvider',
-    'AzureTranscriptionProvider',
+    'WhisperTranscriptionProvider',
     # OpenAI providers
     'OpenAILLMProvider',
     'OpenAIEmbeddingProvider',

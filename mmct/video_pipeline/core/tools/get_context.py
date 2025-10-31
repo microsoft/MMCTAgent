@@ -7,25 +7,13 @@ import os
 from typing_extensions import Annotated
 from mmct.video_pipeline.utils.helper import get_media_folder
 from azure.search.documents.models import VectorizedQuery, VectorFilterMode
-from mmct.config.settings import MMCTConfig
 from mmct.providers.factory import provider_factory
 from loguru import logger
-from mmct.config.settings import SearchConfig
-
-try:
-    config = MMCTConfig()
-    logger.info("Successfully retrieved the MMCT config")
-except Exception as e:
-    logger.exception(f"Exception occurred while fetching the MMCT config: {e}")
 
 try:
     logger.info("Instantiating the embedding and search providers")
-    search_provider = provider_factory.create_search_provider(
-        config.search.provider, config.search.model_dump()
-    )
-    embed_provider = provider_factory.create_embedding_provider(
-        provider_name=config.embedding.provider, config=config.embedding.model_dump()
-    )
+    search_provider = provider_factory.create_search_provider()
+    embed_provider = provider_factory.create_embedding_provider()
     logger.info("Successfully instantiated the search and embedding providers")
 except Exception as e:
     logger.exception(f"Exception occurred while instantiating providers: {e}")
@@ -47,10 +35,7 @@ async def get_context(
    
     
     if use_graph_rag=='True':
-        search_config = SearchConfig(provider="custom_search")
-        search_provider = provider_factory.create_search_provider(
-            search_config.provider, search_config.model_dump()
-        )
+        search_provider = provider_factory.create_search_provider("custom_search")
         search_results = await search_provider.search(query=query, index_name="temp",embedding=embedding)
         return search_results
 

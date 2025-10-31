@@ -10,8 +10,6 @@ class AzureVisionProvider(VisionProvider):
     
     def __init__(self, config: Dict[str, Any]):
         self.config = config
-        # This would be implemented with Azure Computer Vision SDK
-        # For now, we'll use Azure OpenAI Vision capabilities
         self.llm_provider = AzureLLMProvider(config)
     
     @handle_exceptions(retries=3, exceptions=(Exception,))

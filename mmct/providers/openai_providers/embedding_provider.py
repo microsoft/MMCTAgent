@@ -67,3 +67,13 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         except Exception as e:
             logger.error(f"OpenAI batch embedding failed: {e}")
             raise ProviderException(f"OpenAI batch embedding failed: {e}")
+
+    def get_async_client(self):
+        """Get async OpenAI client for direct embeddings API access."""
+        return self.client
+
+    async def close(self):
+        """Close the embedding client and cleanup resources."""
+        if self.client:
+            logger.info("Closing OpenAI embedding client")
+            await self.client.close()

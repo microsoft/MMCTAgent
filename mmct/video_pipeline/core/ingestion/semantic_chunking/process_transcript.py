@@ -6,11 +6,11 @@ import math
 from loguru import logger
 from sklearn.metrics.pairwise import cosine_similarity
 from dotenv import load_dotenv, find_dotenv
-from mmct.llm_client import LLMClient
+from mmct.providers.factory import provider_factory
 # Load environment variables
 load_dotenv(find_dotenv(),override=True)
 
-gpt40_client = LLMClient(service_provider=os.getenv("LLM_PROVIDER", "azure"), isAsync=True).get_client()
+embedding_provider = provider_factory.create_embedding_provider()
 
 # Configurable parameters for semantic chunking optimization
 OPTIMIZED_SIMILARITY_THRESHOLD = 0.4  # Lower = more content grouped together
@@ -111,27 +111,16 @@ async def process_transcript(srt_text: str, SIMILARITY_THRESHOLD=None, TIME_LIMI
     async def create_embedding(text):
         """Generates an embedding for a given text using OpenAI API asynchronously."""
         try:
-            response = await gpt40_client.embeddings.create(input=text, model=EMBEDDING_DEPLOYMENT_NAME)
-            return response.data[0].embedding
+            return await embedding_provider.embedding(text)
         except Exception as e:
             raise Exception(f"Error generating embedding: {e}")
 
     async def create_batch_embeddings(texts, batch_size=100):
         """Generates embeddings for multiple texts in batches using Azure Embeddings API."""
-        all_embeddings = []
-        total_batches = math.ceil(len(texts) / batch_size)
-        
-        logger.info(f"🔄 Creating batch embeddings for {len(texts)} texts in {total_batches} batches")
-        
-        for i in range(0, len(texts), batch_size):
-            batch_texts = texts[i:i + batch_size]
-            batch_num = (i // batch_size) + 1
-            logger.info(f"⏳ Processing batch {batch_num}/{total_batches} ({len(batch_texts)} texts)")
-            response = await gpt40_client.embeddings.create(input=batch_texts, model=EMBEDDING_DEPLOYMENT_NAME)
-            batch_embeddings = [item.embedding for item in response.data]
-            all_embeddings.extend(batch_embeddings)
-        logger.info(f"✅ Batch embedding complete: {len(all_embeddings)} embeddings created")
-        return all_embeddings
+        logger.info(f"🔄 Creating batch embeddings for {len(texts)} texts")
+        embeddings = await embedding_provider.batch_embedding(texts)
+        logger.info(f"✅ Batch embedding complete: {len(embeddings)} embeddings created")
+        return embeddings
 
     async def calculate_cosine_similarity(vec1, vec2):
         """Computes cosine similarity between two vectors asynchronously."""

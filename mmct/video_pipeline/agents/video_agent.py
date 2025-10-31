@@ -98,10 +98,7 @@ class VideoAgent:
 
     def _create_llm_provider(self) -> object:
         """Create LLM provider from configuration."""
-        return provider_factory.create_llm_provider(
-            self.config.llm.provider,
-            self.config.llm.model_dump()
-        )
+        return provider_factory.create_llm_provider()
 
     async def __call__(self) -> VideoAgentResponse:
         """

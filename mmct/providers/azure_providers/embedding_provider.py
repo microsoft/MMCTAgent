@@ -4,7 +4,7 @@ from typing import Dict, Any, List
 from azure.identity import get_bearer_token_provider
 from loguru import logger
 from mmct.utils.error_handler import ProviderException, ConfigurationException
-from openai import AsyncAzureOpenAI, AzureOpenAI
+from openai import AsyncAzureOpenAI
 from mmct.utils.error_handler import handle_exceptions, convert_exceptions
 from mmct.providers.credentials import AzureCredentials
 
@@ -100,10 +100,12 @@ class AzureEmbeddingProvider(EmbeddingProvider):
             logger.error(f"Azure OpenAI batch embedding failed: {e}")
             raise ProviderException(f"Azure OpenAI batch embedding failed: {e}")
 
+    def get_async_client(self):
+        """Get async OpenAI client for direct embeddings API access."""
+        return self.client
+
     async def close(self):
         """Close the embedding client and cleanup resources."""
         if self.client:
             logger.info("Closing Azure OpenAI embedding client")
             await self.client.close()
-            # if self.credential:
-            #     await self.credential.close()

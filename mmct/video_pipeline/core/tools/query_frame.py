@@ -10,19 +10,12 @@ from datetime import time
 from typing import Annotated, Optional
 
 from mmct.providers.factory import provider_factory
-from mmct.config.settings import MMCTConfig
 from mmct.video_pipeline.core.tools.utils.search_keyframes import KeyframeSearcher
 
-# Initialize configuration and providers
-config = MMCTConfig(model_name=os.getenv("LLM_VISION_DEPLOYMENT_NAME", "gpt-4o"))
-llm_provider = provider_factory.create_llm_provider(
-    config.llm.provider,
-    config.llm.model_dump()
-)
+# Initialize providers
+llm_provider = provider_factory.create_llm_provider()
 
-storage_provider = provider_factory.create_storage_provider(
-                config.storage.provider, config.storage.model_dump()
-            )
+storage_provider = provider_factory.create_storage_provider()
 
 async def download_and_encode_blob(blob_name: str, container_name: str, save_locally: bool = False, local_dir: str = "./debug_frames") -> Optional[str]:
     """Download JPG blob using storage_provider and encode to base64."""
@@ -49,6 +42,7 @@ async def download_and_encode_blob(blob_name: str, container_name: str, save_loc
 
 async def query_frame(
     query: Annotated[str, "user query according to which video content has to be analyzeds. e.g. 'What materials are required to prepare the chilly nursery bed, and what are their uses?','count the person doing exercise in the video?'"],
+    index_name: Annotated[str, "search index name"],
     frame_ids: Annotated[Optional[list], "List of specific frame filenames to analyze (e.g., ['video_123.jpg', 'video_456.jpg'])"] = None,
     video_id: Annotated[Optional[str], "Unique video identifier hash for frame retrieval"] = None,
     timestamps: Annotated[Optional[list], "List of time range pairs in HH:MM:SS format like [start_time, end_time], e.g., [['00:07:45', '00:09:44']]. Only 1 start_time, end)time pair"] = None
@@ -68,7 +62,7 @@ async def query_frame(
     # Initialize searcher
     searcher = KeyframeSearcher(
         search_endpoint=search_endpoint,
-        index_name=os.getenv("KEYFRAME_INDEX_NAME")
+        index_name=f"keyframes-{index_name}",
     )
 
     # Determine which frames to use
@@ -97,8 +91,7 @@ async def query_frame(
             results = await searcher.search_keyframes(
                 query=query,
                 top_k=5,
-                video_filter=combined_filter,
-                min_similarity_score=0.001  # Filter out noisy/irrelevant frames
+                video_filter=combined_filter
             )
 
             # check for query matching and check fetched frames

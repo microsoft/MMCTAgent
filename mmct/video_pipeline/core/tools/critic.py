@@ -8,16 +8,14 @@ import json
 import asyncio
 from typing_extensions import Annotated
 from mmct.video_pipeline.prompts_and_description import get_critic_tool_system_prompt
-from mmct.llm_client import LLMClient
+from mmct.providers.factory import provider_factory
 
 from dotenv import load_dotenv, find_dotenv
 
 # Load environment variables
 load_dotenv(find_dotenv(), override=True)
 
-service_provider = os.getenv("LLM_PROVIDER", "azure")
-openai_client = LLMClient(service_provider=service_provider, isAsync=True)
-openai_client = openai_client.get_client()
+llm_provider = provider_factory.create_llm_provider()
 
 
 
@@ -78,16 +76,16 @@ async def critic_tool(
         retry_intervals = [10, 15]
         for attempt, wait_time in enumerate(retry_intervals, start=1):
             try:
-                response = await openai_client.chat.completions.create(
-                    model=os.getenv(
-                        "LLM_DEPLOYMENT_NAME"
-                        if os.getenv("LLM_PROVIDER") == "azure"
-                        else "OPENAI_MODEL_NAME"
-                    ),
-                    temperature=payload["temperature"],
+                result = await llm_provider.chat_completion(
                     messages=payload["messages"],
-                    top_p=payload["top_p"],
+                    temperature=payload["temperature"],
+                    top_p=payload["top_p"]
                 )
+                response = type('obj', (object,), {
+                    'choices': [type('obj', (object,), {
+                        'message': type('obj', (object,), {'content': result['content']})()
+                    })()]
+                })()
                 break
             except Exception as e:
                 if attempt < len(retry_intervals):
@@ -103,10 +101,10 @@ async def critic_tool(
 
 if __name__ == "__main__":
     # Example usage - replace with your actual values
-    user_query = "What farming techniques are shown in the video?"
-    answer = "The video shows traditional farming methods including crop rotation and manual harvesting."
-    raw_context = "Retrieved context from frames showing farmers working in fields with traditional tools."
-    reasoning_steps = "1. Analyzed video frames 2. Identified farming activities 3. Summarized techniques observed"
+    user_query = "user-query"
+    answer = "answer-to-the-user-query"
+    raw_context = "raw-context-used-to-generate-the-answer"
+    reasoning_steps = "step-by-step-reasoning-logs"
 
     res = asyncio.run(
         critic_tool(

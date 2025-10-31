@@ -9,13 +9,11 @@ This script searches for keyframes in the Azure AI Search index by:
 4. Displaying results with details
 """
 
-import os
-import sys
-import argparse
 from typing import List, Dict, Any, Optional
 
-from mmct.video_pipeline.core.tools.utils.azure_search_client import VideoFrameSearchClient
-from mmct.video_pipeline.core.tools.utils.embeddings_generator import EmbeddingsGenerator, EmbeddingConfig
+from mmct.video_pipeline.utils.video_frame_search import VideoFrameSearchClient
+from mmct.video_pipeline.utils.embedding_utils import EmbeddingsGenerator
+from mmct.config.settings import ImageEmbeddingConfig
 
 
 class KeyframeSearcher:
@@ -43,8 +41,8 @@ class KeyframeSearcher:
         )
 
         # Initialize embeddings generator for query encoding
-        embeddings_config = EmbeddingConfig(
-            clip_model_name=clip_model,
+        embeddings_config = ImageEmbeddingConfig(
+            model_name=clip_model,
             batch_size=1
         )
         self.embeddings_generator = EmbeddingsGenerator(embeddings_config)
@@ -53,9 +51,8 @@ class KeyframeSearcher:
     async def search_keyframes(self,
                         query: str,
                         top_k: int = 5,
-                        video_filter: Optional[str] = None,
-                        min_motion_score: Optional[float] = None,
-                        min_similarity_score: Optional[float] = 0.7) -> List[Dict[str, Any]]:
+                        video_filter: Optional[str] = None
+                        ) -> List[Dict[str, Any]]:
         """
         Search for keyframes using text query.
 
@@ -84,14 +81,6 @@ class KeyframeSearcher:
                 top_k=top_k,
                 filters=filters
             )
-
-            # Filter by similarity score to remove noisy/irrelevant frames
-            if min_similarity_score is not None and results:
-                filtered_results = [
-                    r for r in results
-                    if r.get('@search.score', 0) >= min_similarity_score
-                ]
-                return filtered_results
 
             return results
 

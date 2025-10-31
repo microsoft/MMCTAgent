@@ -6,6 +6,7 @@ from mmct.video_pipeline.core.ingestion.transcription.base_transcription import 
 )
 from mmct.video_pipeline.core.ingestion.languages import Languages
 from mmct.video_pipeline.utils.helper import extract_mp3_from_video, get_media_folder
+from mmct.providers.factory import provider_factory
 from dotenv import load_dotenv, find_dotenv
 from loguru import logger
 # Load environment variables
@@ -16,6 +17,8 @@ class WhisperTranscription(Transcription):
     def __init__(self, video_path: str, hash_id: str) -> None:
         super().__init__(video_path=video_path, hash_id=hash_id)
         self.local_save = []
+        # Initialize transcription provider (Azure or OpenAI Whisper)
+        self.transcription_provider = provider_factory.create_transcription_provider()
 
     async def load_audio(self):
         try:
@@ -36,16 +39,11 @@ class WhisperTranscription(Transcription):
     async def get_transcript_whisper(self) -> str:
         """Extracts audio from a video file and transcribes it using Azure OpenAI Whisper."""
         try:
-            model = os.getenv(
-                "SPEECH_SERVICE_DEPLOYMENT_NAME"
-                if os.getenv("LLM_PROVIDER") == "azure"
-                else "OPENAI_SPEECH_SERVICE_MODEL_NAME"
+            logger.info("Performing translation using Whisper endpoint")
+            result = await self.transcription_provider.transcribe_file(
+                audio_path=self.audio_path,
+                response_format="srt"
             )
-            logger.info("Performing translation using openai whisper endpoint")
-            with open(self.audio_path, "rb") as file:
-                result = await self.openai_stt_client.audio.translations.create(
-                    file=file, model=model, response_format="srt"
-                )
             logger.info("Successfully retrieved the translated transcript using Whisper")
             base_path = self.audio_path.split(".mp3")[0]
             transcript_local_path = os.path.join(base_path, ".srt")

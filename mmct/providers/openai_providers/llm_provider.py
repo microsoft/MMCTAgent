@@ -4,6 +4,7 @@ from mmct.utils.error_handler import ProviderException, ConfigurationException
 from typing import Dict, Any, List
 from mmct.utils.error_handler import handle_exceptions, convert_exceptions
 from openai import AsyncOpenAI, OpenAI
+from autogen_ext.models.openai import OpenAIChatCompletionClient
 
 
 class OpenAILLMProvider(LLMProvider):
@@ -86,3 +87,29 @@ class OpenAILLMProvider(LLMProvider):
         except Exception as e:
             logger.error(f"OpenAI chat completion failed: {e}")
             raise ProviderException(f"OpenAI chat completion failed: {e}")
+
+    def get_autogen_client(self):
+        """Get autogen-compatible client for OpenAI."""
+        try:
+            api_key = self.config.get("api_key")
+            if not api_key:
+                raise ConfigurationException("OpenAI API key is required for autogen client")
+
+            model = self.config.get("model_name", "gpt-4o")
+            timeout = self.config.get("timeout", 200)
+            temperature = self.config.get("temperature", 0)
+
+            return OpenAIChatCompletionClient(
+                api_key=api_key,
+                timeout=timeout,
+                model=model,
+                temperature=temperature
+            )
+        except Exception as e:
+            raise ProviderException(f"Failed to create OpenAI autogen client: {e}")
+
+    async def close(self):
+        """Close the LLM client and cleanup resources."""
+        if self.client:
+            logger.info("Closing OpenAI LLM client")
+            await self.client.close()

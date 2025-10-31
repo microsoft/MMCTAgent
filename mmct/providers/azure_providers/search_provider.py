@@ -4,7 +4,9 @@ from mmct.utils.error_handler import ProviderException, ConfigurationException
 from loguru import logger
 from typing import Dict, Any, List
 from azure.search.documents.aio import SearchClient
+from azure.search.documents.indexes.aio import SearchIndexClient
 from azure.search.documents.models import VectorizedQuery
+from azure.search.documents.indexes.models import SearchIndex
 from mmct.providers.base import SearchProvider
 from mmct.providers.credentials import AzureCredentials
 
@@ -15,6 +17,7 @@ class AzureSearchProvider(SearchProvider):
         self.config = config
         self.credential = AzureCredentials.get_async_credentials()
         self.client = self._initialize_client()
+        self.index_client = self._initialize_index_client()
     
     def _initialize_client(self):
         """Initialize Azure AI Search client."""
@@ -45,7 +48,18 @@ class AzureSearchProvider(SearchProvider):
                 )
         except Exception as e:
             raise ProviderException(f"Failed to initialize Azure AI Search client: {e}")
-    
+
+    def _initialize_index_client(self):
+        """Initialize Azure AI Search Index client for index management."""
+        try:
+            endpoint = self.config.get("endpoint")
+            if not endpoint:
+                raise ConfigurationException("Azure AI Search endpoint is required")
+
+            return SearchIndexClient(endpoint=endpoint, credential=self.credential)
+        except Exception as e:
+            raise ProviderException(f"Failed to initialize Azure AI Search Index client: {e}")
+
     @handle_exceptions(retries=3, exceptions=(Exception,))
     @convert_exceptions({Exception: ProviderException})
     async def search(self, query: str, index_name: str = None, **kwargs) -> List[Dict]:
@@ -133,10 +147,87 @@ class AzureSearchProvider(SearchProvider):
             logger.error(f"Azure AI Search deletion failed: {e}")
             raise ProviderException(f"Azure AI Search deletion failed: {e}")
 
+    @handle_exceptions(retries=3, exceptions=(Exception,))
+    @convert_exceptions({Exception: ProviderException})
+    async def create_index(self, index_name: str, index_schema: SearchIndex) -> bool:
+        """
+        Create a search index with the given schema.
+
+        Args:
+            index_name: Name of the index to create
+            index_schema: Azure SearchIndex object defining the index schema
+
+        Returns:
+            bool: True if created, False if already exists
+        """
+        try:
+            await self.index_client.create_index(index_schema)
+            logger.info(f"Successfully created index '{index_name}'")
+            return True
+        except Exception as e:
+            if "ResourceNameAlreadyInUse" in str(e) or "already exists" in str(e):
+                logger.info(f"Index '{index_name}' already exists")
+                return False
+            else:
+                logger.error(f"Failed to create index '{index_name}': {e}")
+                raise ProviderException(f"Failed to create index '{index_name}': {e}")
+
+    @handle_exceptions(retries=3, exceptions=(Exception,))
+    @convert_exceptions({Exception: ProviderException})
+    async def index_exists(self, index_name: str) -> bool:
+        """
+        Check if an index exists.
+
+        Args:
+            index_name: Name of the index to check
+
+        Returns:
+            bool: True if index exists, False otherwise
+        """
+        try:
+            await self.index_client.get_index(index_name)
+            return True
+        except Exception as e:
+            error_str = str(e)
+            # Check for various "index not found" error patterns
+            not_found_patterns = [
+                "ResourceNotFound",
+                "NotFound",
+                "does not exist",
+                "was not found",
+                "No index with the name"
+            ]
+            if any(pattern in error_str for pattern in not_found_patterns):
+                return False
+            else:
+                logger.error(f"Error checking if index '{index_name}' exists: {e}")
+                raise ProviderException(f"Error checking if index '{index_name}' exists: {e}")
+
+    @handle_exceptions(retries=3, exceptions=(Exception,))
+    @convert_exceptions({Exception: ProviderException})
+    async def delete_index(self, index_name: str) -> bool:
+        """
+        Delete a search index.
+
+        Args:
+            index_name: Name of the index to delete
+
+        Returns:
+            bool: True if successful
+        """
+        try:
+            await self.index_client.delete_index(index_name)
+            logger.info(f"Successfully deleted index '{index_name}'")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to delete index '{index_name}': {e}")
+            raise ProviderException(f"Failed to delete index '{index_name}': {e}")
+
     async def close(self):
         """Close the search client and cleanup resources."""
         if self.client:
             logger.info("Closing Azure AI Search client")
             await self.client.close()
-            # if self.credential:
-            #     await self.credential.close()
+        if self.index_client:
+            logger.info("Closing Azure AI Search Index client")
+            await self.index_client.close()

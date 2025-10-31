@@ -54,6 +54,16 @@ class OpenAITranscriptionProvider(TranscriptionProvider):
         except Exception as e:
             logger.error(f"OpenAI Whisper transcription failed: {e}")
             raise ProviderException(f"OpenAI Whisper transcription failed: {e}")
+
+    def get_async_client(self):
+        """Get async OpenAI client for direct audio API access."""
+        return self.client
+
+    async def close(self):
+        """Close the transcription client and cleanup resources."""
+        if self.client:
+            logger.info("Closing OpenAI transcription client")
+            await self.client.close()
     
     @handle_exceptions(retries=3, exceptions=(Exception,))
     @convert_exceptions({Exception: ProviderException})

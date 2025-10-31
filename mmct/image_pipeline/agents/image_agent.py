@@ -17,7 +17,6 @@ from mmct.image_pipeline.prompts import (
     get_critic_system_prompt,
 )
 from mmct.providers.factory import provider_factory
-from mmct.config.settings import MMCTConfig
 from mmct.utils.error_handler import ProviderException, ConfigurationException
 from mmct.utils.error_handler import handle_exceptions
 from mmct.image_pipeline.prompts import IMAGE_AGENT_SYSTEM_PROMPT, ImageAgentResponse
@@ -105,21 +104,11 @@ class ImageAgent:
         disable_console_log: Annotated[bool, "boolean flag to disable console logs"] = False
     ):
         try:
-            # Initialize configuration
-            self.config = MMCTConfig()
-            
             # Initialize logger for this instance
             self.logger = logger
             
             # Initialize providers
-            self.llm_provider = provider_factory.create_llm_provider(
-                self.config.llm.provider,
-                self.config.llm.model_dump()
-            )
-            self.vision_provider = provider_factory.create_vision_provider(
-                self.config.llm.provider,  # Use same provider as LLM for vision
-                self.config.llm.model_dump()
-            )
+            self.llm_provider = provider_factory.create_llm_provider()
             
             # Set instance attributes
             self.image_path = image_path
@@ -135,18 +124,9 @@ class ImageAgent:
             else:
                 logger.disable("mmct")
             
-            # Initialize client components for autogen compatibility
-            from mmct.llm_client import LLMClient
-            service_provider = self.config.llm.provider
-            self.model_client = LLMClient(
-                autogen=True, service_provider=service_provider
-            ).get_client()
-            
-            self.openai_client = LLMClient(
-                service_provider=service_provider, isAsync=True
-            ).get_client()
-            
-            self.model_name = self.config.llm.model_name
+            # Initialize client components using providers
+            self.model_client = self.llm_provider.get_autogen_client()
+
             logger.info("Initialized ImageAgent with provider system")
             
             self.tools_list = []
@@ -368,7 +348,7 @@ class ImageAgent:
             # Use the provider system for LLM completion
             response = await self.llm_provider.chat_completion(
                 messages=messages,
-                temperature=self.config.llm.temperature,
+                temperature=0,
                 response_format=ImageAgentResponse
             )
 

@@ -1,19 +1,17 @@
 import asyncio
-import time
 import os
 import aiofiles
 import json
 from typing import List, Optional, Dict, Any
 from loguru import logger
 from mmct.video_pipeline.core.ingestion.models import TranslationResponse
-import azure.cognitiveservices.speech as speechsdk
-from azure.identity import DefaultAzureCredential, AzureCliCredential
 from mmct.video_pipeline.core.ingestion.transcription.base_transcription import (
     Transcription,
 )
 from mmct.video_pipeline.utils.helper import extract_wav_from_video
 from mmct.video_pipeline.core.ingestion.languages import Languages
 from mmct.video_pipeline.utils.helper import get_media_folder
+from mmct.providers.factory import provider_factory
 from dotenv import load_dotenv, find_dotenv
 
 load_dotenv(find_dotenv(), override=True)
@@ -24,6 +22,9 @@ class CloudTranscription(Transcription):
         super().__init__(video_path=video_path, hash_id=hash_id, language=language)
         self.audio_container = os.getenv("AUDIO_CONTAINER_NAME")
         self.local_save = []
+        # Initialize providers
+        self.llm_provider = provider_factory.create_llm_provider()
+        self.speech_provider = provider_factory.create_transcription_provider('azure_speech')
 
     async def _load_audio(self):
         try:
@@ -52,80 +53,25 @@ class CloudTranscription(Transcription):
 
     async def detect_language(self):
         try:
-            # Use Azure CLI credential first, then fallback to DefaultAzureCredential
-            credential = await self._get_credential()
-
-            token = credential.get_token("https://cognitiveservices.azure.com/.default")
-            token = token.token
-            resource_id = os.getenv("SPEECH_SERVICE_RESOURCE_ID")
-            token = "aad#" + resource_id + "#" + token
-            speech_config = speechsdk.SpeechConfig(
-                region=os.getenv("SPEECH_SERVICE_REGION"), auth_token=token
-            )
-            audio_config = speechsdk.audio.AudioConfig(filename=self.audio_path)
-            lang = None
-            conf = None
             languages = ["en-IN", "hi-IN", "te-IN", "or-IN"]
-            auto_detect_source_language_config = (
-                speechsdk.languageconfig.AutoDetectSourceLanguageConfig(languages=languages)
+            detected_language = await self.speech_provider.detect_language(
+                audio_path=self.audio_path,
+                candidate_languages=languages
             )
-            speech_recognizer = speechsdk.SpeechRecognizer(
-                speech_config=speech_config,
-                auto_detect_source_language_config=auto_detect_source_language_config,
-                audio_config=audio_config,
-            )
-            result = speech_recognizer.recognize_once()
-            auto_detect_source_language_result = speechsdk.AutoDetectSourceLanguageResult(result)
-            detected_language = auto_detect_source_language_result.language
-            # if len(result.text)!=0:
-            #     json_result = result.properties[speechsdk.PropertyId.SpeechServiceResponse_JsonResult]
-            #     json_result = ast.literal_eval(json_result)
-            #     lang = json_result['PrimaryLanguage']['Language']
-            #     conf = json_result['primaryLanguage']['Confidence']
-            # else:
-            #     print("Unable to detect")
-            # if lang and conf and conf=="High":
-            #     return lang
             return detected_language
         except Exception as e:
             logger.exception(f"Error while detection language, Error:{e}")
             raise
 
-    async def _get_credential(self):
-        """Get Azure credential, trying CLI first, then DefaultAzureCredential."""
-        try:
-            # Try Azure CLI credential first
-            cli_credential = AzureCliCredential()
-            # Test if CLI credential works by getting a token
-            cli_credential.get_token("https://cognitiveservices.azure.com/.default")
-            return cli_credential
-        except Exception:
-            return DefaultAzureCredential()
-
     async def get_transcript(self):
         try:
-            result = []
-            # Use Azure CLI credential first, then fallback to DefaultAzureCredential
-            credential = await self._get_credential()
-
-            token = credential.get_token("https://cognitiveservices.azure.com/.default")
-            token = token.token
-            resource_id = os.getenv("SPEECH_SERVICE_RESOURCE_ID")
-            auth_token = f"aad#{resource_id}#{token}"
-            speech_config = speechsdk.SpeechConfig(
-                region=os.getenv("SPEECH_SERVICE_REGION"), auth_token=auth_token
-            )
-            logger.info(
-                f"Speech Config initialized with region: {os.getenv('SPEECH_SERVICE_REGION')}"
-            )
-            logger.info(f"Using resource ID: {resource_id}")
-            if self.source_language == None:
+            if self.source_language["lang-code"] is None:
                 lang = await self.detect_language()
                 self.source_language["lang-code"] = (
                     lang if lang not in [None, "Unknown"] else "en-IN"
                 )
                 self.source_language["lang"] = Languages(self.source_language["lang-code"]).name
-            speech_config.speech_recognition_language = self.source_language["lang-code"]
+
             # Check if audio file exists
             if not os.path.exists(self.audio_path):
                 raise FileNotFoundError(f"Audio file not found: {self.audio_path}")
@@ -133,73 +79,17 @@ class CloudTranscription(Transcription):
             file_size = os.path.getsize(self.audio_path)
             logger.info(f"Audio file path: {self.audio_path}, size: {file_size} bytes")
 
-            audio_config = speechsdk.audio.AudioConfig(filename=self.audio_path)
-
-            transcriber = speechsdk.transcription.ConversationTranscriber(
-                speech_config=speech_config, audio_config=audio_config
-            )
-
-            # 3) (Optional) Add your phrase list -- Only available for Hindi right now
+            # Prepare phrase list for Hindi
+            phrase_list = None
             if self.source_language["lang-code"] == "hi-IN":
-                phrase_list = speechsdk.PhraseListGrammar.from_recognizer(transcriber)
-                for phrase in self.hindi_glossary[:500]:
-                    phrase_list.addPhrase(phrase)
+                phrase_list = self.hindi_glossary
 
-            # 4) Prepare an asyncio.Event + thread‑safe setter
-            loop = asyncio.get_running_loop()
-            done_evt = asyncio.Event()
-
-            def _stop_cb(evt: speechsdk.SessionEventArgs):
-                loop.call_soon_threadsafe(done_evt.set)
-
-            # 5) Define all callbacks
-            def _on_session_started(evt):
-                logger.info("Session started")
-
-            def _on_session_stopped(evt):
-                logger.info("Session stopped")
-                _stop_cb(evt)
-
-            def _on_canceled(evt):
-                logger.info("Canceled")
-                _stop_cb(evt)
-
-            def _on_transcribed(evt: speechsdk.SpeechRecognitionEventArgs):
-                if evt.result.reason == speechsdk.ResultReason.RecognizedSpeech:
-                    start_ms = evt.result.offset
-                    dur_ms = evt.result.duration
-                    # convert from 100‑nanos to seconds
-                    start_s = start_ms / 10_000_000
-                    end_s = (start_ms + dur_ms) / 10_000_000
-                    rec = {
-                        "text": evt.result.text,
-                        "start_time": time.strftime("%H:%M:%S", time.gmtime(start_s)),
-                        "end_time": time.strftime("%H:%M:%S", time.gmtime(end_s)),
-                        "speaker_id": evt.result.speaker_id,
-                    }
-                    logger.info(
-                        f"Transcribed: {rec['text']} [{rec['start_time']}–{rec['end_time']}]"
-                    )
-                    result.append(rec)
-                elif evt.result.reason == speechsdk.ResultReason.NoMatch:
-                    logger.error(f"NoMatch: {evt.result.no_match_details}")
-
-            # 6) Wire up callbacks
-            transcriber.session_started.connect(_on_session_started)
-            transcriber.session_stopped.connect(_on_session_stopped)
-            transcriber.canceled.connect(_on_canceled)
-            transcriber.transcribed.connect(_on_transcribed)
-
-            # 7) Kick off transcription
-            start_future = transcriber.start_transcribing_async()
-            start_future.get()  # wait for the SDK to begin
-
-            # 8) Wait until the SDK signals stop/cancel
-            await done_evt.wait()
-
-            # 9) Clean shutdown
-            stop_future = transcriber.stop_transcribing_async()
-            stop_future.get()
+            # Use speech provider for transcription
+            result = await self.speech_provider.transcribe_file(
+                audio_path=self.audio_path,
+                language=self.source_language["lang-code"],
+                phrase_list=phrase_list
+            )
 
             logger.info(f"Transcription completed with {len(result)} segments")
             if not result:
@@ -251,17 +141,14 @@ class CloudTranscription(Transcription):
             {"role": "user", "content": f"Text to translate:\n{to_translate}"},
         ]
 
-        response = await self.llm_client.beta.chat.completions.parse(
-            model=os.getenv(
-                "LLM_MODEL_NAME" if os.getenv("LLM_PROVIDER") == "azure" else "OPENAI_MODEL_NAME"
-            ),
+        result = await self.llm_provider.chat_completion(
             messages=messages,
             temperature=0,
             top_p=0.1,
             response_format=TranslationResponse,
         )
 
-        translation_response: TranslationResponse = response.choices[0].message.parsed
+        translation_response: TranslationResponse = result['content']
         translations = translation_response.translations
 
         # Check if number of translations matches number of entries
