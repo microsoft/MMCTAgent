@@ -8,7 +8,7 @@ import asyncio
 import base64
 from datetime import time
 from typing import Annotated, Optional
-
+from loguru import logger
 from mmct.providers.factory import provider_factory
 from mmct.video_pipeline.core.tools.utils.search_keyframes import KeyframeSearcher
 
@@ -109,14 +109,14 @@ async def query_frame(
         list(dict.fromkeys(frame_filenames)),
         key=lambda x: int(''.join(filter(str.isdigit, os.path.basename(x).split('_')[-1].split('.')[0])) or 0)
     )
-    print(f"Processing {len(frame_filenames)} frames directly from blob storage")
+    print(f"Processing {len(frame_filenames)} frames directly from storage provider")
 
     # Prepare blob paths
     container_name = "keyframes"
     blob_paths = [f"{video_id}/{j}" for j in frame_filenames if j is not None]
 
-    # Download and encode images directly from blob storage (no disk I/O)
-    print(f"Downloading and encoding {len(blob_paths)} images from blob storage...")
+    # Download and encode images directly from storage provider (no disk I/O)
+    logger.info(f"Downloading and encoding {len(blob_paths)} images from storage provider...")
 
     # Process blobs concurrently - direct blob to base64
     tasks = [download_and_encode_blob(blob_path, container_name, save_locally=save_frames_locally) for blob_path in blob_paths]
@@ -126,7 +126,7 @@ async def query_frame(
     encoded_images = [result for result in encoded_results
                      if isinstance(result, str) and result is not None]
 
-    print(f"Successfully processed {len(encoded_images)} images directly from blob storage")
+    print(f"Successfully processed {len(encoded_images)} images directly from storage provider")
 
     if not encoded_images:
         return "No valid images could be processed."

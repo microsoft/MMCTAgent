@@ -77,7 +77,7 @@ class AzureStorageProvider(StorageProvider):
             if client:
                 await client.close()
 
-    async def get_blob_url(self, container: str, blob_name: str) -> str:
+    async def get_file_url(self, file_name: str, **kwargs) -> str:
         """
         Generate a URL for a blob that doesn't yet exist in storage.
 
@@ -91,14 +91,17 @@ class AzureStorageProvider(StorageProvider):
         self._ensure_initialized()
 
         try:
+            container = kwargs.pop('container')
+            if not container:
+                raise ProviderException("Container name is required while utilizing azure provider")
             # Use service client URL if available, otherwise fall back to config
             if self.service_client:
-                url = f"{self.service_client.url}/{container}/{blob_name}"
+                url = f"{self.service_client.url}/{container}/{file_name}"
             else:
                 account_url = self.config.get("account_url") or os.getenv("STORAGE_ACCOUNT_URL")
                 if not account_url:
                     raise ConfigurationException("Azure Storage account_url is required")
-                url = f"{account_url.rstrip('/')}/{container}/{blob_name}"
+                url = f"{account_url.rstrip('/')}/{container}/{file_name}"
 
             logger.info(f"Generated blob URL: {url}")
             return url
@@ -110,22 +113,24 @@ class AzureStorageProvider(StorageProvider):
 
     @handle_exceptions(retries=3, exceptions=(Exception,))
     @convert_exceptions({Exception: ProviderException})
-    async def upload_file(self, container: str, blob_name: str, file_path: str) -> str:
+    async def save_file(self, file_name: str, file_path: str, **kwargs) -> str:
         """Upload a local file to blob storage."""
         self._ensure_initialized()
 
         client = None
         try:
+            container = kwargs.pop('container')
+            if not container:
+                raise ProviderException("Container name is required while utilizing azure provider")
             logger.info(f"Uploading file: {file_path}")
-            logger.info(f"Container: {container}, Blob: {blob_name}")
 
-            client = self.service_client.get_blob_client(container=container, blob=blob_name)
+            client = self.service_client.get_blob_client(container=container, blob=file_name)
             async with aiofiles.open(file_path, "rb") as f:
                 data = await f.read()
             await client.upload_blob(data, overwrite=True)
 
             logger.info(f"Successfully uploaded file: {file_path}")
-            url = f"{self.service_client.url}/{container}/{blob_name}"
+            url = f"{self.service_client.url}/{container}/{file_name}"
             return url
         except Exception as e:
             logger.exception(f"Error uploading file {file_path}: {e}")
@@ -136,18 +141,19 @@ class AzureStorageProvider(StorageProvider):
 
     @handle_exceptions(retries=3, exceptions=(Exception,))
     @convert_exceptions({Exception: ProviderException})
-    async def upload_base64(self, container: str, blob_name: str, b64_str: str) -> str:
+    async def save_base64(self, file_name: str, b64_str: str, **kwargs) -> str:
         """Upload base64-encoded data to blob storage."""
         self._ensure_initialized()
 
         client = None
         try:
-            logger.info(f"Uploading base64 data to Container: {container}, Blob: {blob_name}")
-            client = self.service_client.get_blob_client(container=container, blob=blob_name)
+            container = kwargs.pop('container')
+            logger.info(f"Uploading base64 data to Container: {container}, Blob: {file_name}")
+            client = self.service_client.get_blob_client(container=container, blob=file_name)
             data = base64.b64decode(b64_str)
             await client.upload_blob(data, overwrite=True)
 
-            url = f"{self.service_client.url}/{container}/{blob_name}"
+            url = f"{self.service_client.url}/{container}/{file_name}"
             return url
         except Exception as e:
             logger.exception(f"Error uploading base64 data: {e}")
@@ -158,18 +164,19 @@ class AzureStorageProvider(StorageProvider):
 
     @handle_exceptions(retries=3, exceptions=(Exception,))
     @convert_exceptions({Exception: ProviderException})
-    async def upload_string(self, container: str, blob_name: str, content: str) -> str:
+    async def save_string(self, file_name: str, content: str, **kwargs) -> str:
         """Upload a string directly to blob storage."""
         self._ensure_initialized()
 
         client = None
         try:
-            logger.info(f"Uploading string content to Container: {container}, Blob: {blob_name}")
-            client = self.service_client.get_blob_client(container=container, blob=blob_name)
+            container = kwargs.pop('container')
+            logger.info(f"Uploading string content to Container: {container}, Blob: {file_name}")
+            client = self.service_client.get_blob_client(container=container, blob=file_name)
             await client.upload_blob(content, overwrite=True)
 
-            logger.info(f"Successfully uploaded content to blob: {blob_name}")
-            url = f"{self.service_client.url}/{container}/{blob_name}"
+            logger.info(f"Successfully uploaded content to blob: {file_name}")
+            url = f"{self.service_client.url}/{container}/{file_name}"
             return url
         except Exception as e:
             logger.exception(f"Error uploading string content: {e}")
@@ -180,16 +187,17 @@ class AzureStorageProvider(StorageProvider):
 
     @handle_exceptions(retries=3, exceptions=(Exception,))
     @convert_exceptions({Exception: ProviderException})
-    async def download_to_file(self, container: str, blob_name: str, download_path: str) -> str:
+    async def download_to_file(self, file_name: str, download_path: str, **kwargs) -> str:
         """Download a blob to a local file path."""
         self._ensure_initialized()
 
         client = None
         try:
-            logger.info(f"Downloading blob {blob_name} to {download_path}")
+            container = kwargs.pop('container')
+            logger.info(f"Downloading blob {file_name} to {download_path}")
             Path(download_path).parent.mkdir(parents=True, exist_ok=True)
 
-            client = self.service_client.get_blob_client(container=container, blob=blob_name)
+            client = self.service_client.get_blob_client(container=container, blob=file_name)
             stream = await client.download_blob()
             data = await stream.readall()
 
@@ -207,14 +215,14 @@ class AzureStorageProvider(StorageProvider):
 
     @handle_exceptions(retries=3, exceptions=(Exception,))
     @convert_exceptions({Exception: ProviderException})
-    async def download_from_url(self, blob_url: str, save_folder: str) -> str:
+    async def download_from_url(self, file_url: str, save_folder: str) -> str:
         """Download a blob from its URL to a local folder."""
         try:
-            logger.info(f"Downloading blob from URL: {blob_url}")
-            parsed = urlparse(blob_url)
+            logger.info(f"Downloading blob from URL: {file_url}")
+            parsed = urlparse(file_url)
             container, blob_name = parsed.path.lstrip("/").split("/", 1)
             local_path = os.path.join(save_folder, blob_name)
-            return await self.download_to_file(container, blob_name, local_path)
+            return await self.download_to_file(container=container,file_name=blob_name,download_path=local_path)
         except Exception as e:
             logger.exception(f"Error downloading blob from URL: {e}")
             raise ProviderException(f"Error downloading blob from URL: {e}")

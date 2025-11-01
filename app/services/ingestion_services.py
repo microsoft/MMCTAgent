@@ -4,7 +4,7 @@ from loguru import logger
 from mmct.video_pipeline import IngestionPipeline
 from mmct.video_pipeline.utils.helper import get_file_hash, remove_file
 from utilities.event_hub_handler import EventHubHandler
-from mmct.blob_store_manager import BlobStorageManager
+from mmct.providers.factory import provider_factory
 from dotenv import load_dotenv
 load_dotenv(override=True)
 
@@ -18,7 +18,7 @@ except Exception as e:
     logger.exception(f"Exception occurred while instantiating the Event Hub class: {e}")
     ingestion_event_hub_handler = None
 
-blob_storage_manager = None  # Will be initialized async in functions
+blob_storage_manager = provider_factory.create_storage_provider()
 
 async def ingest_direct(file: UploadFile, body: dict):
     suffix = os.path.splitext(file.filename)[1]
@@ -47,9 +47,6 @@ async def ingest_queue(file: UploadFile, body: dict):
     if ingestion_event_hub_handler is None:
         raise HTTPException(500, "Event Hub handler failed to initialize. Check Event Hub configuration and credentials.")
     
-    # Initialize blob storage manager
-    blob_storage_manager = await BlobStorageManager.create(account_url=os.getenv("BLOB_ACCOUNT_URL"))
-    
     suffix = os.path.splitext(file.filename)[1]
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
     tmp.write(await file.read()); tmp.close()
@@ -60,9 +57,9 @@ async def ingest_queue(file: UploadFile, body: dict):
         container_name = os.getenv("VIDEO_CONTAINER_NAME")
         logger.info(f"Uploading file {vid}{ext} to container {container_name}")
         
-        blob_url = await blob_storage_manager.upload_file(
+        blob_url = await blob_storage_manager.save_file(
             container=container_name,
-            blob_name=f"{vid}{ext}",
+            file_name=f"{vid}{ext}",
             file_path=path
         )
         logger.info(f"Successfully uploaded file to blob storage: {blob_url}")

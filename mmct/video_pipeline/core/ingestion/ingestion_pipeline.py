@@ -51,7 +51,6 @@ from mmct.video_pipeline.core.ingestion.merge_summary_n_transcript.merge_visual_
     MergeVisualSummaryWithTranscript,
 )
 from mmct.video_pipeline.core.ingestion.video_compression.video_compression import VideoCompressor
-from mmct.blob_store_manager import BlobStorageManager
 from dotenv import load_dotenv, find_dotenv
 from mmct.utils.logging_config import log_manager
 from dataclasses import dataclass
@@ -585,9 +584,9 @@ class IngestionPipeline:
             # Add upload tasks for each keyframe
             for filename, keyframe_path in keyframe_files:
                 context.pending_upload_tasks.append(
-                    blob_manager.upload_file(
+                    blob_manager.save_file(
                         container=self.keyframe_container,
-                        blob_name=f"{context.hash_id}/{filename}",
+                        file_name=f"{context.hash_id}/{filename}",
                         file_path=keyframe_path,
                     )
                 )
@@ -596,8 +595,8 @@ class IngestionPipeline:
             context.local_resources.append(keyframes_dir)
 
             # Update blob URLs to point to keyframes instead of frames
-            context.keyframes_blob_folder_url = await blob_manager.get_blob_url(
-                container=self.keyframe_container, blob_name=f"{context.hash_id}"
+            context.keyframes_blob_folder_url = await blob_manager.get_file_url(
+                container=self.keyframe_container, file_name=f"{context.hash_id}"
             )
 
         except Exception as e:
@@ -660,8 +659,8 @@ class IngestionPipeline:
             blob_manager = await self._get_blob_manager()
 
             # Set keyframes blob URL
-            context.keyframes_blob_folder_url = await blob_manager.get_blob_url(
-                container=self.keyframe_container, blob_name=f"{context.hash_id}"
+            context.keyframes_blob_folder_url = await blob_manager.get_file_url(
+                container=self.keyframe_container, file_name=f"{context.hash_id}"
             )
 
             # Use the keyframe metadata that was extracted earlier

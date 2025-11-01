@@ -1,9 +1,8 @@
 import os
 import base64
 import aiofiles
-import shutil
 from pathlib import Path
-from urllib.parse import urlparse, urlunparse
+from urllib.parse import urlparse
 from loguru import logger
 from typing import Dict, Any
 from mmct.providers.base import StorageProvider
@@ -24,7 +23,7 @@ class LocalStorageProvider(StorageProvider):
                     }
         """
         self.config = config
-        self.base_path = Path(config.get("base_path", "./local_storage")).resolve()
+        self.base_path = Path("./local_storage").resolve()
         self.base_path.mkdir(parents=True, exist_ok=True)
         logger.info(f"LocalStorageProvider initialized at {self.base_path}")
 
@@ -34,12 +33,13 @@ class LocalStorageProvider(StorageProvider):
         blob_path.parent.mkdir(parents=True, exist_ok=True)
         return blob_path
 
-    async def get_blob_url(self, container: str, blob_name: str) -> str:
+    async def get_file_url(self, file_name: str, **kwargs) -> str:
         """
         Generate file:// URL for a local blob.
         Ensures consistent format across OS (handles Windows drive letters).
         """
-        blob_path = self._get_blob_path(container, blob_name)
+        container = kwargs.pop('container')
+        blob_path = self._get_blob_path(container, file_name)
         abs_path = blob_path.resolve()
 
         # Proper file:// handling on Windows (e.g., file:///C:/path/to/file)
@@ -52,54 +52,58 @@ class LocalStorageProvider(StorageProvider):
 
     @handle_exceptions(retries=3, exceptions=(Exception,))
     @convert_exceptions({Exception: ProviderException})
-    async def upload_file(self, container: str, blob_name: str, file_path: str) -> str:
+    async def save_file(self, file_name: str, file_path: str, **kwargs) -> str:
         """Copy a local file into the local storage directory."""
         try:
-            dest_path = self._get_blob_path(container, blob_name)
+            container = kwargs.pop('container')
+            dest_path = self._get_blob_path(container, file_name)
             async with aiofiles.open(file_path, "rb") as src, aiofiles.open(dest_path, "wb") as dst:
                 while chunk := await src.read(1024 * 1024):
                     await dst.write(chunk)
             logger.info(f"File uploaded to {dest_path}")
-            return await self.get_blob_url(container, blob_name)
+            return await self.get_file_url(file_name=file_name, container=container)
         except Exception as e:
             logger.error(f"Error uploading file locally: {e}")
             raise ProviderException(str(e))
 
     @handle_exceptions(retries=3, exceptions=(Exception,))
     @convert_exceptions({Exception: ProviderException})
-    async def upload_base64(self, container: str, blob_name: str, b64_str: str) -> str:
+    async def save_base64(self, file_name: str, b64_str: str, **kwargs) -> str:
         """Upload base64-encoded content."""
         try:
-            dest_path = self._get_blob_path(container, blob_name)
+            container = kwargs.pop('container')
+            dest_path = self._get_blob_path(container, file_name)
             data = base64.b64decode(b64_str)
             async with aiofiles.open(dest_path, "wb") as f:
                 await f.write(data)
             logger.info(f"Base64 data saved to {dest_path}")
-            return await self.get_blob_url(container, blob_name)
+            return await self.get_file_url(container=container, file_name=file_name)
         except Exception as e:
             logger.error(f"Error uploading base64 content: {e}")
             raise ProviderException(str(e))
 
     @handle_exceptions(retries=3, exceptions=(Exception,))
     @convert_exceptions({Exception: ProviderException})
-    async def upload_string(self, container: str, blob_name: str, content: str) -> str:
+    async def save_string(self, file_name: str, content: str, **kwargs) -> str:
         """Upload plain text/string content."""
         try:
-            dest_path = self._get_blob_path(container, blob_name)
+            container = kwargs.pop('container')
+            dest_path = self._get_blob_path(container, file_name)
             async with aiofiles.open(dest_path, "w", encoding="utf-8") as f:
                 await f.write(content)
             logger.info(f"String uploaded to {dest_path}")
-            return await self.get_blob_url(container, blob_name)
+            return await self.get_file_url(container=container, file_name=file_name)
         except Exception as e:
             logger.error(f"Error uploading string content: {e}")
             raise ProviderException(str(e))
 
     @handle_exceptions(retries=3, exceptions=(Exception,))
     @convert_exceptions({Exception: ProviderException})
-    async def download_to_file(self, container: str, blob_name: str, download_path: str) -> str:
+    async def download_to_file(self, file_name: str, download_path: str, **kwargs) -> str:
         """Copy blob from local storage to a specified path."""
         try:
-            src_path = self._get_blob_path(container, blob_name)
+            container = kwargs.pop('container')
+            src_path = self._get_blob_path(container, file_name)
             if not src_path.exists():
                 raise FileNotFoundError(f"Blob not found: {src_path}")
 
@@ -118,13 +122,13 @@ class LocalStorageProvider(StorageProvider):
 
     @handle_exceptions(retries=3, exceptions=(Exception,))
     @convert_exceptions({Exception: ProviderException})
-    async def download_from_url(self, blob_url: str, save_folder: str) -> str:
+    async def download_from_url(self, file_url: str, save_folder: str) -> str:
         """
-        Handle file:// URLs for local blobs.
+        Handle file:// URLs for local files.
         Since local, only file:// URLs are supported.
         """
         try:
-            parsed = urlparse(blob_url)
+            parsed = urlparse(file_url)
             if parsed.scheme != "file":
                 raise ProviderException("Only file:// URLs supported in LocalStorageProvider")
 

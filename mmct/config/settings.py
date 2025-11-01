@@ -256,7 +256,6 @@ class StorageConfig(BaseSettings):
                 'container_name': os.getenv("STORAGE_CONTAINER_NAME"),
                 'account_url': os.getenv("STORAGE_ACCOUNT_URL"),
                 'use_managed_identity': os.getenv("STORAGE_USE_MANAGED_IDENTITY"),
-                'base_path': os.getenv('STORAGE_PATH')
             }
 
         super().__init__(**kwargs)
