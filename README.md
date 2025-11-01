@@ -32,10 +32,9 @@ MMCTAgent is a state-of-the-art multi-modal AI framework that brings human-like 
 
 ### Why MMCTAgent?
 
-- **🧠 Human-Inspired Critical Thinking**: MMCTAgent emulates human cognitive processes by iteratively analyzing multi-modal information, decomposing complex queries, planning strategies, and dynamically evolving its reasoning.
-- **🎯 Superior Performance**: Outperforms traditional approaches on complex visual reasoning benchmarks.  
-- **🔬 Research-Driven Innovation**: Designed as a research framework, MMCTAgent integrates critical thinking elements such as verification of final answers and self-reflection through a novel approach that defines a vision-based critic and identifies task-specific evaluation criteria, thereby enhancing its decision-making abilities.
-- **🚀 Easy Integration**: Its modular design allows for easy integration into existing workflows, facilitating adoption across various domains requiring advanced visual reasoning capabilities.
+- **🧠 Self Reflection Framework**: MMCTAgent emulates iteratively analyzing multi-modal information, decomposing complex queries, planning strategies, and dynamically evolving its reasoning. Designed as a research framework, MMCTAgent integrates critical thinking elements such as verification of final answers and self-reflection through a novel approach that defines a vision-based critic and identifies task-specific evaluation criteria, thereby enhancing its decision-making abilities.
+- **🔬 Enables Qurying over Multimodal Collections**: It enables modular design to plug-in right audio, visual extraction and processing tools, combined with Multimodal LLMs to ingest and query over large number of videos and image data.
+- **🚀 Easy Integration**: Its modular design allows for easy integration into existing workflows and adding domain-specific tools, facilitating adoption across various domains requiring advanced visual reasoning capabilities.
 
 <p align="center">
   <a href="https://arxiv.org/abs/2405.18358">
@@ -354,9 +353,9 @@ If you find MMCTAgent useful in your research, please cite our paper:
 @article{kumar2024mmctagent,
   title={MMCTAgent: Multi-modal Critical Thinking Agent Framework for Complex Visual Reasoning},
   author={Kumar, Somnath and Gadhia, Yash and Ganu, Tanuja and Nambi, Akshay},
-  journal={arXiv preprint arXiv:2405.18358},
+  conference={NeurIPS OWA-2024},
   year={2024},
-  url={https://arxiv.org/abs/2405.18358}
+  url={https://www.microsoft.com/en-us/research/publication/mmctagent-multi-modal-critical-thinking-agent-framework-for-complex-visual-reasoning}
 }
 ```
 
