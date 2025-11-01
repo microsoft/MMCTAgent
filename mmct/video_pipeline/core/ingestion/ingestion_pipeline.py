@@ -90,7 +90,7 @@ class IngestionPipeline:
     IngestionPipeline handles the ingestion to prepare it for use with the VideoAgent system.
 
     This pipeline supports transcription using Speech-to-Text ("azure-stt") or OpenAI Whisper,
-    and it stores the resulting transcripts, frames, audio, metaData and optionally created index corresponsing to the video in computer vision.
+    and it stores the resulting transcripts, keyframes, and metadata.
 
     It also uploads all required video-related files (e.g., original video, transcripts, metadata)
     to an Storage account as part of the ingestion process.
