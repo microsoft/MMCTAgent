@@ -17,17 +17,17 @@ llm_provider = provider_factory.create_llm_provider()
 
 storage_provider = provider_factory.create_storage_provider()
 
-async def download_and_encode_blob(blob_name: str, container_name: str, save_locally: bool = False, local_dir: str = "./debug_frames") -> Optional[str]:
+async def download_and_encode_blob(file_name: str, folder_name: str, save_locally: bool = False, local_dir: str = "./debug_frames") -> Optional[str]:
     """Download JPG blob using storage_provider and encode to base64."""
     try:
         # Load blob data using storage provider
-        image_data = await storage_provider.load_blob_to_memory(container_name, blob_name)
+        image_data = await storage_provider.load_file_to_memory(folder=folder_name, file_name=file_name)
 
         # Optionally save to local disk for debugging
         if save_locally:
             os.makedirs(local_dir, exist_ok=True)
             # Create safe filename from blob_name
-            safe_filename = blob_name.replace('/', '_')
+            safe_filename = file_name.replace('/', '_')
             local_path = os.path.join(local_dir, safe_filename)
             with open(local_path, 'wb') as f:
                 f.write(image_data)
@@ -37,7 +37,7 @@ async def download_and_encode_blob(blob_name: str, container_name: str, save_loc
         return base64.b64encode(image_data).decode('utf-8')
 
     except Exception as e:
-        print(f"Failed to download and encode blob {blob_name}: {e}")
+        print(f"Failed to download and encode file {file_name}: {e}")
         return None
 
 async def query_frame(
@@ -112,14 +112,14 @@ async def query_frame(
     print(f"Processing {len(frame_filenames)} frames directly from storage provider")
 
     # Prepare blob paths
-    container_name = "keyframes"
-    blob_paths = [f"{video_id}/{j}" for j in frame_filenames if j is not None]
+    folder_name = "keyframes"
+    file_paths = [f"{video_id}/{j}" for j in frame_filenames if j is not None]
 
     # Download and encode images directly from storage provider (no disk I/O)
-    logger.info(f"Downloading and encoding {len(blob_paths)} images from storage provider...")
+    logger.info(f"Downloading and encoding {len(file_paths)} images from storage provider...")
 
     # Process blobs concurrently - direct blob to base64
-    tasks = [download_and_encode_blob(blob_path, container_name, save_locally=save_frames_locally) for blob_path in blob_paths]
+    tasks = [download_and_encode_blob(file_name=file_name,folder_name=folder_name, save_locally=save_frames_locally) for file_name in file_paths]
     encoded_results = await asyncio.gather(*tasks, return_exceptions=True)
 
     # Filter successful results
@@ -210,19 +210,10 @@ if __name__ == "__main__":
     import asyncio
 
     async def main():
-        query = "What materials are required to prepare the chilly nursery bed, and what are their uses?"
-        video_id = "d5bbc45fb8d284082f84b788b9dce1a931052e1e650daa4889de78654dbb9d45"
+        query = "user-query"
+        video_id = "hash-video-id"
         frame_ids = [
-            "d5bbc45fb8d284082f84b788b9dce1a931052e1e650daa4889de78654dbb9d45_1827.jpg",
-            "d5bbc45fb8d284082f84b788b9dce1a931052e1e650daa4889de78654dbb9d45_2436.jpg",
-            "d5bbc45fb  8d284082f84b788b9dce1a931052e1e650daa4889de78654dbb9d45_3770.jpg",
-            "d5bbc45fb8d284082f84b788b9dce1a931052e1e650daa4889de78654dbb9d45_4901.jpg",
-            "d5bbc45fb8d284082f84b788b9dce1a931052e1e650daa4889de78654dbb9d45_5133.jpg",
-            "d5bbc45fb8d284082f84b788b9dce1a931052e1e650daa4889de78654dbb9d45_8845.jpg",
-            "d5bbc45fb8d284082f84b788b9dce1a931052e1e650daa4889de78654dbb9d45_9802.jpg",
-            "d5bbc45fb8d284082f84b788b9dce1a931052e1e650daa4889de78654dbb9d45_10121.jpg",
-            "d5bbc45fb8d284082f84b788b9dce1a931052e1e650daa4889de78654dbb9d45_10643.jpg",
-            "d5bbc45fb8d284082f84b788b9dce1a931052e1e650daa4889de78654dbb9d45_11774.jpg"
+            "<hash-video-id>_<frame-number>.jpg",
         ]
 
         result = await query_frame(query, frame_ids, video_id)

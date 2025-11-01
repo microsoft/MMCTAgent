@@ -585,9 +585,9 @@ class IngestionPipeline:
             for filename, keyframe_path in keyframe_files:
                 context.pending_upload_tasks.append(
                     blob_manager.save_file(
-                        container=self.keyframe_container,
+                        folder_name=self.keyframe_container,
                         file_name=f"{context.hash_id}/{filename}",
-                        file_path=keyframe_path,
+                        src_file_path=keyframe_path,
                     )
                 )
 
@@ -596,7 +596,7 @@ class IngestionPipeline:
 
             # Update blob URLs to point to keyframes instead of frames
             context.keyframes_blob_folder_url = await blob_manager.get_file_url(
-                container=self.keyframe_container, file_name=f"{context.hash_id}"
+                folder_name=self.keyframe_container, file_name=f"{context.hash_id}"
             )
 
         except Exception as e:
@@ -660,7 +660,7 @@ class IngestionPipeline:
 
             # Set keyframes blob URL
             context.keyframes_blob_folder_url = await blob_manager.get_file_url(
-                container=self.keyframe_container, file_name=f"{context.hash_id}"
+                folder_name=self.keyframe_container, file_name=f"{context.hash_id}"
             )
 
             # Use the keyframe metadata that was extracted earlier

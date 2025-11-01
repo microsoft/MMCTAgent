@@ -9,7 +9,7 @@ class StorageProvider(ABC):
         pass
 
     @abstractmethod
-    async def save_file(self, file_name: str, file_path: str, **kwargs) -> str:
+    async def save_file(self, file_name: str, src_file_path: str, **kwargs) -> str:
         """Save a local file to storage."""
         pass
 
@@ -24,13 +24,18 @@ class StorageProvider(ABC):
         pass
 
     @abstractmethod
-    async def download_to_file(self, file_name: str, download_path: str, **kwargs) -> str:
+    async def save_to_file(self, file_name: str, download_path: str, **kwargs) -> str:
         """Download a file to a local file path."""
         pass
 
     @abstractmethod
     async def download_from_url(self, file_url: str, save_folder: str) -> str:
         """Download a file from its URL to a local folder."""
+        pass
+
+    @abstractmethod
+    async def load_file_to_memory(self, folder: str, file_name: str) -> bytes:
+        """Load a file into memory as bytes."""
         pass
 
     @abstractmethod

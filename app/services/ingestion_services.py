@@ -58,9 +58,9 @@ async def ingest_queue(file: UploadFile, body: dict):
         logger.info(f"Uploading file {vid}{ext} to container {container_name}")
         
         blob_url = await blob_storage_manager.save_file(
-            container=container_name,
+            folder_name=container_name,
             file_name=f"{vid}{ext}",
-            file_path=path
+            src_file_path=path
         )
         logger.info(f"Successfully uploaded file to blob storage: {blob_url}")
         
