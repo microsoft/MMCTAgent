@@ -1,41 +1,75 @@
-"""Video frame search utilities using Azure Search provider."""
+"""Video frame search utilities; supports pluggable search providers (Azure or local FAISS)."""
+
 import numpy as np
 from typing import List, Dict, Any, Optional
 from azure.search.documents.models import VectorizedQuery
 
-from mmct.providers.azure_providers.search_provider import AzureSearchProvider
+from mmct.providers.factory import provider_factory
+from mmct.providers.base import SearchProvider
 
 
 class VideoFrameSearchClient:
-    """Video frame search client using AzureSearchProvider."""
+    """Video frame search client with a pluggable search provider.
 
-    def __init__(self, search_endpoint: str, search_key: Optional[str] = None,
-                 index_name: str = "video-frames-index"):
-        """
-        Initialize the video frame search client.
+    By default the provider is created via ProviderFactory (reads MMCTConfig). You can pass
+    an explicit provider instance or a provider_name (e.g. 'local_faiss').
+    """
+
+    def __init__(
+        self,
+        search_endpoint: Optional[str] = None,
+        search_key: Optional[str] = None,
+        index_name: str = "video-frames-index",
+        provider: Optional[SearchProvider] = None,
+        provider_name: Optional[str] = None,
+        provider_config: Optional[dict] = None,
+    ):
+        """Initialize the video frame search client.
 
         Args:
-            search_endpoint: Azure AI Search endpoint URL
-            search_key: API key (if None, uses managed identity)
-            index_name: Name of the search index
+            search_endpoint: optional endpoint to inject into provider config
+            search_key: optional api key to inject into provider config
+            index_name: name of the search index
+            provider: optional pre-created SearchProvider instance
+            provider_name: optional provider name to create via ProviderFactory
+            provider_config: optional provider config dict to pass to factory-created provider
         """
-        config = {
-            "endpoint": search_endpoint,
-            "index_name": index_name,
-            "use_managed_identity": search_key is None,
-        }
-        if search_key:
-            config["api_key"] = search_key
+        if provider is not None:
+            self.provider = provider
+        else:
+            # create provider via factory; provider_name may be None to use config default
+            self.provider = provider_factory.create_search_provider(provider_name)
 
-        self.provider = AzureSearchProvider(config)
+        # allow caller to override config values
+        if provider_config:
+            # merge provided config into provider.config (shallow)
+            try:
+                self.provider.config.update(provider_config)
+            except Exception:
+                self.provider.config = provider_config
+
+        if search_endpoint:
+            self.provider.config["endpoint"] = search_endpoint
+        if search_key:
+            self.provider.config["api_key"] = search_key
+
         self.index_name = index_name
+        # keep provider aware of which index it will operate on
+        self.provider.config["index_name"] = index_name
+        if hasattr(self.provider, "_initialize_client"):
+            # some providers expose _initialize_client() factory for client attribute
+            try:
+                self.provider.client = self.provider._initialize_client()
+            except Exception:
+                # ignore; provider may initialize lazily
+                pass
 
     async def search_similar_frames(
         self,
         query_vector: np.ndarray,
         query_text: str = "",
         top_k: int = 10,
-        filters: Optional[str] = None
+        filters: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
         Search for similar frames using vector search.
@@ -57,16 +91,17 @@ class VideoFrameSearchClient:
                 fields="clip_embedding"
             )
 
-            # Perform search using provider
+            # Perform search using provider.
             results = await self.provider.search(
                 query=query_text if query_text else "*",
                 index_name=self.index_name,
                 search_text=query_text if query_text else "*",
                 vector_queries=[vector_query],
+                embedding=vector_query.vector if hasattr(vector_query, "vector") else (vector_query.vector if isinstance(vector_query, dict) and "vector" in vector_query else query_vector),
                 filter=filters,
                 top=top_k,
-                select=['keyframe_filename', 'video_id', 'timestamp_seconds', 'motion_score'],
-                query_type="vector"
+                select=["keyframe_filename", "video_id", "timestamp_seconds", "motion_score"],
+                query_type="vector",
             )
 
             return results
@@ -88,18 +123,20 @@ class VideoFrameSearchClient:
             if not documents:
                 return True
 
-            # Upload documents in batches
+            # Upload documents in batches using provider bulk API when available
             batch_size = 100
             for i in range(0, len(documents), batch_size):
-                batch = documents[i:i + batch_size]
-                for doc in batch:
-                    await self.provider.index_document(doc, self.index_name)
+                batch = documents[i : i + batch_size]
+                # prefer bulk upload if provider implements it
+                if hasattr(self.provider, "upload_documents"):
+                    await self.provider.upload_documents(batch, index_name=self.index_name)
+                else:
+                    for doc in batch:
+                        await self.provider.index_document(doc, self.index_name)
 
             return True
-
-        except Exception as e:
+        except Exception:
             return False
-
     async def delete_frames_by_video(self, video_id: str) -> bool:
         """
         Delete all frames for a specific video.

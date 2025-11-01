@@ -23,7 +23,10 @@ class KeyframeSearcher:
                  search_endpoint: str,
                  search_key: Optional[str] = None,
                  index_name: str = "video-frames-index",
-                 clip_model: str = "openai/clip-vit-base-patch32"):
+                 clip_model: str = "openai/clip-vit-base-patch32",
+                 provider: Optional[object] = None,
+                 provider_name: Optional[str] = None,
+                 provider_config: Optional[dict] = None):
         """
         Initialize the keyframe searcher.
 
@@ -33,11 +36,14 @@ class KeyframeSearcher:
             index_name: Search index name
             clip_model: CLIP model name for query embeddings
         """
-        # Initialize search client
+        # Initialize search client; allow injecting a provider instance or provider_name.
         self.search_client = VideoFrameSearchClient(
             search_endpoint=search_endpoint,
             search_key=search_key,
-            index_name=index_name
+            index_name=index_name,
+            provider=provider,
+            provider_name=provider_name,
+            provider_config=provider_config,
         )
 
         # Initialize embeddings generator for query encoding
@@ -73,8 +79,7 @@ class KeyframeSearcher:
 
             # Build filter expression
             filters = f"{video_filter}" if video_filter else None
-
-            # Search for similar frames
+       
             results = await self.search_client.search_similar_frames(
                 query_vector=query_embedding,
                 query_text=query,

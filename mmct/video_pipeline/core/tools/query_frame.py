@@ -45,7 +45,8 @@ async def query_frame(
     index_name: Annotated[str, "search index name"],
     frame_ids: Annotated[Optional[list], "List of specific frame filenames to analyze (e.g., ['video_123.jpg', 'video_456.jpg'])"] = None,
     video_id: Annotated[Optional[str], "Unique video identifier hash for frame retrieval"] = None,
-    timestamps: Annotated[Optional[list], "List of time range pairs in HH:MM:SS format like [start_time, end_time], e.g., [['00:07:45', '00:09:44']]. Only 1 start_time, end)time pair"] = None
+    timestamps: Annotated[Optional[list], "List of time range pairs in HH:MM:SS format like [start_time, end_time], e.g., [['00:07:45', '00:09:44']]. Only 1 start_time, end)time pair"] = None,
+    provider_name: Annotated[Optional[str], "Optional search provider name to override config (e.g. 'local_faiss')"] = None
 ) -> str:
     """
     This is query_frame tool which takes a user query and either specific frame IDs or
@@ -59,10 +60,21 @@ async def query_frame(
     # Get search endpoint from environment
     search_endpoint = os.getenv('SEARCH_ENDPOINT')
 
+    # If there is a FAISS index directory in examples/ (e.g. from exported indices), prefer it
+    provider_config = None
+    alt_faiss_dir = os.path.join(os.getcwd(), "examples", "mmct_faiss_indices")
+    default_faiss_dir = os.path.join(os.getcwd(), "mmct_faiss_indices")
+    if os.path.isdir(alt_faiss_dir) and any(os.scandir(alt_faiss_dir)):
+        provider_config = {"index_path": alt_faiss_dir}
+    elif os.path.isdir(default_faiss_dir) and any(os.scandir(default_faiss_dir)):
+        provider_config = {"index_path": default_faiss_dir}
+
     # Initialize searcher
     searcher = KeyframeSearcher(
         search_endpoint=search_endpoint,
         index_name=f"keyframes-{index_name}",
+        provider_name=provider_name,
+        provider_config=provider_config,
     )
 
     # Determine which frames to use
@@ -210,13 +222,22 @@ if __name__ == "__main__":
     import asyncio
 
     async def main():
-        query = "user-query"
-        video_id = "hash-video-id"
-        frame_ids = [
-            "<hash-video-id>_<frame-number>.jpg",
-        ]
+        # Use the concrete inputs provided for debugging
+        query = "count the fruits on the christmas tree"
+        index_name = "local_search_index"
+        video_id = "808ef24205b8bfe7181818699675f5a4dbfe5974baf5ded99ab5b5b3c8b6f15d"
+        # Use timestamps mode (list of [start, end]) as in your function call
+        timestamps = [["00:00:00", "00:00:46"]]
 
-        result = await query_frame(query, frame_ids, video_id)
-        print(f"Query result: {result}")
+        # Call the tool using timestamps mode (frame_ids=None)
+        result = await query_frame(
+            query=query,
+            index_name=index_name,
+            frame_ids=None,
+            video_id=video_id,
+            timestamps=timestamps
+        )
+
+        print("query_frame result:", result)
 
     asyncio.run(main())

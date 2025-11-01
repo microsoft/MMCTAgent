@@ -148,3 +148,58 @@ def create_video_chapter_index_schema(index_name: str) -> SearchIndex:
         vector_search=vector_search
     )
     return index
+
+
+def create_keyframe_index_schema(index_name: str, dim: int = 512) -> SearchIndex:
+    """
+    Create the index schema definition for keyframe search. Uses a vector field for CLIP embeddings.
+
+    Args:
+        index_name: Name of the index to create
+        dim: Dimensionality of the CLIP embedding vectors (default: 512)
+
+    Returns:
+        SearchIndex: The index schema definition
+    """
+    fields = [
+        # identifier
+        SimpleField(name="id", type=SearchFieldDataType.String, key=True),
+        # metadata fields
+        SearchableField(name="video_id", type=SearchFieldDataType.String, filterable=True, facetable=True),
+        SearchableField(name="keyframe_filename", type=SearchFieldDataType.String, filterable=True, facetable=True),
+        # vector field for CLIP embeddings
+        SearchField(
+            name="clip_embedding",
+            type=SearchFieldDataType.Collection(SearchFieldDataType.Single),
+            searchable=True,
+            vector_search_dimensions=dim,
+            vector_search_profile_name="clip-profile",
+        ),
+        SimpleField(name="created_at", type=SearchFieldDataType.DateTimeOffset, filterable=True, sortable=True),
+        SimpleField(name="motion_score", type=SearchFieldDataType.Double, filterable=True, sortable=True),
+        SimpleField(name="timestamp_seconds", type=SearchFieldDataType.Double, filterable=True, sortable=True),
+        SimpleField(name="blob_url", type=SearchFieldDataType.String),
+        SimpleField(name="parent_id", type=SearchFieldDataType.String, filterable=True),
+        SimpleField(name="parent_duration", type=SearchFieldDataType.Double, filterable=True, sortable=True),
+        SimpleField(name="video_duration", type=SearchFieldDataType.Double, filterable=True, sortable=True),
+    ]
+
+    vector_search = VectorSearch(
+        algorithms=[
+            HnswAlgorithmConfiguration(
+                name="hnsw-algorithm",
+                parameters={
+                    "m": 4,
+                    "efConstruction": 400,
+                    "efSearch": 500,
+                    "metric": "cosine",
+                },
+            )
+        ],
+        profiles=[
+            VectorSearchProfile(name="clip-profile", algorithm_configuration_name="hnsw-algorithm")
+        ],
+    )
+
+    index = SearchIndex(name=index_name, fields=fields, vector_search=vector_search)
+    return index
