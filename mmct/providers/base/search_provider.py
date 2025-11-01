@@ -58,3 +58,35 @@ class SearchProvider(ABC):
             bool: True if successful
         """
         pass
+
+    @abstractmethod
+    async def upload_documents(self, documents: List[Dict], index_name: str = None) -> Dict[str, Any]:
+        """
+        Upload multiple documents to the search index.
+
+        Args:
+            documents: List of document dictionaries to upload
+            index_name: Optional index name (uses default if not provided)
+
+        Returns:
+            Dict with upload results
+        """
+        pass
+
+    @abstractmethod
+    async def check_is_document_exist(self, hash_id: str, index_name: str = None) -> bool:
+        """
+        Check if a document with the given hash_id exists in the index.
+
+        Args:
+            hash_id: Hash ID of the document to check
+            index_name: Optional index name (uses default if not provided)
+
+        Returns:
+            bool: True if document exists, False otherwise
+        """
+        pass
+
+    async def close(self):
+        """Close the search client and cleanup resources. Optional to implement."""
+        pass

@@ -23,11 +23,11 @@ class AzureSearchProvider(SearchProvider):
         """Initialize Azure AI Search client."""
         try:
             endpoint = self.config.get("endpoint")
+            if not endpoint:
+                raise ConfigurationException("SEARCH_ENDPOINT environment variable not set")
+
             index_name = self.config.get("index_name", "default")
             use_managed_identity = self.config.get("use_managed_identity", True)
-            
-            if not endpoint:
-                raise ConfigurationException("Azure AI Search endpoint is required")
             
             if use_managed_identity:
                 return SearchClient(
@@ -222,6 +222,72 @@ class AzureSearchProvider(SearchProvider):
         except Exception as e:
             logger.error(f"Failed to delete index '{index_name}': {e}")
             raise ProviderException(f"Failed to delete index '{index_name}': {e}")
+
+    @handle_exceptions(retries=3, exceptions=(Exception,))
+    @convert_exceptions({Exception: ProviderException})
+    async def upload_documents(self, documents: List[Dict], index_name: str = None) -> Dict[str, Any]:
+        """
+        Upload multiple documents to the search index.
+
+        Args:
+            documents: List of document dictionaries to upload
+            index_name: Optional index name (uses default if not provided)
+
+        Returns:
+            Dict with upload results
+        """
+        try:
+            if index_name and index_name != self.client._index_name:
+                # Create new client for different index
+                config = self.config.copy()
+                config["index_name"] = index_name
+                client = AzureSearchProvider(config).client
+            else:
+                client = self.client
+
+            result = await client.upload_documents(documents=documents)
+            logger.info(f"Successfully uploaded {len(documents)} documents to index")
+            return {"success": True, "count": len(documents), "result": result}
+        except Exception as e:
+            logger.error(f"Azure AI Search bulk upload failed: {e}")
+            raise ProviderException(f"Azure AI Search bulk upload failed: {e}")
+
+    @handle_exceptions(retries=3, exceptions=(Exception,))
+    @convert_exceptions({Exception: ProviderException})
+    async def check_is_document_exist(self, hash_id: str, index_name: str = None) -> bool:
+        """
+        Check if a document with the given hash_id exists in the index.
+
+        Args:
+            hash_id: Hash ID of the document to check
+            index_name: Optional index name (uses default if not provided)
+
+        Returns:
+            bool: True if document exists, False otherwise
+        """
+        try:
+            if index_name and index_name != self.client._index_name:
+                # Create new client for different index
+                config = self.config.copy()
+                config["index_name"] = index_name
+                client = AzureSearchProvider(config).client
+            else:
+                client = self.client
+
+            # Search for document with the given hash_id
+            results = await client.search(
+                search_text="*",
+                filter=f"hash_video_id eq '{hash_id}'",
+                top=1
+            )
+
+            # Check if any results were returned
+            async for _ in results:
+                return True
+            return False
+        except Exception as e:
+            logger.error(f"Failed to check if document exists: {e}")
+            raise ProviderException(f"Failed to check if document exists: {e}")
 
     async def close(self):
         """Close the search client and cleanup resources."""

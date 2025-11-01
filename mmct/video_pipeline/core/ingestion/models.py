@@ -14,7 +14,7 @@ class TranslationResponse(BaseModel):
 
 
 class SubjectVarietyResponse(BaseModel):
-    """Pydantic model for validating responses from the subject_and_variety function.
+    """Pydantic model for validating responses from the _extract_subject_and_variety function.
     
     This model represents the structured output from subject and variety identification analysis,
     extracting key subject matter information from video transcripts.
@@ -32,7 +32,7 @@ class SubjectVarietyResponse(BaseModel):
 
 
 class ChapterCreationResponse(BaseModel):
-    """Pydantic model for validating responses from the Chapters_creation function.
+    """Pydantic model for validating responses from the create_chapter function.
     
     This model represents the structured output from video analysis, including topic information,
     categorization, species identification, and detailed summary of content.
