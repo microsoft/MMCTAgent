@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import List, Dict, Optional, Tuple
 from loguru import logger
 
-from mmct.video_pipeline.utils.ai_search_client import AISearchClient, AISearchDocument
+from mmct.providers.search_document_models import AISearchDocument
 from mmct.video_pipeline.core.ingestion.semantic_chunking.semantic_chunker import SemanticChunker
 from mmct.video_pipeline.core.ingestion.chapter_generator.generate_chapter import ChapterGenerator
 from mmct.providers.factory import provider_factory
@@ -30,7 +30,6 @@ class ChapterIngestionPipeline:
     2. Chapter generation from chunks
     3. Document creation and ingestion to search index
 
-    This class separates concerns from SemanticChunker, which should only handle clustering.
     """
 
     def __init__(
@@ -74,11 +73,17 @@ class ChapterIngestionPipeline:
             keyframe_index=f"keyframes-{index_name}",
         )
         self.embedding_provider = provider_factory.create_embedding_provider()
-        # AISearchClient handles credential management internally
-        self.index_client = AISearchClient(
-            endpoint=os.getenv("SEARCH_ENDPOINT"),
-            index_name=self.index_name,
-        )
+
+        # Create search provider with custom index_name for this pipeline
+        search_endpoint = os.getenv("SEARCH_ENDPOINT")
+        if not search_endpoint:
+            raise ValueError("SEARCH_ENDPOINT environment variable not set")
+
+        self.search_provider = provider_factory.create_search_provider()
+        # Update the search provider's client to use our specific index_name
+        # The provider was created with default config, but we need a specific index
+        self.search_provider.config["index_name"] = self.index_name
+        self.search_provider.client = self.search_provider._initialize_client()
 
         # Pipeline state
         self.chunked_segments = []
@@ -88,11 +93,22 @@ class ChapterIngestionPipeline:
 
     async def _create_search_index(self):
         """Create search index if it doesn't exist."""
-        created = await self.index_client.check_and_create_index()
+        # Check if index exists
+        exists = await self.search_provider.index_exists(self.index_name)
+        if exists:
+            logger.info(f"Index {self.index_name} already exists.")
+            return
+
+        # Index doesn't exist, create it using the reusable schema utility
+        from mmct.providers.search_index_schema import create_video_chapter_index_schema
+
+        logger.info(f"Creating index '{self.index_name}'...")
+        index_schema = create_video_chapter_index_schema(self.index_name)
+
+        # Create the index using the provider
+        created = await self.search_provider.create_index(self.index_name, index_schema)
         if created:
             logger.info(f"Index {self.index_name} created successfully.")
-        else:
-            logger.info(f"Index {self.index_name} already exists.")
 
     async def _create_embedding_normal(self, text: str) -> List[float]:
         """Create embedding for text."""
@@ -133,12 +149,12 @@ class ChapterIngestionPipeline:
             return
 
         # Use the chapter generator to create chapters in batch
+        # Note: max_concurrent_requests is set in ChapterGenerator.__init__
         self.chapter_responses, self.chapter_transcripts = await self.chapter_generator.create_chapters_batch(
             chunked_segments=self.chunked_segments,
             video_id=self.hash_id,
             subject_variety=self.subject_data,
             categories="",
-            max_concurrent_requests=3,
         )
 
         logger.info(f"Chapter creation completed: {len(self.chapter_responses)} chapters created")
@@ -190,8 +206,9 @@ class ChapterIngestionPipeline:
             logger.error("No documents created - cannot upload to search index!")
             return
 
-        await self.index_client.upload_documents(
-            documents=[doc.model_dump() for doc in doc_objects]
+        await self.search_provider.upload_documents(
+            documents=[doc.model_dump() for doc in doc_objects],
+            index_name=self.index_name
         )
         logger.info(f"Successfully uploaded {len(doc_objects)} documents to index")
 
@@ -205,22 +222,21 @@ class ChapterIngestionPipeline:
         Returns:
             Tuple of (chapter_responses, chapter_transcripts, is_already_ingested)
         """
-        try:
-            # Ensure search index exists
-            await self._create_search_index()
-        except Exception as e:
-            logger.error(f"Error creating search index: {e}")
-            await asyncio.sleep(3)
+        # Ensure search index exists before checking for duplicates
+        await self._create_search_index()
 
-        # Check for duplicate
-        is_exist = await self.index_client.check_if_exists(hash_id=self.hash_id)
+        # Check for duplicate (only after ensuring index exists)
+        is_exist = await self.search_provider.check_is_document_exist(
+            hash_id=self.hash_id,
+            index_name=self.index_name
+        )
         if is_exist:
             logger.info("Document already exists in the index.")
             return None, None, is_exist
 
         # Step 1: Semantic Chunking
         logger.info("Step 1: Performing semantic chunking...")
-        self.chunked_segments = await self.semantic_chunker.process()
+        self.chunked_segments = await self.semantic_chunker.run()
 
         if not self.chunked_segments:
             logger.error("Semantic chunking failed - no segments created")
@@ -239,7 +255,7 @@ class ChapterIngestionPipeline:
         await self._ingest(url=url)
 
         # Cleanup
-        await self.index_client.close()
+        await self.search_provider.close()
 
         logger.info("Chapter ingestion pipeline completed successfully!")
         return self.chapter_responses, self.chapter_transcripts, is_exist

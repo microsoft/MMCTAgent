@@ -6,7 +6,7 @@ import os
 import subprocess
 import aiofiles
 from loguru import logger
-from mmct.video_pipeline.utils.ai_search_client import AISearchClient
+from mmct.providers.factory import provider_factory
 
 
 async def get_video_duration(video_path: str) -> float:
@@ -258,19 +258,30 @@ async def check_video_already_ingested(hash_id: str, index_name: str) -> bool:
         bool: True if video already exists, False otherwise
     """
     try:
-        # Create AI Search client (handles credentials internally)
-        index_client = AISearchClient(
-            endpoint=os.getenv("SEARCH_ENDPOINT"),
-            index_name=index_name,
-        )
+        # Create search provider using factory
+        search_provider = provider_factory.create_search_provider()
+
+        # Update to use the specified index_name
+        search_provider.config["index_name"] = index_name
+        search_provider.client = search_provider._initialize_client()
+
+        # First check if index exists
+        index_exists = await search_provider.index_exists(index_name)
+        if not index_exists:
+            logger.info(f"Index '{index_name}' does not exist yet, skipping duplicate check")
+            await search_provider.close()
+            return False
 
         # Check if document exists
-        exists = await index_client.check_if_exists(hash_id=hash_id)
-        await index_client.close()
+        exists = await search_provider.check_is_document_exist(
+            hash_id=hash_id,
+            index_name=index_name
+        )
+        await search_provider.close()
 
         return exists
 
     except Exception as e:
-        logger.warning(f"{e}")
+        logger.warning(f"Error checking if video already ingested: {e}")
         # In case of error, return False to proceed with ingestion
         return False
