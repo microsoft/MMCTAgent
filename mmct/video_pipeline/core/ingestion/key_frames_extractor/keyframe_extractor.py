@@ -38,12 +38,18 @@ class KeyframeExtractionConfig:
     num_workers:
         How many parallel segments of the video to process.
         1 = sequential. >1 will split the video by frame ranges.
+    index_name:
+        Name of the base index (keyframes index will be created as keyframes-{index_name}).
+    search_endpoint:
+        Azure Search endpoint URL for creating the keyframe search index client.
     """
     motion_threshold: float = 0.8
     sample_fps: int = 1
     max_frame_width: int = 800
     debug_mode: bool = False
     num_workers: int = 4
+    index_name: Optional[str] = None
+    search_endpoint: Optional[str] = None
 
 
 # ============================================================

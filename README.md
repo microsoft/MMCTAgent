@@ -200,7 +200,7 @@ ingestion = IngestionPipeline(
 )
 
 # Run the ingestion pipeline
-await ingestion()
+await ingestion.run()
 ```
 
 Perform Q&A through MMCT's Video Agent.

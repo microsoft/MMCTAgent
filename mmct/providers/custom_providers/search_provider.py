@@ -90,3 +90,19 @@ class CustomSearchProvider(SearchProvider):
         """
         logger.warning("Index deletion not applicable for GraphRAG")
         return False
+
+    async def upload_documents(self, documents: List[Dict], index_name: str = None) -> Dict[str, Any]:
+        """
+        Upload multiple documents to GraphRAG.
+        Not implemented for CustomSearchProvider.
+        """
+        logger.warning("Batch upload not implemented for CustomSearchProvider (GraphRAG)")
+        return {"success": False, "count": 0, "message": "Not implemented"}
+
+    async def check_is_document_exist(self, hash_id: str, index_name: str = None) -> bool:
+        """
+        Check if a document exists in GraphRAG.
+        Not implemented for CustomSearchProvider.
+        """
+        logger.warning("Document existence check not implemented for CustomSearchProvider (GraphRAG)")
+        return False
