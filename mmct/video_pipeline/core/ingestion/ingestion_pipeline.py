@@ -327,10 +327,10 @@ class IngestionPipeline:
             # Add upload tasks for each keyframe
             for filename, keyframe_path in keyframe_files:
                 context.pending_upload_tasks.append(
-                    blob_manager.upload_file(
-                        container=self.keyframe_container,
-                        blob_name=f"{context.hash_id}/{filename}",
-                        file_path=keyframe_path,
+                    blob_manager.save_file(
+                        folder_name=self.keyframe_container,
+                        file_name=f"{context.hash_id}/{filename}",
+                        src_file_path=keyframe_path,
                     )
                 )
 
@@ -338,8 +338,8 @@ class IngestionPipeline:
             context.local_resources.append(keyframes_dir)
 
             # Update blob URLs to point to keyframes instead of frames
-            context.keyframes_blob_folder_url = await blob_manager.get_blob_url(
-                container=self.keyframe_container, blob_name=f"{context.hash_id}"
+            context.keyframes_blob_folder_url = await blob_manager.get_file_url(
+                folder_name=self.keyframe_container, file_name=f"{context.hash_id}"
             )
 
         except Exception as e:
@@ -392,8 +392,8 @@ class IngestionPipeline:
             blob_manager = await self._get_blob_manager()
 
             # Set keyframes blob URL
-            context.keyframes_blob_folder_url = await blob_manager.get_blob_url(
-                container=self.keyframe_container, blob_name=f"{context.hash_id}"
+            context.keyframes_blob_folder_url = await blob_manager.get_file_url(
+                folder_name=self.keyframe_container, file_name=f"{context.hash_id}"
             )
 
             # Step 2: Process keyframes (extract, generate embeddings, store to search index)

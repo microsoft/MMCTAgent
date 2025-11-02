@@ -8,7 +8,7 @@ import asyncio
 import base64
 from datetime import time
 from typing import Annotated, Optional
-
+from loguru import logger
 from mmct.providers.factory import provider_factory
 from mmct.video_pipeline.core.tools.utils.search_keyframes import KeyframeSearcher
 
@@ -17,17 +17,17 @@ llm_provider = provider_factory.create_llm_provider()
 
 storage_provider = provider_factory.create_storage_provider()
 
-async def download_and_encode_blob(blob_name: str, container_name: str, save_locally: bool = False, local_dir: str = "./debug_frames") -> Optional[str]:
+async def download_and_encode_blob(file_name: str, folder_name: str, save_locally: bool = False, local_dir: str = "./debug_frames") -> Optional[str]:
     """Download JPG blob using storage_provider and encode to base64."""
     try:
         # Load blob data using storage provider
-        image_data = await storage_provider.load_blob_to_memory(container_name, blob_name)
+        image_data = await storage_provider.load_file_to_memory(folder=folder_name, file_name=file_name)
 
         # Optionally save to local disk for debugging
         if save_locally:
             os.makedirs(local_dir, exist_ok=True)
             # Create safe filename from blob_name
-            safe_filename = blob_name.replace('/', '_')
+            safe_filename = file_name.replace('/', '_')
             local_path = os.path.join(local_dir, safe_filename)
             with open(local_path, 'wb') as f:
                 f.write(image_data)
@@ -37,7 +37,7 @@ async def download_and_encode_blob(blob_name: str, container_name: str, save_loc
         return base64.b64encode(image_data).decode('utf-8')
 
     except Exception as e:
-        print(f"Failed to download and encode blob {blob_name}: {e}")
+        print(f"Failed to download and encode file {file_name}: {e}")
         return None
 
 async def query_frame(
@@ -45,7 +45,8 @@ async def query_frame(
     index_name: Annotated[str, "search index name"],
     frame_ids: Annotated[Optional[list], "List of specific frame filenames to analyze (e.g., ['video_123.jpg', 'video_456.jpg'])"] = None,
     video_id: Annotated[Optional[str], "Unique video identifier hash for frame retrieval"] = None,
-    timestamps: Annotated[Optional[list], "List of time range pairs in HH:MM:SS format like [start_time, end_time], e.g., [['00:07:45', '00:09:44']]. Only 1 start_time, end)time pair"] = None
+    timestamps: Annotated[Optional[list], "List of time range pairs in HH:MM:SS format like [start_time, end_time], e.g., [['00:07:45', '00:09:44']]. Only 1 start_time, end)time pair"] = None,
+    provider_name: Annotated[Optional[str], "Optional search provider name to override config (e.g. 'local_faiss')"] = None
 ) -> str:
     """
     This is query_frame tool which takes a user query and either specific frame IDs or
@@ -59,10 +60,21 @@ async def query_frame(
     # Get search endpoint from environment
     search_endpoint = os.getenv('SEARCH_ENDPOINT')
 
+    # If there is a FAISS index directory in examples/ (e.g. from exported indices), prefer it
+    provider_config = None
+    alt_faiss_dir = os.path.join(os.getcwd(), "examples", "mmct_faiss_indices")
+    default_faiss_dir = os.path.join(os.getcwd(), "mmct_faiss_indices")
+    if os.path.isdir(alt_faiss_dir) and any(os.scandir(alt_faiss_dir)):
+        provider_config = {"index_path": alt_faiss_dir}
+    elif os.path.isdir(default_faiss_dir) and any(os.scandir(default_faiss_dir)):
+        provider_config = {"index_path": default_faiss_dir}
+
     # Initialize searcher
     searcher = KeyframeSearcher(
         search_endpoint=search_endpoint,
         index_name=f"keyframes-{index_name}",
+        provider_name=provider_name,
+        provider_config=provider_config,
     )
 
     # Determine which frames to use
@@ -109,24 +121,24 @@ async def query_frame(
         list(dict.fromkeys(frame_filenames)),
         key=lambda x: int(''.join(filter(str.isdigit, os.path.basename(x).split('_')[-1].split('.')[0])) or 0)
     )
-    print(f"Processing {len(frame_filenames)} frames directly from blob storage")
+    print(f"Processing {len(frame_filenames)} frames directly from storage provider")
 
     # Prepare blob paths
-    container_name = "keyframes"
-    blob_paths = [f"{video_id}/{j}" for j in frame_filenames if j is not None]
+    folder_name = "keyframes"
+    file_paths = [f"{video_id}/{j}" for j in frame_filenames if j is not None]
 
-    # Download and encode images directly from blob storage (no disk I/O)
-    print(f"Downloading and encoding {len(blob_paths)} images from blob storage...")
+    # Download and encode images directly from storage provider (no disk I/O)
+    logger.info(f"Downloading and encoding {len(file_paths)} images from storage provider...")
 
     # Process blobs concurrently - direct blob to base64
-    tasks = [download_and_encode_blob(blob_path, container_name, save_locally=save_frames_locally) for blob_path in blob_paths]
+    tasks = [download_and_encode_blob(file_name=file_name,folder_name=folder_name, save_locally=save_frames_locally) for file_name in file_paths]
     encoded_results = await asyncio.gather(*tasks, return_exceptions=True)
 
     # Filter successful results
     encoded_images = [result for result in encoded_results
                      if isinstance(result, str) and result is not None]
 
-    print(f"Successfully processed {len(encoded_images)} images directly from blob storage")
+    print(f"Successfully processed {len(encoded_images)} images directly from storage provider")
 
     if not encoded_images:
         return "No valid images could be processed."
@@ -210,22 +222,22 @@ if __name__ == "__main__":
     import asyncio
 
     async def main():
-        query = "What materials are required to prepare the chilly nursery bed, and what are their uses?"
-        video_id = "d5bbc45fb8d284082f84b788b9dce1a931052e1e650daa4889de78654dbb9d45"
-        frame_ids = [
-            "d5bbc45fb8d284082f84b788b9dce1a931052e1e650daa4889de78654dbb9d45_1827.jpg",
-            "d5bbc45fb8d284082f84b788b9dce1a931052e1e650daa4889de78654dbb9d45_2436.jpg",
-            "d5bbc45fb  8d284082f84b788b9dce1a931052e1e650daa4889de78654dbb9d45_3770.jpg",
-            "d5bbc45fb8d284082f84b788b9dce1a931052e1e650daa4889de78654dbb9d45_4901.jpg",
-            "d5bbc45fb8d284082f84b788b9dce1a931052e1e650daa4889de78654dbb9d45_5133.jpg",
-            "d5bbc45fb8d284082f84b788b9dce1a931052e1e650daa4889de78654dbb9d45_8845.jpg",
-            "d5bbc45fb8d284082f84b788b9dce1a931052e1e650daa4889de78654dbb9d45_9802.jpg",
-            "d5bbc45fb8d284082f84b788b9dce1a931052e1e650daa4889de78654dbb9d45_10121.jpg",
-            "d5bbc45fb8d284082f84b788b9dce1a931052e1e650daa4889de78654dbb9d45_10643.jpg",
-            "d5bbc45fb8d284082f84b788b9dce1a931052e1e650daa4889de78654dbb9d45_11774.jpg"
-        ]
+        # Use the concrete inputs provided for debugging
+        query = "count the fruits on the christmas tree"
+        index_name = "local_search_index"
+        video_id = "808ef24205b8bfe7181818699675f5a4dbfe5974baf5ded99ab5b5b3c8b6f15d"
+        # Use timestamps mode (list of [start, end]) as in your function call
+        timestamps = [["00:00:00", "00:00:46"]]
 
-        result = await query_frame(query, frame_ids, video_id)
-        print(f"Query result: {result}")
+        # Call the tool using timestamps mode (frame_ids=None)
+        result = await query_frame(
+            query=query,
+            index_name=index_name,
+            frame_ids=None,
+            video_id=video_id,
+            timestamps=timestamps
+        )
+
+        print("query_frame result:", result)
 
     asyncio.run(main())

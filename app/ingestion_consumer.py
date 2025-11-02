@@ -1,7 +1,7 @@
 from mmct.video_pipeline import IngestionPipeline, Languages, TranscriptionServices
 from mmct.video_pipeline.utils.helper import get_media_folder
-from mmct.blob_store_manager import BlobStorageManager
 from mmct.video_pipeline.utils.helper import remove_file
+from mmct.providers.factory import provider_factory
 from utilities.event_hub_handler import EventHubHandler
 from utilities.execution_timer import ExecutionTimer
 from azure.eventhub import EventData, PartitionContext
@@ -23,7 +23,7 @@ except Exception as e:
     logger.exception(f"Exception occured while instantiating the Event Hub class: {e}")
     raise
 
-blob_storage_manager = None  # Will be initialized async in on_event
+blob_storage_manager = provider_factory.create_storage_provider()
     
 async def on_event(partition_context: PartitionContext, event: EventData):
     with ExecutionTimer() as timer:
@@ -42,14 +42,13 @@ async def on_event(partition_context: PartitionContext, event: EventData):
             logger.info("Successfully fetched payload from the event hub!")
 
             logger.info("Creating an instance of blob storage manager to handle operations related to blob")
-            blob_storage_manager = await BlobStorageManager.create(account_url=os.getenv("BLOB_ACCOUNT_URL"))
-
+        
             transcription_service = transcription_service.split('.')[-1]
             language = language.split('.')[-1]
 
             if video_id:
                 logger.info("Retrieving the video from the Blob!")
-                await blob_storage_manager.download_from_url(blob_url=video_blob_url, save_folder=await get_media_folder())
+                await blob_storage_manager.download_from_url(file_url=video_blob_url, save_folder=await get_media_folder())
                 logger.info("Successfully retrieved the video from blob")
 
                 ingestion = IngestionPipeline(

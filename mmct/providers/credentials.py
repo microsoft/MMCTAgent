@@ -11,7 +11,6 @@ from azure.identity.aio import (
     AzureCliCredential as AsyncAzureCliCredential,
     ChainedTokenCredential as AsyncChainedTokenCredential
 )
-from loguru import logger
 
 
 class AzureCredentials:
@@ -26,7 +25,6 @@ class AzureCredentials:
         Returns:
             ChainedTokenCredential with CLI and DefaultAzureCredential
         """
-        logger.info("Creating chained credential (CLI -> DefaultAzureCredential)")
         return ChainedTokenCredential(
             AzureCliCredential(),
             DefaultAzureCredential()
@@ -41,7 +39,6 @@ class AzureCredentials:
         Returns:
             AsyncChainedTokenCredential with CLI and DefaultAzureCredential
         """
-        logger.info("Creating async chained credential (CLI -> DefaultAzureCredential)")
         return AsyncChainedTokenCredential(
             AsyncAzureCliCredential(),
             AsyncDefaultAzureCredential()

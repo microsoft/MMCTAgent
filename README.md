@@ -200,7 +200,7 @@ ingestion = IngestionPipeline(
 )
 
 # Run the ingestion pipeline
-await ingestion()
+await ingestion.run()
 ```
 
 Perform Q&A through MMCT's Video Agent.
@@ -238,7 +238,7 @@ MMCTAgent now features a **modular provider system** that allows you to seamless
 | Service Type | Supported Providers | Use Cases |
 |--------------|--------------------|-----------|
 | **LLM** | Azure OpenAI, OpenAI | Text generation, chat completion |
-| **Search** | Azure AI Search | Document search and retrieval |
+| **Search** | Azure AI Search, FAISS | Document search and retrieval |
 | **Transcription** | Azure Speech Services, OpenAI Whisper | Audio-to-text conversion |
 | **Storage** | Azure Blob Storage, Local Storage | File storage and management |
 
@@ -270,14 +270,9 @@ High-throughput (fast, large batches):
 
 MMCTAgent uses a flexible configuration system that supports multiple cloud providers. Choose your configuration method:
 
-#### Quick Start - Copy Environment Template
+#### Quick Start
 
-```bash
-# For development
-cp config/environments/development.env .env
-```
-
-Then edit `.env` with your specific values.
+Rename the `.env.example` to `.env` and fill the specific values.
 
 #### Provider Configuration Examples
 
@@ -291,18 +286,18 @@ LLM_MODEL_NAME=gpt-4o
 LLM_USE_MANAGED_IDENTITY=true
 
 # Search Configuration
-SEARCH_PROVIDER=azure_ai_search
+SEARCH_PROVIDER=azure_ai_search # use `local_faiss` to enable faiss index as vector db
 SEARCH_ENDPOINT=https://your-search.search.windows.net
 SEARCH_USE_MANAGED_IDENTITY=true
 SEARCH_INDEX_NAME=your-index-name
 
 # Storage Configuration
-STORAGE_PROVIDER=azure_blob
+STORAGE_PROVIDER=azure # use `local` to store items to local storage
 STORAGE_ACCOUNT_NAME=your-storage-account
 STORAGE_USE_MANAGED_IDENTITY=true
 ```
 
-📖 **For comprehensive configuration options, see our [Provider Configuration Guide](docs/PROVIDERS.md)**
+📖 **For comprehensive configuration options, see our [Provider Configuration Guide](docs/PROVIDERS_GUIDE.md)**
 
 ## **Project Structure**
 

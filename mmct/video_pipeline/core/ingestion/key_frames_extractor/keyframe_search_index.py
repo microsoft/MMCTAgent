@@ -1,44 +1,40 @@
 from typing import List, Optional
 import logging
 
-from mmct.providers.azure_providers.search_provider import AzureSearchProvider
+from mmct.providers.factory import provider_factory
 from mmct.video_pipeline.core.ingestion.key_frames_extractor.clip_embeddings import FrameEmbedding
 from mmct.video_pipeline.utils.video_frame_search import create_frame_documents_from_embeddings
-from azure.search.documents.indexes.models import (
-    SearchIndex,
-    SearchField,
-    SimpleField,
-    SearchableField,
-    SearchFieldDataType,
-    VectorSearch,
-    HnswAlgorithmConfiguration,
-    VectorSearchProfile
-)
+from mmct.providers.search_index_schema import create_keyframe_index_schema
 
 logger = logging.getLogger(__name__)
 
 
 class KeyframeSearchIndex:
-    """Manages keyframe storage and search in Azure AI Search using AzureSearchProvider."""
+    """Provider-agnostic keyframe storage and indexing helper."""
 
-    def __init__(self, search_endpoint: str, index_name: str = "video-keyframes-index"):
-        """
-        Initialize the keyframe search index.
-
-        Args:
-            search_endpoint: Azure AI Search endpoint URL
-            index_name: Name of the search index for keyframes
-        """
+    def __init__(self, search_endpoint: str = None, index_name: str = "video-keyframes-index", provider_name: Optional[str] = None, provider_config: Optional[dict] = None):
         self.search_endpoint = search_endpoint
         self.index_name = index_name
 
-        # Initialize Azure Search provider
-        config = {
-            "endpoint": search_endpoint,
-            "index_name": index_name,
-            "use_managed_identity": True
-        }
-        self.provider = AzureSearchProvider(config)
+        # create provider via factory (uses configured default if provider_name is None)
+        self.provider = provider_factory.create_search_provider(provider_name)
+
+        # merge provided config and endpoint
+        cfg = provider_config or {}
+        if search_endpoint:
+            cfg.setdefault("endpoint", search_endpoint)
+        cfg.setdefault("index_name", index_name)
+        try:
+            self.provider.config.update(cfg)
+        except Exception:
+            self.provider.config = cfg
+
+        # initialize client shim when available
+        if hasattr(self.provider, "_initialize_client"):
+            try:
+                self.provider.client = self.provider._initialize_client()
+            except Exception:
+                pass
 
     async def create_keyframe_index_if_not_exists(self) -> bool:
         """
@@ -53,60 +49,13 @@ class KeyframeSearchIndex:
                 logger.info(f"Keyframe index '{self.index_name}' already exists")
                 return False
 
-            # Define keyframe-specific fields (matching reference schema)
-            fields = [
-                SimpleField(name="id", type=SearchFieldDataType.String, key=True),
-                SearchableField(name="video_id", type=SearchFieldDataType.String,
-                              filterable=True, facetable=True),
-                SearchableField(name="keyframe_filename", type=SearchFieldDataType.String,
-                              filterable=True, facetable=True),
-                SearchField(name="clip_embedding", type=SearchFieldDataType.Collection(SearchFieldDataType.Single),
-                           searchable=True, vector_search_dimensions=512,
-                           vector_search_profile_name="clip-profile"),
-                SimpleField(name="created_at", type=SearchFieldDataType.DateTimeOffset,
-                           filterable=True, sortable=True),
-                SimpleField(name="motion_score", type=SearchFieldDataType.Double,
-                           filterable=True, sortable=True),
-                SimpleField(name="timestamp_seconds", type=SearchFieldDataType.Double,
-                           filterable=True, sortable=True),
-                SimpleField(name="blob_url", type=SearchFieldDataType.String),
-                SimpleField(name="parent_id", type=SearchFieldDataType.String,
-                           filterable=True),
-                SimpleField(name="parent_duration", type=SearchFieldDataType.Double,
-                           filterable=True, sortable=True),
-                SimpleField(name="video_duration", type=SearchFieldDataType.Double,
-                           filterable=True, sortable=True)
-            ]
+            # If provider is Azure, create the rich SearchIndex schema via the helper
+            if provider_factory.is_search_provider(self.provider, "azure_ai_search"):
+                index_schema = create_keyframe_index_schema(self.index_name, dim=512)
+                return await self.provider.create_index(self.index_name, index_schema)
 
-            # Configure vector search for CLIP embeddings
-            vector_search = VectorSearch(
-                algorithms=[
-                    HnswAlgorithmConfiguration(
-                        name="hnsw-algorithm",
-                        parameters={
-                            "m": 4,
-                            "efConstruction": 400,
-                            "efSearch": 500,
-                            "metric": "cosine"
-                        }
-                    )
-                ],
-                profiles=[
-                    VectorSearchProfile(
-                        name="clip-profile",
-                        algorithm_configuration_name="hnsw-algorithm"
-                    )
-                ]
-            )
-
-            # Create the index
-            index = SearchIndex(
-                name=self.index_name,
-                fields=fields,
-                vector_search=vector_search
-            )
-
-            return await self.provider.create_index(self.index_name, index)
+            # Non-Azure (e.g., local FAISS) — pass a simple schema dict and let provider decide
+            return await self.provider.create_index(self.index_name, {"dim": None})
 
         except Exception as e:
             logger.error(f"Failed to create keyframe index: {e}")
@@ -145,18 +94,38 @@ class KeyframeSearchIndex:
 
             # Create documents
             documents = create_frame_documents_from_embeddings(
-                frame_embeddings, video_id, video_path,
-                parent_id, parent_duration, video_duration
+                frame_embeddings, video_id, video_path, parent_id, parent_duration, video_duration
             )
 
-            # Upload in batches using provider
+            # Detect provider type and transform for non-Azure providers
+            is_azure = provider_factory.is_search_provider(self.provider, "azure_ai_search")
+
             batch_size = 100
             for i in range(0, len(documents), batch_size):
                 batch = documents[i:i + batch_size]
 
-                # Upload each document in the batch
-                for doc in batch:
-                    await self.provider.index_document(doc, self.index_name)
+                if not is_azure:
+                    # map clip_embedding -> embeddings for FAISS-style providers
+                    transformed = []
+                    for doc in batch:
+                        new_doc = dict(doc)
+                        if "clip_embedding" in new_doc:
+                            new_doc["embeddings"] = new_doc.get("clip_embedding")
+                        transformed.append(new_doc)
+
+                    if hasattr(self.provider, "upload_documents"):
+                        await self.provider.upload_documents(transformed, index_name=self.index_name)
+                    else:
+                        for doc in transformed:
+                            await self.provider.index_document(doc, self.index_name)
+
+                else:
+                    # Azure expects clip_embedding field; prefer bulk API
+                    if hasattr(self.provider, "upload_documents"):
+                        await self.provider.upload_documents(batch, index_name=self.index_name)
+                    else:
+                        for doc in batch:
+                            await self.provider.index_document(doc, self.index_name)
 
                 logger.info(f"Uploaded batch {i // batch_size + 1} of {len(batch)} frame documents")
 

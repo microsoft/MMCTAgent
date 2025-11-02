@@ -26,7 +26,9 @@ from .openai_providers import (
 )
 from ..utils.error_handler import ConfigurationException
 from .custom_providers import (
-    CustomSearchProvider
+    CustomSearchProvider,
+    LocalFaissSearchProvider,
+    LocalStorageProvider
 )
 from ..config.settings import MMCTConfig
 
@@ -45,7 +47,8 @@ class ProviderFactory:
     
     _search_providers: Dict[str, Type[SearchProvider]] = {
         'azure_ai_search': AzureSearchProvider,
-        'custom_search': CustomSearchProvider
+        'custom_search': CustomSearchProvider,
+        'local_faiss': LocalFaissSearchProvider
         # Add other search providers here
     }
     
@@ -62,6 +65,7 @@ class ProviderFactory:
 
     _storage_providers: Dict[str, Type[StorageProvider]] = {
         'azure': AzureStorageProvider,
+        'local': LocalStorageProvider
     }
 
     @classmethod
@@ -146,7 +150,23 @@ class ProviderFactory:
 
         provider_class = cls._search_providers[provider_name]
         logger.info(f"Creating search provider: {provider_name}")
-        return provider_class(config.search.model_dump())
+        # instantiate provider with configured dict
+        provider_instance = provider_class(config.search.model_dump())
+        # tag provider instance with an explicit provider name for robust detection
+        try:
+            # prefer storing in config dict
+            if isinstance(provider_instance.config, dict):
+                provider_instance.config.setdefault("provider", provider_name)
+            else:
+                setattr(provider_instance, "provider", provider_name)
+        except Exception:
+            # best-effort - do not fail provider creation on tagging issues
+            try:
+                setattr(provider_instance, "provider", provider_name)
+            except Exception:
+                pass
+
+        return provider_instance
     
     @classmethod
     def create_vision_provider(cls, provider_name: str = None) -> VisionProvider:
@@ -243,6 +263,36 @@ class ProviderFactory:
             "transcription": list(cls._transcription_providers.keys()),
             "storage": list(cls._storage_providers.keys())
         }
+
+    @classmethod
+    def is_search_provider(cls, provider, provider_name: str) -> bool:
+        """check whether a provider instance corresponds to a named search provider.
+
+        Detection order:
+        1. provider.config['provider'] or similar explicit tag
+        2. provider.provider attribute
+        3. duck-typing (Azure index_client.create_index)
+        Returns True if the provider matches provider_name.
+        """
+        try:
+            if provider is None:
+                return False
+            cfg = getattr(provider, "config", None)
+            if isinstance(cfg, dict):
+                prov = cfg.get("provider") or cfg.get("provider_name") or cfg.get("name")
+                if prov and str(prov).lower() == provider_name.lower():
+                    return True
+
+            prov_attr = getattr(provider, "provider", None)
+            if prov_attr and str(prov_attr).lower() == provider_name.lower():
+                return True
+
+            # Azure duck-typing: has index_client.create_index
+            if provider_name.lower().startswith("azure") and hasattr(provider, "index_client") and hasattr(provider.index_client, "create_index"):
+                return True
+        except Exception:
+            pass
+        return False
     
     @classmethod
     def register_llm_provider(cls, name: str, provider_class: Type[LLMProvider]):

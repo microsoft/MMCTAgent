@@ -23,6 +23,8 @@ The `base/` folder contains abstract base classes that define the interface for 
 - **`search_provider.py`** - Base class for Search Index provider
 - **`vision_provider.py`** - Base class for Vision/Image Understanding providers
 - **`transcription_provider.py`** - Base class for Audio Transcription providers
+- **`image_embedding_provider`** - Base class for image embedding generation providers
+- **`storage_provider`** - Base class for the storage providers.
 
 ### Azure Providers
 
@@ -159,26 +161,43 @@ class LLMConfig(BaseSettings):
 
 _You can add the relevant environment variables that you have to provider to your custom implementation, you can add those variables directly in the respective config itself_
 
-### Method 3: Direct Instantiation
+### Method 3: Direct instantiation (code examples)
 
-Load providers directly in your code:
+You can create provider instances directly with `provider_factory`. The factory reads defaults from `MMCTConfig` (which loads `.env`), but you can force a provider and override its runtime config after creation.
+
+Example — custom/local provider (GraphRAG or Local FAISS):
 
 ```python
-# importing the search config and the provider_factory
-from mmct.config.settings import SearchConfig
 from mmct.providers.factory import provider_factory
 
-# setting the provider directly available in the provider_factory
-search_config = SearchConfig(provider="custom_search")
+# create the provider by name
+prov = provider_factory.create_search_provider('custom_search')
 
-# instantiating the provider class according the config.
-search_provider = provider_factory.create_search_provider(
-    search_config.provider, search_config.model_dump()
-)
+# override config programmatically if needed
+prov.config['some_custom_key'] = 'value'
 
-# performing the search over the `query` and the generated `query-embedding`
-search_results = await search_provider.search(query=query,embedding=embedding)
+# run a search (for custom providers, embedding may be required)
+results = await prov.search(query='find this', embedding=embedding_vector, top=5)
 ```
+
+Example — Azure Cognitive Search provider:
+
+```python
+from mmct.providers.factory import provider_factory
+
+# create the Azure Search provider (reads endpoint/api key from MMCTConfig/.env by default)
+azure_search = provider_factory.create_search_provider('azure_ai_search')
+
+# if you need to target a different index at runtime, update the config
+azure_search.config['index_name'] = 'keyframes-local_search_index'
+
+# perform a vector/text search (Azure accepts vector_queries or search_text + filter)
+results = await azure_search.search(query='some text', top=10)
+```
+
+Notes:
+- Some providers (like `local_faiss`) expect an `embedding` kwarg when searching. Azure accepts `vector_queries` / `search_text` and `filter` strings.
+- If you need to override many config values programmatically, set `prov.config[...]` after creating the provider instance.
 
 ---
 

@@ -243,6 +243,23 @@ class StorageConfig(BaseSettings):
     account_url: Optional[str] = Field(default=None, env="STORAGE_ACCOUNT_URL")
     use_managed_identity: bool = Field(default=True, env="STORAGE_USE_MANAGED_IDENTITY")
 
+    def __init__(self, **kwargs):
+        # Force load environment variables before validation
+        load_dotenv(find_dotenv())
+
+        # If no explicit values provided, use environment variables
+        if not kwargs:
+            kwargs = {
+                'provider': os.getenv("STORAGE_PROVIDER", "azure"),
+                'connection_string': os.getenv("STORAGE_CONNECTION_STRING"),
+                'account_name': os.getenv("STORAGE_ACCOUNT_NAME"),
+                'container_name': os.getenv("STORAGE_CONTAINER_NAME"),
+                'account_url': os.getenv("STORAGE_ACCOUNT_URL"),
+                'use_managed_identity': os.getenv("STORAGE_USE_MANAGED_IDENTITY"),
+            }
+
+        super().__init__(**kwargs)
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
