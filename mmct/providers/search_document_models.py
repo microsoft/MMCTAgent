@@ -104,8 +104,8 @@ class ChapterIndexDocument(BaseModel):
         key=False
     )
     subject_registry: str = Field(
-        default="{}",
-        description="JSON string of subject registry tracking all subjects (people, objects, etc.) in the video segment",
+        default="[]",
+        description="JSON string array of subject registry tracking all subjects (people, objects, etc.) in the video segment",
         searchable=True,
         filterable=False,
         retrievable=True,
@@ -393,9 +393,21 @@ class SubjectRegistryDocument(BaseModel):
         key=False
     )
 
+    url: str = Field(
+        default="",
+        description="URL of the video",
+        searchable=False,
+        filterable=True,
+        retrievable=True,
+        stored=True,
+        sortable=False,
+        facetable=False,
+        key=False
+    )
+
     subject_registry: str = Field(
-        default="{}",
-        description="JSON string of merged subject registry containing all subjects (people, objects, etc.) from the entire video",
+        default="[]",
+        description="JSON string array of merged subject registry containing all subjects (people, objects, etc.) from the entire video",
         searchable=True,
         filterable=False,
         retrievable=True,

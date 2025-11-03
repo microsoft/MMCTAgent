@@ -1,6 +1,6 @@
 import json
 import uuid
-from typing import List, Dict, Optional
+from typing import List, Optional
 from loguru import logger
 from pydantic import BaseModel, Field
 from mmct.config.settings import MMCTConfig
@@ -17,9 +17,9 @@ class MergedSubjectRegistryResponse(BaseModel):
     """
     model_config = {"extra": "forbid"}
 
-    merged_subjects: Optional[Dict[str, SubjectResponse]] = Field(
-        default_factory=dict,
-        description="Dictionary mapping subject names (keys) to SubjectResponse objects (values) containing name, appearance, identity, first_seen timestamp, and additional_details"
+    merged_subjects: Optional[List[SubjectResponse]] = Field(
+        default_factory=list,
+        description="List of SubjectResponse objects containing name, appearance, identity, first_seen timestamp, and additional_details"
     )
 
 
@@ -46,17 +46,19 @@ class SubjectRegistryProcessor:
     async def run(
         self,
         chapter_responses: List[ChapterCreationResponse],
-        video_id: str
-    ) -> Optional[Dict[str, SubjectResponse]]:
+        video_id: str,
+        url: Optional[str] = None
+    ) -> Optional[List[SubjectResponse]]:
         """
         Main method to process chapter responses and create merged subject registry.
 
         Args:
             chapter_responses: List of ChapterCreationResponse objects containing subject registries
             video_id: Unique identifier for the video
+            url: Optional URL of the video
 
         Returns:
-            Merged subject registry dictionary mapping subject names to SubjectResponse objects, or None if no subjects found
+            Merged subject registry as a list of SubjectResponse objects, or None if no subjects found
         """
         # Extract all subject registries from chapters
         registries = self._extract_registries(chapter_responses)
@@ -73,14 +75,14 @@ class SubjectRegistryProcessor:
             return None
 
         # Index the merged registry
-        await self._index_registry(merged_registry, video_id)
+        await self._index_registry(merged_registry, video_id, url)
 
         return merged_registry
 
     def _extract_registries(
         self,
         chapter_responses: List[ChapterCreationResponse]
-    ) -> List[Dict[str, SubjectResponse]]:
+    ) -> List[List[SubjectResponse]]:
         """
         Extract subject registries from chapter responses.
 
@@ -88,29 +90,27 @@ class SubjectRegistryProcessor:
             chapter_responses: List of ChapterCreationResponse objects
 
         Returns:
-            List of subject registry dictionaries (Dict[str, SubjectResponse])
+            List of subject registry lists (List[SubjectResponse])
         """
         registries = []
 
         for idx, chapter in enumerate(chapter_responses):
             if chapter.subject_registry:
-                # Keep as Dict[str, SubjectResponse]
-                if chapter.subject_registry:
-                    registries.append(chapter.subject_registry)
-                    logger.debug(f"Extracted registry from chapter {idx}: {len(chapter.subject_registry)} subjects")
+                registries.append(chapter.subject_registry)
+                logger.debug(f"Extracted registry from chapter {idx}: {len(chapter.subject_registry)} subjects")
 
         logger.info(f"Extracted {len(registries)} non-empty registries from {len(chapter_responses)} chapters")
         return registries
 
-    async def _merge_registries(self, registries: List[Dict[str, SubjectResponse]]) -> Optional[Dict[str, SubjectResponse]]:
+    async def _merge_registries(self, registries: List[List[SubjectResponse]]) -> Optional[List[SubjectResponse]]:
         """
         Merge multiple subject registries using LLM to handle duplicates.
 
         Args:
-            registries: List of subject registry dictionaries (Dict[str, SubjectResponse])
+            registries: List of subject registry lists (List[SubjectResponse])
 
         Returns:
-            Merged subject registry dictionary (Dict[str, SubjectResponse])
+            Merged subject registry as a list of SubjectResponse objects
         """
         if len(registries) == 0:
             return None
@@ -123,41 +123,39 @@ class SubjectRegistryProcessor:
             # Convert Pydantic models to dicts for JSON serialization
             registries_dicts = []
             for registry in registries:
-                registry_dict = {}
-                for subject_name, subject_obj in registry.items():
-                    registry_dict[subject_name] = subject_obj.model_dump()
-                registries_dicts.append(registry_dict)
+                registry_list = [subject_obj.model_dump() for subject_obj in registry]
+                registries_dicts.append(registry_list)
 
             registries_json = json.dumps(registries_dicts, indent=2)
 
             system_prompt = """You are a SubjectRegistryMergerGPT. Your task is to merge multiple partial subject registries from different clips of the same video into one coherent registry.
 
-MERGE RULES:
-1. PRESERVE ALL UNIQUE SUBJECTS - Do not lose any information or subjects from the input registries
-2. IDENTIFY AND MERGE DUPLICATES - If two or more subjects clearly refer to the same entity (same person, object, or animal), merge them intelligently:
-   - Choose the most descriptive or complete name (prefer specific names over generic ones)
-   - Keep the EARLIEST `first_seen` timestamp across all occurrences
-   - Combine ALL appearance descriptions from all instances (remove exact duplicates, but keep meaningful variations)
-   - Combine ALL identity descriptions from all instances (remove exact duplicates, but keep meaningful variations)
-   - Merge additional_details into a comprehensive, coherent description that includes all relevant information
-3. MAINTAIN STRUCTURE - Each merged subject must have:
-   - name: string (the subject's name or identifier)
-   - appearance: list of strings (visual characteristics)
-   - identity: list of strings (type, category, role, etc.)
-   - first_seen: float (timestamp in seconds)
-   - additional_details: string or null (any extra context)
-4. OUTPUT FORMAT - Return a dictionary where keys are subject names and values are subject objects with the above fields
+            MERGE RULES:
+            1. PRESERVE ALL UNIQUE SUBJECTS - Do not lose any information or subjects from the input registries
+            2. IDENTIFY AND MERGE DUPLICATES - If two or more subjects clearly refer to the same entity (same person, object, or animal), merge them intelligently:
+            - Choose the most descriptive or complete name (prefer specific names over generic ones)
+            - Keep the EARLIEST `first_seen` timestamp across all occurrences
+            - Combine ALL appearance descriptions from all instances (remove exact duplicates, but keep meaningful variations)
+            - Combine ALL identity descriptions from all instances (remove exact duplicates, but keep meaningful variations)
+            - Merge additional_details into a comprehensive, coherent description that includes all relevant information
+            3. MAINTAIN STRUCTURE - Each merged subject must have:
+            - name: string (the subject's name or identifier)
+            - appearance: list of strings (visual characteristics)
+            - identity: list of strings (type, category, role, etc.)
+            - first_seen: float (timestamp in seconds)
+            - additional_details: string or null (any extra context)
+            4. OUTPUT FORMAT - Return a list of subject objects with the above fields
 
-EXAMPLES OF MERGING:
-- If "red car" appears at 10s and "red sports car" at 30s with similar descriptions → merge into "red sports car" with first_seen=10.0
-- If "presenter" and "main host" clearly refer to the same person → merge into one with combined descriptions
-- If "iPhone" and "smartphone" both refer to the same device → merge appropriately"""
+            EXAMPLES OF MERGING:
+            - If "red car" appears at 10s and "red sports car" at 30s with similar descriptions → merge into "red sports car" with first_seen=10.0
+            - If "presenter" and "main host" clearly refer to the same person → merge into one with combined descriptions
+            - If "iPhone" and "smartphone" both refer to the same device → merge appropriately"""
 
             user_prompt = f"""Merge these partial subject registries from the same video into a single coherent registry:
 
-{registries_json}
+            {registries_json}
 
-Carefully identify duplicate subjects that refer to the same entity and merge them according to the rules. Preserve all unique subjects."""
+            Carefully identify duplicate subjects that refer to the same entity and merge them according to the rules. Preserve all unique subjects."""
 
             messages = [
                 {"role": "system", "content": system_prompt},
@@ -183,13 +181,14 @@ Carefully identify duplicate subjects that refer to the same entity and merge th
             logger.error(f"Failed to merge subject registries: {e}")
             return None
 
-    async def _index_registry(self, registry: Dict[str, SubjectResponse], video_id: str) -> bool:
+    async def _index_registry(self, registry: List[SubjectResponse], video_id: str, url: Optional[str] = None) -> bool:
         """
         Index the merged subject registry into search index as a single combined document.
 
         Args:
-            registry: Merged subject registry dictionary (Dict[str, SubjectResponse])
+            registry: Merged subject registry as a list of SubjectResponse objects
             video_id: Unique identifier for the video
+            url: Optional URL of the video
 
         Returns:
             True if indexing succeeded, False otherwise
@@ -204,23 +203,21 @@ Carefully identify duplicate subjects that refer to the same entity and merge th
                 await self._create_subject_registry_index()
 
             # Serialize the entire merged subject_registry to JSON string
-            subject_registry_json = "{}"
+            subject_registry_json = "[]"
             if registry:
                 try:
-                    # Convert the Dict[str, SubjectResponse] to JSON-serializable dict
-                    subject_registry_dict = {
-                        subject_id: subject.model_dump()
-                        for subject_id, subject in registry.items()
-                    }
-                    subject_registry_json = json.dumps(subject_registry_dict)
+                    # Convert the List[SubjectResponse] to JSON-serializable list
+                    subject_registry_list = [subject.model_dump() for subject in registry]
+                    subject_registry_json = json.dumps(subject_registry_list)
                 except Exception as e:
                     logger.warning(f"Failed to serialize merged subject_registry: {e}")
-                    subject_registry_json = "{}"
+                    subject_registry_json = "[]"
 
             # Create a single document with the combined subject registry
             doc = {
                 "id": str(uuid.uuid4()),
                 "video_id": video_id,
+                "url": url,
                 "subject_registry": subject_registry_json,
                 "subject_count": len(registry)
             }

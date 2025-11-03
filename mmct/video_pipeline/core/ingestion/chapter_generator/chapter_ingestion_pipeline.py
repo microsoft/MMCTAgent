@@ -147,18 +147,15 @@ class ChapterIngestionPipeline:
             chapter_content_str = chapter_response.__str__(transcript=chapter_transcript)
 
             # Serialize subject_registry to JSON string
-            subject_registry_json = "{}"
+            subject_registry_json = "[]"
             if chapter_response.subject_registry:
                 try:
-                    # Convert the Dict[str, SubjectResponse] to JSON-serializable dict
-                    subject_registry_dict = {
-                        subject_id: subject.model_dump()
-                        for subject_id, subject in chapter_response.subject_registry.items()
-                    }
-                    subject_registry_json = json.dumps(subject_registry_dict)
+                    # Convert the List[SubjectResponse] to JSON-serializable list
+                    subject_registry_list = [subject.model_dump() for subject in chapter_response.subject_registry]
+                    subject_registry_json = json.dumps(subject_registry_list)
                 except Exception as e:
                     logger.warning(f"Failed to serialize subject_registry: {e}")
-                    subject_registry_json = "{}"
+                    subject_registry_json = "[]"
 
             obj = ChapterIndexDocument(
                 id=str(uuid.uuid4()),
@@ -234,7 +231,8 @@ class ChapterIngestionPipeline:
         logger.info("Step 3: Processing and indexing subject registry...")
         merged_registry = await self.subject_registry_processor.run(
             chapter_responses=self.chapter_responses,
-            video_id=self.hash_id
+            video_id=self.hash_id,
+            url=url
         )
         if merged_registry:
             logger.info(f"Subject registry processed: {len(merged_registry)} unique subjects")

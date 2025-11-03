@@ -64,13 +64,13 @@ class SubjectRegistry(BaseModel):
     """Pydantic model for the registry of all subjects tracked in a video segment.
 
     This model maintains a collection of subjects (people, objects, animals, etc.)
-    identified and tracked throughout the video, with each subject mapped by its name.
+    identified and tracked throughout the video.
     """
     model_config = ConfigDict(extra="forbid")
 
-    subjects: Optional[Dict[str, SubjectResponse]] = Field(
+    subjects: Optional[List[SubjectResponse]] = Field(
         ...,
-        description="Dictionary mapping subject names to their corresponding SubjectResponse objects containing details like appearance, identity, and first appearance timestamp. The key is the subject's name (e.g., 'iPhone 15 Pro', 'main presenter', 'red car')"
+        description="List of SubjectResponse objects containing details like appearance, identity, and first appearance timestamp for each subject (e.g., 'iPhone 15 Pro', 'main presenter', 'red car')"
     )
 
 
@@ -108,9 +108,9 @@ class ChapterCreationResponse(BaseModel):
         None,
         description="Text extracted from the video scenes"
     )
-    subject_registry: Optional[Dict[str, SubjectResponse]] = Field(
+    subject_registry: Optional[List[SubjectResponse]] = Field(
         default=None,
-        description="Registry of all subjects (people, objects, animals, etc.) tracked in this video segment. Dictionary mapping subject names to their corresponding SubjectResponse objects. The key is the subject's name (e.g., 'iPhone 15 Pro', 'main presenter', 'red car')"
+        description="Registry of all subjects (people, objects, animals, etc.) tracked in this video segment."
     )
     
     def __str__(self, transcript: str = None) -> str:
@@ -149,7 +149,7 @@ class ChapterCreationResponse(BaseModel):
         if self.subject_registry:
             text += "Subjects in the video: "
             subject_descriptions = []
-            for subject_info in self.subject_registry.values():
+            for subject_info in self.subject_registry:
                 subject_desc = f"{subject_info.name} (first seen at {subject_info.first_seen}s)"
                 subject_descriptions.append(subject_desc)
             text += ", ".join(subject_descriptions) + ". "
