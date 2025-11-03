@@ -153,13 +153,31 @@ class LocalFaissSearchProvider(SearchProvider):
         """
         idx = self._indexes[index_name]
         
-        # Initialize index if dimension not set
+        # Get dimension from embeddings
+        embedding_dim = len(embeddings)
+        
+        # Initialize index if dimension not set or if index doesn't exist
         if meta.get("dim") is None:
-            dim = len(embeddings)
+            dim = embedding_dim
             meta["dim"] = dim
             base_index = faiss.IndexFlatL2(dim)
             idx = faiss.IndexIDMap(base_index)
             self._indexes[index_name] = idx
+        elif idx is None:
+            # Index metadata exists but index object doesn't - recreate it
+            dim = meta["dim"]
+            base_index = faiss.IndexFlatL2(dim)
+            idx = faiss.IndexIDMap(base_index)
+            self._indexes[index_name] = idx
+        else:
+            # Verify dimension matches
+            existing_dim = meta.get("dim")
+            if existing_dim != embedding_dim:
+                raise ProviderException(
+                    f"Dimension mismatch for index '{index_name}': "
+                    f"existing dimension is {existing_dim}, but document has {embedding_dim}. "
+                    f"Cannot add documents with different dimensions to the same index."
+                )
             
         # Ensure idx is IDMap for ID-based operations
         if not isinstance(idx, faiss.IndexIDMap):
@@ -393,7 +411,7 @@ class LocalFaissSearchProvider(SearchProvider):
             await asyncio.to_thread(self._save_index_sync, index_name)
             return True
         except Exception as e:
-            logger.error(f"Local FAISS indexing failed: {e}")
+            logger.exception(f"Local FAISS indexing failed: {e}")
             raise ProviderException(f"Local FAISS indexing failed: {e}")
 
     @handle_exceptions(retries=3, exceptions=(Exception,))
