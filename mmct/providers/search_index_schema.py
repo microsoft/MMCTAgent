@@ -33,13 +33,21 @@ def create_video_chapter_index_schema(index_name: str) -> SearchIndex:
     Returns:
         SearchIndex: The index schema definition
     """
+<<<<<<< HEAD
     from mmct.providers.search_document_models import ChapterIndexDocument
+=======
+    from mmct.providers.search_document_models import AISearchDocument
+>>>>>>> dfb5611 (create combined subject registry and indexing)
 
     # Create index definition using AISearchDocument model fields
     fields = []
     searchable_fields_names = []
 
+<<<<<<< HEAD
     for name, model_field in ChapterIndexDocument.model_fields.items():
+=======
+    for name, model_field in AISearchDocument.model_fields.items():
+>>>>>>> dfb5611 (create combined subject registry and indexing)
         extra = model_field.json_schema_extra
 
         # Special handling for embeddings vector
@@ -59,6 +67,7 @@ def create_video_chapter_index_schema(index_name: str) -> SearchIndex:
             )
             continue
 
+<<<<<<< HEAD
         # Choose data type based on annotation
         if model_field.annotation is datetime:
             data_type = SearchFieldDataType.DateTimeOffset
@@ -68,6 +77,14 @@ def create_video_chapter_index_schema(index_name: str) -> SearchIndex:
             data_type = SearchFieldDataType.Int32
         else:
             data_type = SearchFieldDataType.String
+=======
+        # Choose data type
+        data_type = (
+            SearchFieldDataType.DateTimeOffset
+            if model_field.annotation is datetime
+            else SearchFieldDataType.String
+        )
+>>>>>>> dfb5611 (create combined subject registry and indexing)
 
         common_kwargs = dict(
             name=name,
@@ -150,6 +167,7 @@ def create_video_chapter_index_schema(index_name: str) -> SearchIndex:
         semantic_search=semantic_config,
         vector_search=vector_search
     )
+<<<<<<< HEAD
 
     print(fields)
     return index
@@ -159,6 +177,15 @@ def create_object_collection_index_schema(index_name: str) -> SearchIndex:
     """
     Create the index schema definition for object collection search.
     This schema is based on ObjectCollectionDocument model.
+=======
+    return index
+
+
+def create_subject_registry_index_schema(index_name: str) -> SearchIndex:
+    """
+    Create the index schema definition for subject registry search.
+    This schema is based on SubjectRegistryDocument model.
+>>>>>>> dfb5611 (create combined subject registry and indexing)
 
     Args:
         index_name: Name of the index to create
@@ -166,6 +193,7 @@ def create_object_collection_index_schema(index_name: str) -> SearchIndex:
     Returns:
         SearchIndex: The index schema definition
     """
+<<<<<<< HEAD
     from mmct.providers.search_document_models import ObjectCollectionDocument
 
     # Create index definition using ObjectCollectionDocument model fields
@@ -196,6 +224,19 @@ def create_object_collection_index_schema(index_name: str) -> SearchIndex:
             data_type = SearchFieldDataType.Double
         elif model_field.annotation is int:
             data_type = SearchFieldDataType.Int32
+=======
+    from mmct.providers.search_document_models import SubjectRegistryDocument
+
+    # Create index definition using SubjectRegistryDocument model fields
+    fields = []
+
+    for name, model_field in SubjectRegistryDocument.model_fields.items():
+        extra = model_field.json_schema_extra
+
+        # Determine data type based on annotation
+        if model_field.annotation is float:
+            data_type = SearchFieldDataType.Double
+>>>>>>> dfb5611 (create combined subject registry and indexing)
         else:
             data_type = SearchFieldDataType.String
 
@@ -221,6 +262,7 @@ def create_object_collection_index_schema(index_name: str) -> SearchIndex:
             fields.append(
                 SimpleField(**common_kwargs)
             )
+<<<<<<< HEAD
     important_fields = [
         SemanticField(field_name="video_summary")
     ]     
@@ -266,13 +308,19 @@ def create_object_collection_index_schema(index_name: str) -> SearchIndex:
             )
         ]
     )
+=======
+>>>>>>> dfb5611 (create combined subject registry and indexing)
 
     # Create the index
     index = SearchIndex(
         name=index_name,
+<<<<<<< HEAD
         fields=fields,
         vector_search=vector_search,
         semantic_search=semantic_config
         
+=======
+        fields=fields
+>>>>>>> dfb5611 (create combined subject registry and indexing)
     )
     return index
