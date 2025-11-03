@@ -8,6 +8,7 @@ It coordinates semantic chunking, chapter generation, and search index ingestion
 import uuid
 import asyncio
 import json
+import json
 from datetime import datetime
 from typing import List, Optional, Tuple
 from loguru import logger
