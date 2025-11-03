@@ -60,6 +60,20 @@ class SubjectResponse(BaseModel):
     )
 
 
+class SubjectRegistry(BaseModel):
+    """Pydantic model for the registry of all subjects tracked in a video segment.
+
+    This model maintains a collection of subjects (people, objects, animals, etc.)
+    identified and tracked throughout the video, with each subject mapped by its name.
+    """
+    model_config = ConfigDict(extra="forbid")
+
+    subjects: Optional[Dict[str, SubjectResponse]] = Field(
+        ...,
+        description="Dictionary mapping subject names to their corresponding SubjectResponse objects containing details like appearance, identity, and first appearance timestamp. The key is the subject's name (e.g., 'iPhone 15 Pro', 'main presenter', 'red car')"
+    )
+
+
 
 class ChapterCreationResponse(BaseModel):
     """Pydantic model for validating responses from the create_chapter function.
@@ -96,7 +110,7 @@ class ChapterCreationResponse(BaseModel):
     )
     subject_registry: Optional[Dict[str, SubjectResponse]] = Field(
         default=None,
-        description="Registry of all subjects (people, objects, animals, etc.) tracked in this video segment. Key is subject_id as string (e.g., '0', '1', '2', '3'), value contains subject details including name, appearance, identity, and first appearance timestamp."
+        description="Registry of all subjects (people, objects, animals, etc.) tracked in this video segment. Dictionary mapping subject names to their corresponding SubjectResponse objects. The key is the subject's name (e.g., 'iPhone 15 Pro', 'main presenter', 'red car')"
     )
     
     def __str__(self, transcript: str = None) -> str:
@@ -135,7 +149,7 @@ class ChapterCreationResponse(BaseModel):
         if self.subject_registry:
             text += "Subjects in the video: "
             subject_descriptions = []
-            for subject_id, subject_info in self.subject_registry.items():
+            for subject_info in self.subject_registry.values():
                 subject_desc = f"{subject_info.name} (first seen at {subject_info.first_seen}s)"
                 subject_descriptions.append(subject_desc)
             text += ", ".join(subject_descriptions) + ". "

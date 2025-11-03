@@ -326,6 +326,7 @@ class ChapterGenerator:
                 processed_frames = frames
                 processed_metadata = frame_metadata
                 logger.info("Frame stacking disabled or insufficient frames for stacking")
+
             # Add frame stacking information to system prompt if enabled
             frame_stacking_info = ""
             if self.frame_stacking_grid_size > 1 and len(processed_frames) < len(frames):
@@ -377,9 +378,9 @@ class ChapterGenerator:
                             meta = processed_metadata[idx]
                             if 'frames' in meta and isinstance(meta.get('frames'), list):
                                 # Stacked frame with horizontal layout
-                                stack_info = f"Stacked Image {idx} ({meta['stacked_count']} frames, left to right):\n"
+                                stack_info = f"Stacked Image {idx} ({meta['stacked_count']} frames, left to right):\n" # Stacking info
                                 for frame_info in meta['frames']:
-                                    stack_info += f"  Frame {frame_info['position']}: {frame_info['timestamp_seconds']}s\n"
+                                    stack_info += f"  Frame {frame_info['position']}: {frame_info['timestamp_seconds']}s\n" #adding the timestamp of each frame in the stack
                                 frame_timing_parts.append(stack_info.strip())
                             else:
                                 # Single frame

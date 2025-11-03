@@ -15,6 +15,7 @@ from loguru import logger
 from mmct.providers.search_document_models import ChapterIndexDocument
 from mmct.video_pipeline.core.ingestion.semantic_chunking.semantic_chunker import SemanticChunker
 from mmct.video_pipeline.core.ingestion.chapter_generator.generate_chapter import ChapterGenerator
+from mmct.video_pipeline.core.ingestion.chapter_generator.subject_registry import SubjectRegistryProcessor
 from mmct.providers.factory import provider_factory
 
 from dotenv import load_dotenv, find_dotenv
@@ -74,7 +75,12 @@ class ChapterIngestionPipeline:
         )
         self.embedding_provider = provider_factory.create_embedding_provider()
 
-        # Create search provider - it will use the configured provider (Azure/FAISS/etc)
+        # Initialize subject registry processor
+        self.subject_registry_processor = SubjectRegistryProcessor(
+            index_name=f"subject-registry-{index_name}"
+        )
+
+        # Create search provider with custom index_name for this pipeline
         self.search_provider = provider_factory.create_search_provider()
 
         # Pipeline state
@@ -224,8 +230,19 @@ class ChapterIngestionPipeline:
         logger.info("Step 2: Generating chapters from semantic chunks...")
         await self._create_chapters()
 
-        # Step 3: Ingest to search index
-        logger.info("Step 3: Ingesting chapters to search index...")
+        # Step 3: Process subject registry
+        logger.info("Step 3: Processing and indexing subject registry...")
+        merged_registry = await self.subject_registry_processor.run(
+            chapter_responses=self.chapter_responses,
+            video_id=self.hash_id
+        )
+        if merged_registry:
+            logger.info(f"Subject registry processed: {len(merged_registry)} unique subjects")
+        else:
+            logger.info("No subjects found in chapters")
+
+        # Step 4: Ingest to search index
+        logger.info("Step 4: Ingesting chapters to search index...")
         await self._ingest(url=url)
 
         # Cleanup
