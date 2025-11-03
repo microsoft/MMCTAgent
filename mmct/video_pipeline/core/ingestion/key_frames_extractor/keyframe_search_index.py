@@ -47,7 +47,7 @@ def create_frame_documents_from_embeddings(
             "id": frame_id,
             "video_id": video_id,
             "keyframe_filename": frame_filename,
-            "embeddings": frame_embedding.clip_embedding.tolist() if isinstance(frame_embedding.clip_embedding, np.ndarray) else frame_embedding.clip_embedding,
+            "clip_embedding": frame_embedding.clip_embedding.tolist() if isinstance(frame_embedding.clip_embedding, np.ndarray) else frame_embedding.clip_embedding,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "motion_score": float(frame_embedding.frame_metadata.motion_score),
             "timestamp_seconds": float(frame_embedding.frame_metadata.timestamp_seconds),

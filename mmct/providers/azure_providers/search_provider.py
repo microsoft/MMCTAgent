@@ -255,7 +255,7 @@ class AzureSearchProvider(SearchProvider):
             SearchableField(name="keyframe_filename", type=SearchFieldDataType.String, filterable=True, facetable=True),
             # vector field for CLIP embeddings
             SearchField(
-                name="embeddings",
+                name="clip_embedding",
                 type=SearchFieldDataType.Collection(SearchFieldDataType.Single),
                 searchable=True,
                 vector_search_dimensions=dim,

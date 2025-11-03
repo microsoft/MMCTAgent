@@ -364,7 +364,7 @@ class KeyframeDocument(BaseModel):
     )
 
     # — Vector embedding field —
-    embeddings: List[float] = Field(
+    clip_embedding: List[float] = Field(
         ...,
         description="CLIP embedding vector for frame",
         searchable=True,
