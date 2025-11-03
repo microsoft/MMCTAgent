@@ -367,11 +367,11 @@ class KeyframeDocument(BaseModel):
 
 
 class SubjectRegistryDocument(BaseModel):
-    """Document model for subject registry search index."""
- 
+    """Document model for combined subject registry search index."""
+
     id: str = Field(
         ...,
-        description="Unique subject document ID",
+        description="Unique subject registry document ID",
         searchable=False,
         filterable=True,
         retrievable=True,
@@ -380,10 +380,10 @@ class SubjectRegistryDocument(BaseModel):
         facetable=False,
         key=True
     )
- 
+
     video_id: str = Field(
         ...,
-        description="Video hash ID this subject belongs to",
+        description="Video hash ID this subject registry belongs to",
         searchable=False,
         filterable=True,
         retrievable=True,
@@ -392,22 +392,10 @@ class SubjectRegistryDocument(BaseModel):
         facetable=False,
         key=False
     )
- 
-    name: str = Field(
-        ...,
-        description="Name of the subject (person, object, animal, etc.)",
-        searchable=True,
-        filterable=True,
-        retrievable=True,
-        stored=True,
-        sortable=False,
-        facetable=True,
-        key=False
-    )
- 
-    appearance: str = Field(
-        ...,
-        description="Pipe-separated list of appearance descriptions",
+
+    subject_registry: str = Field(
+        default="{}",
+        description="JSON string of merged subject registry containing all subjects (people, objects, etc.) from the entire video",
         searchable=True,
         filterable=False,
         retrievable=True,
@@ -416,34 +404,10 @@ class SubjectRegistryDocument(BaseModel):
         facetable=False,
         key=False
     )
- 
-    identity: str = Field(
-        ...,
-        description="Pipe-separated list of identity descriptions",
-        searchable=True,
-        filterable=False,
-        retrievable=True,
-        stored=True,
-        sortable=False,
-        facetable=False,
-        key=False
-    )
- 
-    additional_details: Optional[str] = Field(
-        None,
-        description="Additional information about the subject",
-        searchable=True,
-        filterable=False,
-        retrievable=True,
-        stored=True,
-        sortable=False,
-        facetable=False,
-        key=False
-    )
- 
-    first_seen: float = Field(
-        ...,
-        description="Timestamp in seconds when subject first appears",
+
+    subject_count: int = Field(
+        default=0,
+        description="Total number of unique subjects in the registry",
         searchable=False,
         filterable=True,
         retrievable=True,

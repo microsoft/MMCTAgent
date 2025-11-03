@@ -14,8 +14,8 @@ from loguru import logger
 
 from mmct.providers.search_document_models import ChapterIndexDocument
 from mmct.video_pipeline.core.ingestion.semantic_chunking.semantic_chunker import SemanticChunker
-from mmct.video_pipeline.core.ingestion.chapter_generator.generate_chapter import ChapterGenerator
-from mmct.video_pipeline.core.ingestion.chapter_generator.subject_registry import SubjectRegistryProcessor
+from mmct.video_pipeline.core.ingestion.chapter_generator.chapter_generator import ChapterGenerator
+from mmct.video_pipeline.core.ingestion.chapter_generator.subject_registry_processor import SubjectRegistryProcessor
 from mmct.providers.factory import provider_factory
 
 from dotenv import load_dotenv, find_dotenv

@@ -185,7 +185,7 @@ Carefully identify duplicate subjects that refer to the same entity and merge th
 
     async def _index_registry(self, registry: Dict[str, SubjectResponse], video_id: str) -> bool:
         """
-        Index the merged subject registry into search index.
+        Index the merged subject registry into search index as a single combined document.
 
         Args:
             registry: Merged subject registry dictionary (Dict[str, SubjectResponse])
@@ -203,32 +203,35 @@ Carefully identify duplicate subjects that refer to the same entity and merge th
                 # Create index schema for subject registry
                 await self._create_subject_registry_index()
 
-            # Prepare documents for indexing
-            documents = []
-            for subject_name, subject_obj in registry.items():
-                # Create searchable document
-                doc = {
-                    "id":str(uuid.uuid4()),
-                    "video_id": video_id,
-                    "name": subject_obj.name,
-                    "appearance": " | ".join(subject_obj.appearance),
-                    "identity": " | ".join(subject_obj.identity),
-                    "first_seen": subject_obj.first_seen,
-                    "additional_details": subject_obj.additional_details
-                }
-                documents.append(doc)
+            # Serialize the entire merged subject_registry to JSON string
+            subject_registry_json = "{}"
+            if registry:
+                try:
+                    # Convert the Dict[str, SubjectResponse] to JSON-serializable dict
+                    subject_registry_dict = {
+                        subject_id: subject.model_dump()
+                        for subject_id, subject in registry.items()
+                    }
+                    subject_registry_json = json.dumps(subject_registry_dict)
+                except Exception as e:
+                    logger.warning(f"Failed to serialize merged subject_registry: {e}")
+                    subject_registry_json = "{}"
 
-            # Index documents
-            if documents:
-                await self.search_provider.upload_documents(
-                    documents=documents,
-                    index_name=self.index_name
-                )
-                logger.info(f"Successfully indexed {len(documents)} subjects for video {video_id}")
-                return True
-            else:
-                logger.warning("No documents to index")
-                return False
+            # Create a single document with the combined subject registry
+            doc = {
+                "id": str(uuid.uuid4()),
+                "video_id": video_id,
+                "subject_registry": subject_registry_json,
+                "subject_count": len(registry)
+            }
+
+            # Index the single combined document
+            await self.search_provider.upload_documents(
+                documents=[doc],
+                index_name=self.index_name
+            )
+            logger.info(f"Successfully indexed combined subject registry with {len(registry)} subjects for video {video_id}")
+            return True
 
         except Exception as e:
             logger.error(f"Failed to index subject registry: {e}")
