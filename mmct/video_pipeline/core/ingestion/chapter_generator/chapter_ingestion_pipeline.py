@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import List, Dict, Optional, Tuple
 from loguru import logger
 
-from mmct.providers.search_document_models import AISearchDocument
+from mmct.providers.search_document_models import ChapterIndexDocument
 from mmct.video_pipeline.core.ingestion.semantic_chunking.semantic_chunker import SemanticChunker
 from mmct.video_pipeline.core.ingestion.chapter_generator.generate_chapter import ChapterGenerator
 from mmct.providers.factory import provider_factory
@@ -73,12 +73,8 @@ class ChapterIngestionPipeline:
         )
         self.embedding_provider = provider_factory.create_embedding_provider()
 
-        # Create search provider with custom index_name for this pipeline
+        # Create search provider - it will use the configured provider (Azure/FAISS/etc)
         self.search_provider = provider_factory.create_search_provider()
-        # Update the search provider's client to use our specific index_name
-        # The provider was created with default config, but we need a specific index
-        self.search_provider.config["index_name"] = self.index_name
-        self.search_provider.client = self.search_provider._initialize_client()
 
         # Pipeline state
         self.chunked_segments = []
@@ -94,14 +90,11 @@ class ChapterIngestionPipeline:
             logger.info(f"Index {self.index_name} already exists.")
             return
 
-        # Index doesn't exist, create it using the reusable schema utility
-        from mmct.providers.search_index_schema import create_video_chapter_index_schema
-
+        # Index doesn't exist, create it
+        # Provider will handle schema creation based on type indicator
         logger.info(f"Creating index '{self.index_name}'...")
-        index_schema = create_video_chapter_index_schema(self.index_name)
-
-        # Create the index using the provider
-        created = await self.search_provider.create_index(self.index_name, index_schema)
+        
+        created = await self.search_provider.create_index(self.index_name, "chapter")
         if created:
             logger.info(f"Index {self.index_name} created successfully.")
 
@@ -156,12 +149,12 @@ class ChapterIngestionPipeline:
 
     async def _ingest(self, url: Optional[str] = None):
         """
-        Create search documents from chapters and ingest to Azure AI Search.
+        Create search documents from chapters and ingest to search index.
 
         Args:
             url: Optional YouTube URL for the video
         """
-        doc_objects: List[AISearchDocument] = []
+        doc_objects: List[ChapterIndexDocument] = []
         current_time = datetime.now()
 
         logger.info(f"Creating documents from {len(self.chapter_responses)} chapters")
@@ -170,7 +163,7 @@ class ChapterIngestionPipeline:
             self.chapter_responses, self.chapter_transcripts
         ):
             chapter_content_str = chapter_response.__str__(transcript=chapter_transcript)
-            obj = AISearchDocument(
+            obj = ChapterIndexDocument(
                 id=str(uuid.uuid4()),
                 hash_video_id=self.hash_id,
                 topic_of_video=chapter_response.Topic_of_video or "None",

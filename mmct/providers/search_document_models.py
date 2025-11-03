@@ -9,8 +9,8 @@ from typing import List
 from pydantic import BaseModel, Field
 
 
-class AISearchDocument(BaseModel):
-    """Document model for Azure AI Search video chapter index."""
+class ChapterIndexDocument(BaseModel):
+    """Document model for video chapter search index."""
 
     # — Primary key —
     id: str = Field(
@@ -236,6 +236,137 @@ class AISearchDocument(BaseModel):
     embeddings: List[float] = Field(
         ...,
         description="Vector embedding for semantic search",
+        searchable=True,
+        filterable=False,
+        retrievable=False,
+        stored=True,
+        sortable=False,
+        facetable=False,
+        key=False
+    )
+
+
+class KeyframeDocument(BaseModel):
+    """Document model for keyframe/frame search index."""
+
+    # — Primary key —
+    id: str = Field(
+        ...,
+        description="Unique frame document ID",
+        searchable=False,
+        filterable=True,
+        retrievable=True,
+        stored=True,
+        sortable=True,
+        facetable=False,
+        key=True
+    )
+
+    # — Metadata fields —
+    video_id: str = Field(
+        ...,
+        description="Hash-based video identifier",
+        searchable=True,
+        filterable=True,
+        retrievable=True,
+        stored=True,
+        sortable=False,
+        facetable=True,
+        key=False
+    )
+    keyframe_filename: str = Field(
+        ...,
+        description="Filename of the extracted keyframe",
+        searchable=True,
+        filterable=True,
+        retrievable=True,
+        stored=True,
+        sortable=False,
+        facetable=True,
+        key=False
+    )
+    created_at: datetime = Field(
+        ...,
+        description="Frame extraction timestamp",
+        searchable=False,
+        filterable=True,
+        retrievable=True,
+        stored=True,
+        sortable=True,
+        facetable=False,
+        key=False
+    )
+    motion_score: float = Field(
+        ...,
+        description="Optical flow motion score",
+        searchable=False,
+        filterable=True,
+        retrievable=True,
+        stored=True,
+        sortable=True,
+        facetable=False,
+        key=False
+    )
+    timestamp_seconds: float = Field(
+        ...,
+        description="Time position in video (seconds)",
+        searchable=False,
+        filterable=True,
+        retrievable=True,
+        stored=True,
+        sortable=True,
+        facetable=False,
+        key=False
+    )
+    blob_url: str = Field(
+        default="",
+        description="Blob storage URL for the frame image",
+        searchable=False,
+        filterable=False,
+        retrievable=True,
+        stored=True,
+        sortable=False,
+        facetable=False,
+        key=False
+    )
+    parent_id: str = Field(
+        default="",
+        description="Original video ID (before splitting)",
+        searchable=False,
+        filterable=True,
+        retrievable=True,
+        stored=True,
+        sortable=False,
+        facetable=False,
+        key=False
+    )
+    parent_duration: float = Field(
+        default=0.0,
+        description="Duration of parent video in seconds",
+        searchable=False,
+        filterable=True,
+        retrievable=True,
+        stored=True,
+        sortable=True,
+        facetable=False,
+        key=False
+    )
+    video_duration: float = Field(
+        default=0.0,
+        description="Duration of this video part in seconds",
+        searchable=False,
+        filterable=True,
+        retrievable=True,
+        stored=True,
+        sortable=True,
+        facetable=False,
+        key=False
+    )
+
+    # — Vector embedding field —
+    embeddings: List[float] = Field(
+        ...,
+        description="CLIP embedding vector for frame",
         searchable=True,
         filterable=False,
         retrievable=False,

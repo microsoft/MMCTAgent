@@ -88,7 +88,7 @@ class VideoFrameSearchClient:
             vector_query = VectorizedQuery(
                 vector=query_vector.tolist() if isinstance(query_vector, np.ndarray) else query_vector,
                 k_nearest_neighbors=top_k,
-                fields="clip_embedding"
+                fields="embeddings"
             )
 
             # Perform search using provider.
@@ -109,34 +109,6 @@ class VideoFrameSearchClient:
         except Exception as e:
             return []
 
-    async def upload_frame_documents(self, documents: List[Dict[str, Any]]) -> bool:
-        """
-        Upload frame documents to the search index.
-
-        Args:
-            documents: List of frame documents to upload
-
-        Returns:
-            bool: True if successful, False otherwise
-        """
-        try:
-            if not documents:
-                return True
-
-            # Upload documents in batches using provider bulk API when available
-            batch_size = 100
-            for i in range(0, len(documents), batch_size):
-                batch = documents[i : i + batch_size]
-                # prefer bulk upload if provider implements it
-                if hasattr(self.provider, "upload_documents"):
-                    await self.provider.upload_documents(batch, index_name=self.index_name)
-                else:
-                    for doc in batch:
-                        await self.provider.index_document(doc, self.index_name)
-
-            return True
-        except Exception:
-            return False
     async def delete_frames_by_video(self, video_id: str) -> bool:
         """
         Delete all frames for a specific video.
@@ -177,60 +149,6 @@ class VideoFrameSearchClient:
             await self.provider.close()
 
 
-def create_frame_documents_from_embeddings(
-    frame_embeddings: List,
-    video_id: str,
-    video_path: str,
-    parent_id: Optional[str] = None,
-    parent_duration: Optional[float] = None,
-    video_duration: Optional[float] = None
-) -> List[Dict[str, Any]]:
-    """
-    Create search documents from frame embeddings.
-
-    Args:
-        frame_embeddings: List of FrameEmbedding objects
-        video_id: Unique video identifier
-        video_path: Path to the video file
-        parent_id: Parent video ID (original video before splitting)
-        parent_duration: Duration of parent video in seconds
-        video_duration: Duration of this video part in seconds
-
-    Returns:
-        List of document dictionaries ready for Azure AI Search
-    """
-    import uuid
-    from datetime import datetime, timezone
-
-    documents = []
-
-    for frame_embedding in frame_embeddings:
-        # Generate unique ID for this frame
-        frame_id = f"{video_id}_{frame_embedding.frame_metadata.frame_number}"
-        frame_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, frame_id))
-
-        # Create frame filename
-        frame_filename = f"{video_id}_{frame_embedding.frame_metadata.frame_number}.jpg"
-
-        document = {
-            "id": frame_id,
-            "video_id": video_id,
-            "keyframe_filename": frame_filename,
-            "clip_embedding": frame_embedding.clip_embedding.tolist() if isinstance(frame_embedding.clip_embedding, np.ndarray) else frame_embedding.clip_embedding,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-            "motion_score": float(frame_embedding.frame_metadata.motion_score),
-            "timestamp_seconds": float(frame_embedding.frame_metadata.timestamp_seconds),
-            "blob_url": "",  # Can be populated if needed
-            "parent_id": parent_id if parent_id else video_id,
-            "parent_duration": parent_duration if parent_duration is not None else 0.0,
-            "video_duration": video_duration if video_duration is not None else 0.0
-        }
-
-        documents.append(document)
-
-    return documents
-
-
 def create_frame_document(
     video_path: str,
     frame_path: str,
@@ -245,7 +163,7 @@ def create_frame_document(
     video_id: str = None
 ) -> Dict[str, Any]:
     """
-    Create a frame document for Azure AI Search.
+    Create a frame document following KeyframeDocument schema.
 
     Args:
         video_path: Path to the source video file
@@ -261,7 +179,7 @@ def create_frame_document(
         video_id: Hash-based video ID (if None, uses filename)
 
     Returns:
-        Document dictionary ready for Azure AI Search
+        Document dictionary following KeyframeDocument schema
     """
     import os
     import uuid
@@ -282,7 +200,7 @@ def create_frame_document(
         "id": frame_id,
         "video_id": video_id,
         "keyframe_filename": keyframe_filename,
-        "clip_embedding": clip_embedding.tolist() if isinstance(clip_embedding, np.ndarray) else clip_embedding,
+        "embeddings": clip_embedding.tolist() if isinstance(clip_embedding, np.ndarray) else clip_embedding,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "motion_score": float(motion_score),
         "timestamp_seconds": float(timestamp_seconds)

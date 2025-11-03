@@ -26,7 +26,9 @@ class SearchProvider(ABC):
 
         Args:
             index_name: Name of the index to create
-            index_schema: Provider-specific index schema definition
+            index_schema: Provider-specific index schema definition.
+                For simple cases, can be a string indicating index type: "chapter" or "keyframe"
+                For complex cases, can be provider-specific schema object
 
         Returns:
             bool: True if created, False if already exists
@@ -84,6 +86,36 @@ class SearchProvider(ABC):
 
         Returns:
             bool: True if document exists, False otherwise
+        """
+        pass
+
+    @abstractmethod
+    async def upload_clip_documents(self, documents: List[Dict], index_name: str = None) -> Dict[str, Any]:
+        """
+        Upload CLIP embedding documents to the search index.
+        Can handle both single document (as list with one item) and multiple documents.
+
+        Args:
+            documents: List of CLIP embedding document dictionaries to upload
+            index_name: Optional index name (uses default if not provided)
+
+        Returns:
+            Dict with upload results
+        """
+        pass
+
+    @abstractmethod
+    async def search_clip(self, query: str, index_name: str = None, **kwargs) -> List[Dict]:
+        """
+        Search for CLIP embedding documents.
+
+        Args:
+            query: Search query string
+            index_name: Optional index name (uses default if not provided)
+            **kwargs: Additional search parameters (e.g., embedding, top)
+
+        Returns:
+            List of matching documents
         """
         pass
 
