@@ -390,12 +390,21 @@ class KeyframeDocument(BaseModel):
     )
 
 
+<<<<<<< HEAD
 class ObjectCollectionDocument(BaseModel):
     """Document model for combined object collection search index."""
 
     id: str = Field(
         ...,
         description="Unique object collection document ID",
+=======
+class SubjectRegistryDocument(BaseModel):
+    """Document model for subject registry search index."""
+ 
+    id: str = Field(
+        ...,
+        description="Unique subject document ID",
+>>>>>>> ea4bc92 (align code with main branch changes)
         searchable=False,
         filterable=True,
         retrievable=True,
@@ -404,10 +413,17 @@ class ObjectCollectionDocument(BaseModel):
         facetable=False,
         key=True
     )
+<<<<<<< HEAD
 
     video_id: str = Field(
         ...,
         description="Video hash ID this object collection belongs to",
+=======
+ 
+    video_id: str = Field(
+        ...,
+        description="Video hash ID this subject belongs to",
+>>>>>>> ea4bc92 (align code with main branch changes)
         searchable=False,
         filterable=True,
         retrievable=True,
@@ -416,15 +432,24 @@ class ObjectCollectionDocument(BaseModel):
         facetable=False,
         key=False
     )
+<<<<<<< HEAD
 
     url: str = Field(
         default="",
         description="URL of the video",
         searchable=False,
+=======
+ 
+    name: str = Field(
+        ...,
+        description="Name of the subject (person, object, animal, etc.)",
+        searchable=True,
+>>>>>>> ea4bc92 (align code with main branch changes)
         filterable=True,
         retrievable=True,
         stored=True,
         sortable=False,
+<<<<<<< HEAD
         facetable=False,
         key=False
     )
@@ -432,6 +457,15 @@ class ObjectCollectionDocument(BaseModel):
     object_collection: str = Field(
         default="[]",
         description="JSON string array of merged object collection containing all objects (people, objects, etc.) from the entire video",
+=======
+        facetable=True,
+        key=False
+    )
+ 
+    appearance: str = Field(
+        ...,
+        description="Pipe-separated list of appearance descriptions",
+>>>>>>> ea4bc92 (align code with main branch changes)
         searchable=True,
         filterable=False,
         retrievable=True,
@@ -440,6 +474,7 @@ class ObjectCollectionDocument(BaseModel):
         facetable=False,
         key=False
     )
+<<<<<<< HEAD
 
     object_count: int = Field(
         default=0,
@@ -456,6 +491,12 @@ class ObjectCollectionDocument(BaseModel):
     video_summary: str = Field(
         default="",
         description="Overall summary of the entire video",
+=======
+ 
+    identity: str = Field(
+        ...,
+        description="Pipe-separated list of identity descriptions",
+>>>>>>> ea4bc92 (align code with main branch changes)
         searchable=True,
         filterable=False,
         retrievable=True,
@@ -464,6 +505,7 @@ class ObjectCollectionDocument(BaseModel):
         facetable=False,
         key=False
     )
+<<<<<<< HEAD
 
     video_summary_embedding: List[float] = Field(
         default_factory=list,
@@ -471,15 +513,31 @@ class ObjectCollectionDocument(BaseModel):
         searchable=True,
         filterable=False,
         retrievable=False,
+=======
+ 
+    additional_details: Optional[str] = Field(
+        None,
+        description="Additional information about the subject",
+        searchable=True,
+        filterable=False,
+        retrievable=True,
+>>>>>>> ea4bc92 (align code with main branch changes)
         stored=True,
         sortable=False,
         facetable=False,
         key=False
     )
+<<<<<<< HEAD
 
     video_duration: float = Field(
         default=0.0,
         description="Duration of the video in seconds",
+=======
+ 
+    first_seen: float = Field(
+        ...,
+        description="Timestamp in seconds when subject first appears",
+>>>>>>> ea4bc92 (align code with main branch changes)
         searchable=False,
         filterable=True,
         retrievable=True,
