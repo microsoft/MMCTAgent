@@ -41,7 +41,7 @@ async def main():
     
     # Initialize provider
     config = {
-        "index_path": "test_faiss_indices"
+        "index_path": "../results/test_faiss_indices"
     }
     provider = LocalFaissSearchProvider(config)
     
@@ -168,7 +168,7 @@ async def main():
             }
             image_docs.append(doc)
         
-        result = await provider.upload_clip_documents(image_docs, image_index_name)
+        result = await provider.upload_documents(image_docs, image_index_name)
         logger.info(f"Indexed {result['count']} image documents")
         test_results["image_index_tests"]["documents_indexed"] = result['count']
         
@@ -191,7 +191,7 @@ async def main():
         logger.info(f"Query: Single image embedding (dim={len(image_query_embedding)})")
         
         # Search with embedding
-        image_search_results = await provider.search_clip(
+        image_search_results = await provider.search(
             query="test image",
             index_name=image_index_name,
             embedding=image_query_embedding,
@@ -226,7 +226,7 @@ async def main():
         logger.info(f"Expected most similar: {cross_modal_data['most_similar_image']}")
         
         # Search images using text embedding
-        cross_results = await provider.search_clip(
+        cross_results = await provider.search(
             query=text_query,
             index_name=image_index_name,
             embedding=text_query_embedding,

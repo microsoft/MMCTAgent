@@ -155,7 +155,7 @@ class KeyframeSearchIndex:
                 batch = documents[i:i + batch_size]
                 
                 # Provider's upload_documents method will handle transformation
-                await self.provider.upload_clip_documents(batch, index_name=self.index_name)
+                await self.provider.upload_documents(batch, index_name=self.index_name)
                 
                 logger.info(f"Uploaded batch {i // batch_size + 1} of {len(batch)} frame documents")
 

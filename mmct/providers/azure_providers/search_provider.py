@@ -551,40 +551,6 @@ class AzureSearchProvider(SearchProvider):
             logger.error(f"Failed to check if document exists: {e}")
             raise ProviderException(f"Failed to check if document exists: {e}")
 
-    @handle_exceptions(retries=3, exceptions=(Exception,))
-    @convert_exceptions({Exception: ProviderException})
-    async def upload_clip_documents(self, documents: List[Dict], index_name: str = None) -> Dict[str, Any]:
-        """
-        Upload CLIP embedding documents to the search index.
-        Can handle both single document (as list with one item) and multiple documents.
-
-        Args:
-            documents: List of CLIP embedding document dictionaries to upload
-            index_name: Optional index name (uses default if not provided)
-
-        Returns:
-            Dict with upload results
-        """
-        # Reuse the existing upload_documents implementation
-        return await self.upload_documents(documents=documents, index_name=index_name)
-
-    @handle_exceptions(retries=3, exceptions=(Exception,))
-    @convert_exceptions({Exception: ProviderException})
-    async def search_clip(self, query: str, index_name: str = None, **kwargs) -> List[Dict]:
-        """
-        Search for CLIP embedding documents.
-
-        Args:
-            query: Search query string
-            index_name: Optional index name (uses default if not provided)
-            **kwargs: Additional search parameters (e.g., embedding, top)
-
-        Returns:
-            List of matching documents
-        """
-        # Reuse the existing search implementation
-        return await self.search(query=query, index_name=index_name, **kwargs)
-
     async def close(self):
         """Close all search clients and cleanup resources."""
         try:

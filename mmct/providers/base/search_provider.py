@@ -89,36 +89,6 @@ class SearchProvider(ABC):
         """
         pass
 
-    @abstractmethod
-    async def upload_clip_documents(self, documents: List[Dict], index_name: str = None) -> Dict[str, Any]:
-        """
-        Upload CLIP embedding documents to the search index.
-        Can handle both single document (as list with one item) and multiple documents.
-
-        Args:
-            documents: List of CLIP embedding document dictionaries to upload
-            index_name: Optional index name (uses default if not provided)
-
-        Returns:
-            Dict with upload results
-        """
-        pass
-
-    @abstractmethod
-    async def search_clip(self, query: str, index_name: str = None, **kwargs) -> List[Dict]:
-        """
-        Search for CLIP embedding documents.
-
-        Args:
-            query: Search query string
-            index_name: Optional index name (uses default if not provided)
-            **kwargs: Additional search parameters (e.g., embedding, top)
-
-        Returns:
-            List of matching documents
-        """
-        pass
-
     async def close(self):
         """Close the search client and cleanup resources. Optional to implement."""
         pass
