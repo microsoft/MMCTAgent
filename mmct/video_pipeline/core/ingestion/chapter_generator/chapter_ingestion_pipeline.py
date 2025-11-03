@@ -160,7 +160,7 @@ class ChapterIngestionPipeline:
                     logger.warning(f"Failed to serialize subject_registry: {e}")
                     subject_registry_json = "{}"
 
-            obj = AISearchDocument(
+            obj = ChapterIndexDocument(
                 id=str(uuid.uuid4()),
                 hash_video_id=self.hash_id,
                 topic_of_video=chapter_response.topic_of_video or "None",

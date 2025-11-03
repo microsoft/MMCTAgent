@@ -263,7 +263,7 @@ async def check_video_already_ingested(hash_id: str, index_name: str) -> bool:
 
         # Update to use the specified index_name
         search_provider.config["index_name"] = index_name
-        search_provider.client = search_provider._initialize_client()
+        search_provider.client = search_provider._create_search_client(index_name=index_name)
 
         # First check if index exists
         index_exists = await search_provider.index_exists(index_name)

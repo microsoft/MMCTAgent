@@ -33,13 +33,13 @@ def create_video_chapter_index_schema(index_name: str) -> SearchIndex:
     Returns:
         SearchIndex: The index schema definition
     """
-    from mmct.providers.search_document_models import AISearchDocument
+    from mmct.providers.search_document_models import ChapterIndexDocument
 
     # Create index definition using AISearchDocument model fields
     fields = []
     searchable_fields_names = []
 
-    for name, model_field in AISearchDocument.model_fields.items():
+    for name, model_field in ChapterIndexDocument.model_fields.items():
         extra = model_field.json_schema_extra
 
         # Special handling for embeddings vector

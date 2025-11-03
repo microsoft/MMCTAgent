@@ -364,3 +364,92 @@ class KeyframeDocument(BaseModel):
         facetable=False,
         key=False
     )
+
+
+class SubjectRegistryDocument(BaseModel):
+    """Document model for subject registry search index."""
+ 
+    id: str = Field(
+        ...,
+        description="Unique subject document ID",
+        searchable=False,
+        filterable=True,
+        retrievable=True,
+        stored=True,
+        sortable=True,
+        facetable=False,
+        key=True
+    )
+ 
+    video_id: str = Field(
+        ...,
+        description="Video hash ID this subject belongs to",
+        searchable=False,
+        filterable=True,
+        retrievable=True,
+        stored=True,
+        sortable=False,
+        facetable=False,
+        key=False
+    )
+ 
+    name: str = Field(
+        ...,
+        description="Name of the subject (person, object, animal, etc.)",
+        searchable=True,
+        filterable=True,
+        retrievable=True,
+        stored=True,
+        sortable=False,
+        facetable=True,
+        key=False
+    )
+ 
+    appearance: str = Field(
+        ...,
+        description="Pipe-separated list of appearance descriptions",
+        searchable=True,
+        filterable=False,
+        retrievable=True,
+        stored=True,
+        sortable=False,
+        facetable=False,
+        key=False
+    )
+ 
+    identity: str = Field(
+        ...,
+        description="Pipe-separated list of identity descriptions",
+        searchable=True,
+        filterable=False,
+        retrievable=True,
+        stored=True,
+        sortable=False,
+        facetable=False,
+        key=False
+    )
+ 
+    additional_details: Optional[str] = Field(
+        None,
+        description="Additional information about the subject",
+        searchable=True,
+        filterable=False,
+        retrievable=True,
+        stored=True,
+        sortable=False,
+        facetable=False,
+        key=False
+    )
+ 
+    first_seen: float = Field(
+        ...,
+        description="Timestamp in seconds when subject first appears",
+        searchable=False,
+        filterable=True,
+        retrievable=True,
+        stored=True,
+        sortable=True,
+        facetable=False,
+        key=False
+    )
+ 
