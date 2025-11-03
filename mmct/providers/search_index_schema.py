@@ -244,7 +244,12 @@ def create_subject_registry_index_schema(index_name: str) -> SearchIndex:
         # Determine data type based on annotation
         if model_field.annotation is float:
             data_type = SearchFieldDataType.Double
+<<<<<<< HEAD
 >>>>>>> dfb5611 (create combined subject registry and indexing)
+=======
+        elif model_field.annotation is int:
+            data_type = SearchFieldDataType.Int32
+>>>>>>> 10ff4c8 (create single subject registry document)
         else:
             data_type = SearchFieldDataType.String
 

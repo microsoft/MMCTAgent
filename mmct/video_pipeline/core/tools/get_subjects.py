@@ -41,7 +41,7 @@ async def get_subjects(
             search_text="*",
             filter=video_filter,
             top=1000,  # Get all subjects for the video
-            select = ['name','appearance','identity','additional_details','first_seen']
+            select = ['name', 'appearance', 'identity', 'additional_details', 'first_seen']
         )
         results = [[res['name'], res['appearance'], res['identity'], res['additional_details'],res['first_seen']] for res in results]
         

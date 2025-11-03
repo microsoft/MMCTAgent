@@ -399,12 +399,16 @@ class ObjectCollectionDocument(BaseModel):
         description="Unique object collection document ID",
 =======
 class SubjectRegistryDocument(BaseModel):
-    """Document model for subject registry search index."""
- 
+    """Document model for combined subject registry search index."""
+
     id: str = Field(
         ...,
+<<<<<<< HEAD
         description="Unique subject document ID",
 >>>>>>> ea4bc92 (align code with main branch changes)
+=======
+        description="Unique subject registry document ID",
+>>>>>>> 10ff4c8 (create single subject registry document)
         searchable=False,
         filterable=True,
         retrievable=True,
@@ -413,6 +417,7 @@ class SubjectRegistryDocument(BaseModel):
         facetable=False,
         key=True
     )
+<<<<<<< HEAD
 <<<<<<< HEAD
 
     video_id: str = Field(
@@ -424,6 +429,12 @@ class SubjectRegistryDocument(BaseModel):
         ...,
         description="Video hash ID this subject belongs to",
 >>>>>>> ea4bc92 (align code with main branch changes)
+=======
+
+    video_id: str = Field(
+        ...,
+        description="Video hash ID this subject registry belongs to",
+>>>>>>> 10ff4c8 (create single subject registry document)
         searchable=False,
         filterable=True,
         retrievable=True,
@@ -432,6 +443,7 @@ class SubjectRegistryDocument(BaseModel):
         facetable=False,
         key=False
     )
+<<<<<<< HEAD
 <<<<<<< HEAD
 
     url: str = Field(
@@ -466,6 +478,12 @@ class SubjectRegistryDocument(BaseModel):
         ...,
         description="Pipe-separated list of appearance descriptions",
 >>>>>>> ea4bc92 (align code with main branch changes)
+=======
+
+    subject_registry: str = Field(
+        default="{}",
+        description="JSON string of merged subject registry containing all subjects (people, objects, etc.) from the entire video",
+>>>>>>> 10ff4c8 (create single subject registry document)
         searchable=True,
         filterable=False,
         retrievable=True,
@@ -474,6 +492,7 @@ class SubjectRegistryDocument(BaseModel):
         facetable=False,
         key=False
     )
+<<<<<<< HEAD
 <<<<<<< HEAD
 
     object_count: int = Field(
@@ -538,6 +557,12 @@ class SubjectRegistryDocument(BaseModel):
         ...,
         description="Timestamp in seconds when subject first appears",
 >>>>>>> ea4bc92 (align code with main branch changes)
+=======
+
+    subject_count: int = Field(
+        default=0,
+        description="Total number of unique subjects in the registry",
+>>>>>>> 10ff4c8 (create single subject registry document)
         searchable=False,
         filterable=True,
         retrievable=True,
