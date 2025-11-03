@@ -368,16 +368,11 @@ class AzureSearchProvider(SearchProvider):
                 semantic_configuration_name=semantic_configuration_name,
                 **kwargs
             )
-
-            result_list = [dict(result) async for result in results]
-            return result_list
+            
+            return [dict(result) async for result in results]
         except Exception as e:
             logger.error(f"Azure AI Search failed: {e}")
             raise ProviderException(f"Azure AI Search failed: {e}")
-        finally:
-            # Clean up temporary provider if created
-            if temp_provider:
-                await temp_provider.close()
         
     @handle_exceptions(retries=3, exceptions=(Exception,))
     @convert_exceptions({Exception: ProviderException})
@@ -399,9 +394,6 @@ class AzureSearchProvider(SearchProvider):
         except Exception as e:
             logger.error(f"Azure AI Search indexing failed: {e}")
             raise ProviderException(f"Azure AI Search indexing failed: {e}")
-        finally:
-            if temp_provider:
-                await temp_provider.close()
     
     @handle_exceptions(retries=3, exceptions=(Exception,))
     @convert_exceptions({Exception: ProviderException})
@@ -423,9 +415,6 @@ class AzureSearchProvider(SearchProvider):
         except Exception as e:
             logger.error(f"Azure AI Search deletion failed: {e}")
             raise ProviderException(f"Azure AI Search deletion failed: {e}")
-        finally:
-            if temp_provider:
-                await temp_provider.close()
 
     @handle_exceptions(retries=3, exceptions=(Exception,))
     @convert_exceptions({Exception: ProviderException})
@@ -543,7 +532,6 @@ class AzureSearchProvider(SearchProvider):
         Returns:
             Dict with upload results including success status, count, and result details
         """
-        temp_provider = None
         try:
             client = self._get_client_for_index(index_name)
             result = await client.upload_documents(documents=documents)
@@ -552,9 +540,6 @@ class AzureSearchProvider(SearchProvider):
         except Exception as e:
             logger.error(f"Azure AI Search bulk upload failed: {e}")
             raise ProviderException(f"Azure AI Search bulk upload failed: {e}")
-        finally:
-            if temp_provider:
-                await temp_provider.close()
 
     @handle_exceptions(retries=3, exceptions=(Exception,))
     @convert_exceptions({Exception: ProviderException})
@@ -569,7 +554,6 @@ class AzureSearchProvider(SearchProvider):
         Returns:
             bool: True if document exists, False otherwise
         """
-        temp_provider = None
         try:
             client = self._get_client_for_index(index_name)
 
@@ -587,9 +571,6 @@ class AzureSearchProvider(SearchProvider):
         except Exception as e:
             logger.error(f"Failed to check if document exists: {e}")
             raise ProviderException(f"Failed to check if document exists: {e}")
-        finally:
-            if temp_provider:
-                await temp_provider.close()
 
     async def close(self):
         """Close all search clients and cleanup resources."""
