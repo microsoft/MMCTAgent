@@ -103,26 +103,15 @@ class ChapterIndexDocument(BaseModel):
         facetable=True,
         key=False
     )
-    subject: str = Field(
-        ...,
-        description="Main subject or item mentioned",
+    subject_registry: str = Field(
+        default="{}",
+        description="JSON string of subject registry tracking all subjects (people, objects, etc.) in the video segment",
         searchable=True,
-        filterable=True,
+        filterable=False,
         retrievable=True,
         stored=True,
         sortable=False,
-        facetable=True,
-        key=False
-    )
-    variety: str = Field(
-        ...,
-        description="Variety or type of subject",
-        searchable=True,
-        filterable=True,
-        retrievable=True,
-        stored=True,
-        sortable=False,
-        facetable=True,
+        facetable=False,
         key=False
     )
     hash_video_id: str = Field(

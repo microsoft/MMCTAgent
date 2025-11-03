@@ -7,6 +7,7 @@ It coordinates semantic chunking, chapter generation, and search index ingestion
 
 import uuid
 import asyncio
+import json
 from datetime import datetime
 from typing import List, Dict, Optional, Tuple
 from loguru import logger
@@ -78,7 +79,6 @@ class ChapterIngestionPipeline:
 
         # Pipeline state
         self.chunked_segments = []
-        self.subject_data = {"subject": "None", "variety_of_subject": "None"}
         self.chapter_responses = []
         self.chapter_transcripts = []
 
@@ -105,30 +105,6 @@ class ChapterIngestionPipeline:
         except Exception as e:
             raise Exception(f"Failed to create embedding: {e}")
 
-    async def _extract_subject_and_variety(self) -> Dict[str, str]:
-        """
-        Extract subject and variety information from chunked segments.
-
-        Returns:
-            Dict with 'subject' and 'variety_of_subject' keys
-        """
-        if not self.chunked_segments:
-            return {"subject": "None", "variety_of_subject": "None"}
-
-        # Create titled transcript from chunks
-        titled_transcript = "\nVideo Transcript: " + " ".join(
-            [seg.sentence for seg in self.chunked_segments]
-        )
-        logger.info(f"Created titled transcript from {len(self.chunked_segments)} segments")
-
-        # Get subject and variety using chapter generator
-        subject_variety_json = await self.chapter_generator._extract_subject_and_variety(
-            transcript=titled_transcript
-        )
-        subject_data = eval(subject_variety_json)
-        logger.info(f"Extracted subject data: {subject_data}")
-
-        return subject_data
 
     async def _create_chapters(self):
         """Create chapters using ChapterGenerator class."""
@@ -141,7 +117,7 @@ class ChapterIngestionPipeline:
         self.chapter_responses, self.chapter_transcripts = await self.chapter_generator.create_chapters_batch(
             chunked_segments=self.chunked_segments,
             video_id=self.hash_id,
-            subject_variety=self.subject_data,
+            subject_variety={},
             categories="",
         )
 
@@ -163,20 +139,34 @@ class ChapterIngestionPipeline:
             self.chapter_responses, self.chapter_transcripts
         ):
             chapter_content_str = chapter_response.__str__(transcript=chapter_transcript)
-            obj = ChapterIndexDocument(
+
+            # Serialize subject_registry to JSON string
+            subject_registry_json = "{}"
+            if chapter_response.subject_registry:
+                try:
+                    # Convert the Dict[str, SubjectResponse] to JSON-serializable dict
+                    subject_registry_dict = {
+                        subject_id: subject.model_dump()
+                        for subject_id, subject in chapter_response.subject_registry.items()
+                    }
+                    subject_registry_json = json.dumps(subject_registry_dict)
+                except Exception as e:
+                    logger.warning(f"Failed to serialize subject_registry: {e}")
+                    subject_registry_json = "{}"
+
+            obj = AISearchDocument(
                 id=str(uuid.uuid4()),
                 hash_video_id=self.hash_id,
-                topic_of_video=chapter_response.Topic_of_video or "None",
-                action_taken=chapter_response.Action_taken or "None",
-                detailed_summary=chapter_response.Detailed_summary or "None",
-                category=chapter_response.Category or "None",
-                sub_category=chapter_response.Sub_category or "None",
-                text_from_scene=chapter_response.Text_from_scene or "None",
+                topic_of_video=chapter_response.topic_of_video or "None",
+                action_taken=chapter_response.action_taken or "None",
+                detailed_summary=chapter_response.detailed_summary or "None",
+                category=chapter_response.category or "None",
+                sub_category=chapter_response.sub_category or "None",
+                text_from_scene=chapter_response.text_from_scene or "None",
+                subject_registry=subject_registry_json,
                 youtube_url=url or "None",
                 time=current_time,
                 chapter_transcript=chapter_transcript,
-                subject=self.subject_data["subject"] or "None",
-                variety=self.subject_data["variety_of_subject"] or "None",
                 parent_id=self.parent_id or "None",
                 parent_duration=str(self.parent_duration) if self.parent_duration is not None else "None",
                 video_duration=str(self.video_duration) if self.video_duration is not None else "None",
@@ -230,16 +220,12 @@ class ChapterIngestionPipeline:
             logger.error("Semantic chunking failed - no segments created")
             return None, None, is_exist
 
-        # Step 2: Extract subject and variety
-        logger.info("Step 2: Extracting subject and variety information...")
-        self.subject_data = await self._extract_subject_and_variety()
-
-        # Step 3: Generate chapters
-        logger.info("Step 3: Generating chapters from semantic chunks...")
+        # Step 2: Generate chapters
+        logger.info("Step 2: Generating chapters from semantic chunks...")
         await self._create_chapters()
 
-        # Step 4: Ingest to search index
-        logger.info("Step 4: Ingesting chapters to search index...")
+        # Step 3: Ingest to search index
+        logger.info("Step 3: Ingesting chapters to search index...")
         await self._ingest(url=url)
 
         # Cleanup

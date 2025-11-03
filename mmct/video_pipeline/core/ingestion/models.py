@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Dict
 from pydantic import BaseModel, Field, ConfigDict
 
 class TranslationResponse(BaseModel):
@@ -30,6 +30,36 @@ class SubjectVarietyResponse(BaseModel):
         description="Name of the specific variety or type of subject mentioned in the video, or 'None' if not found"
     )
 
+class SubjectResponse(BaseModel):
+    """Pydantic model representing a single subject tracked in the video.
+
+    A subject can be a person, object, animal, or any other entity that appears
+    consistently throughout the video and is relevant to the content.
+    """
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(
+        ...,
+        description="Name of the subject if known, otherwise a short descriptive identity (e.g., 'iPhone 15 Pro', 'red car', 'main presenter', 'golden retriever')"
+    )
+    appearance: List[str] = Field(
+        ...,
+        description="List of appearance descriptions for this subject (e.g., visual characteristics, color, shape, distinctive features)"
+    )
+    identity: List[str] = Field(
+        ...,
+        description="List of identity descriptions for this subject (e.g., type, category, role, model number, brand, purpose)"
+    )
+    first_seen: float = Field(
+        ...,
+        description="Timestamp in seconds when this subject first appears in the video"
+    )
+    additional_details: Optional[str] = Field(
+        None,
+        description="Any additional relevant information about this subject that doesn't fit into the other categories (e.g., behavior, context, interactions, unique observations)"
+    )
+
+
 
 class ChapterCreationResponse(BaseModel):
     """Pydantic model for validating responses from the create_chapter function.
@@ -39,37 +69,34 @@ class ChapterCreationResponse(BaseModel):
     """
     model_config = ConfigDict(extra="forbid")
     
-    Topic_of_video: str = Field(
-        ..., 
+    topic_of_video: str = Field(
+        ...,
         description="Main topic or theme that is discussed in the video"
     )
-    Category: str = Field(
+    category: str = Field(
         ..., 
         description="The primary category the video content belongs to"
     )
-    Sub_category: Optional[str] = Field(
+    sub_category: Optional[str] = Field(
         None, 
         description="The sub-category the video content belongs to"
     )
-    subject: Optional[str] = Field(
-        None, 
-        description="Name of the main subject or item discussed in the video"
-    )
-    variety_of_subject: Optional[str] = Field(
-        None, 
-        description="Specific variety or type of subject mentioned in the video"
-    )
-    Detailed_summary: str = Field(
+    
+    detailed_summary: str = Field(
         ..., 
         description="Comprehensive summary of the video content including frame analysis"
     )
-    Action_taken: Optional[str] = Field(
+    action_taken: Optional[str] = Field(
         None, 
         description="Actions performed or demonstrated in the video"
     )
-    Text_from_scene: Optional[str] = Field(
-        None, 
+    text_from_scene: Optional[str] = Field(
+        None,
         description="Text extracted from the video scenes"
+    )
+    subject_registry: Optional[Dict[str, SubjectResponse]] = Field(
+        default=None,
+        description="Registry of all subjects (people, objects, animals, etc.) tracked in this video segment. Key is subject_id as string (e.g., '0', '1', '2', '3'), value contains subject details including name, appearance, identity, and first appearance timestamp."
     )
     
     def __str__(self, transcript: str = None) -> str:
@@ -85,31 +112,33 @@ class ChapterCreationResponse(BaseModel):
             str: Natural language representation of the chapter
         """
         # Start with the topic and category
-        text = f"This video is about {self.Topic_of_video}. "
-        text += f"It belongs to the {self.Category} category"
-        
+        text = f"This video is about {self.topic_of_video}. "
+        text += f"It belongs to the {self.category} category"
+
         # Add subcategory if available
-        if self.Sub_category:
-            text += f", specifically in the {self.Sub_category} subcategory"
+        if self.sub_category:
+            text += f", specifically in the {self.sub_category} subcategory"
         text += ". "
-        
-        # Add subject information if available
-        if self.subject and self.subject.lower() != "none":
-            text += f"The video discusses {self.subject}"
-            if self.variety_of_subject and self.variety_of_subject.lower() != "none":
-                text += f", particularly the {self.variety_of_subject} variety"
-            text += ". "
-        
+
         # Add the detailed summary
-        text += f"{self.Detailed_summary} "
-        
+        text += f"{self.detailed_summary} "
+
         # Add actions if available
-        if self.Action_taken and self.Action_taken.lower() != "none":
-            text += f"The following actions are demonstrated in the video: {self.Action_taken}. "
-        
+        if self.action_taken and self.action_taken.lower() != "none":
+            text += f"The following actions are demonstrated in the video: {self.action_taken}. "
+
         # Add text from scene if available
-        if self.Text_from_scene and self.Text_from_scene.lower() != "none":
-            text += f"Text visible in the video includes: {self.Text_from_scene}. "
+        if self.text_from_scene and self.text_from_scene.lower() != "none":
+            text += f"Text visible in the video includes: {self.text_from_scene}. "
+
+        # Add subject registry information if available
+        if self.subject_registry:
+            text += "Subjects in the video: "
+            subject_descriptions = []
+            for subject_id, subject_info in self.subject_registry.items():
+                subject_desc = f"{subject_info.name} (first seen at {subject_info.first_seen}s)"
+                subject_descriptions.append(subject_desc)
+            text += ", ".join(subject_descriptions) + ". "
         
         # Add transcript if provided
         if transcript:

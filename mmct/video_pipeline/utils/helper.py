@@ -220,37 +220,62 @@ async def stack_images_in_grid(frames, grid_size=4, type="base64"):
         raise Exception(f"Error while stacking images in grid: {e}")
 
 
-async def create_stacked_frames_base64(frames, grid_size=4, enable_stacking=True):
+async def create_stacked_frames_base64(frames, grid_size=4, enable_stacking=True, frame_metadata=None):
     """
-    Create stacked frames in base64 format for LLM processing.
-    
+    Create horizontally stacked frames in base64 format for LLM processing.
+
     Args:
         frames: List of base64 encoded images
-        grid_size: Number of images per grid (default: 4 for 2x2)
+        grid_size: Number of images to stack horizontally per group (default: 4)
         enable_stacking: Whether to enable frame stacking (default: True)
-    
+        frame_metadata: List of metadata dicts for each frame (optional)
+
     Returns:
-        List of base64 encoded stacked images or original frames
+        Tuple of (stacked_frames, processed_metadata)
+        - stacked_frames: List of base64 encoded horizontally stacked images or original frames
+        - processed_metadata: List of metadata for processed frames
     """
     try:
         if not enable_stacking or len(frames) <= grid_size:
-            return frames
-        
-        # Create grid images
-        grid_images = await stack_images_in_grid(frames, grid_size=grid_size, type="base64")
-        
-        # Convert back to base64
+            # No stacking, return original frames and metadata
+            return frames, frame_metadata if frame_metadata else []
+
+        # Stack images horizontally in groups
         stacked_frames = []
-        for grid_img in grid_images:
-            base64_str = await encode_image_to_base64(grid_img)
+        processed_metadata = []
+
+        for i in range(0, len(frames), grid_size):
+            batch = frames[i:i + grid_size]
+
+            # Stack this batch horizontally
+            stacked_img = await stack_images_horizontally(batch, type="base64")
+            base64_str = await encode_image_to_base64(stacked_img)
             stacked_frames.append(base64_str)
-        
-        logger.info(f"Stacked {len(frames)} frames into {len(stacked_frames)} grid images (grid_size={grid_size})")
-        return stacked_frames
+
+            # Create metadata for this stacked image
+            if frame_metadata:
+                start_idx = i
+                end_idx = min(i + grid_size, len(frame_metadata))
+
+                frames_info = []
+                for j, orig_idx in enumerate(range(start_idx, end_idx), start=1):
+                    frames_info.append({
+                        'position': j,  # 1, 2, 3, 4 (left to right)
+                        'frame_index': orig_idx,
+                        'timestamp_seconds': frame_metadata[orig_idx]['timestamp_seconds']
+                    })
+
+                processed_metadata.append({
+                    'stacked_count': len(frames_info),
+                    'frames': frames_info
+                })
+
+        logger.info(f"Stacked {len(frames)} frames into {len(stacked_frames)} horizontally stacked images (stack_size={grid_size})")
+        return stacked_frames, processed_metadata
     except Exception as e:
         logger.error(f"Error creating stacked frames: {e}")
         # Fallback to original frames on error
-        return frames
+        return frames, frame_metadata if frame_metadata else []
 
 
 async def load_required_files(session_id):

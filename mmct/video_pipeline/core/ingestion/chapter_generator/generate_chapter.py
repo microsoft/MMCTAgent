@@ -39,8 +39,9 @@ class ChapterGenerator:
 
         Returns:
             List[str]: List of base64 encoded frame images.
+            timestamps:[start_time, end_time]
         """
-        frames_file_name = []
+        frames_metadata = []
         match = re.search(r'(\d{2}:\d{2}:\d{2}),\d+\s*-->\s*(\d{2}:\d{2}:\d{2}),\d+', transcript_seg)
         start_time, end_time = match.groups()
         # Convert string timestamps to time objects if needed
@@ -61,14 +62,18 @@ class ChapterGenerator:
             search_text="*",
             filter=combined_filter,
             order_by=["created_at asc"],
-            index_name=self.index_name
+            index_name=self.index_name,
+            select = ['keyframe_filename','timestamp_seconds']
+
         )
         for result in results:
-            frames_file_name.append(result['keyframe_filename'])
+            file_name = result['keyframe_filename'].split('_')[-1].split('.')[0]
+            timestamp_seconds = result['timestamp_seconds']
+            frames_metadata.append({'file_name':file_name,'timestamp_seconds':timestamp_seconds})
 
         # Load the keyframes from local
         base_dir = await get_media_folder()
-        frames_file_paths = [os.path.join(base_dir, "keyframes", video_id, fname) for fname in frames_file_name]
+        frames_file_paths = [os.path.join(base_dir, "keyframes", video_id, f"{video_id}_{fdata['file_name']}.jpg") for fdata in frames_metadata]
 
         # Load and convert to base64 directly
         base64_frames = []
@@ -77,7 +82,7 @@ class ChapterGenerator:
                 with open(fpath, "rb") as img_file:
                     base64_frames.append(base64.b64encode(img_file.read()).decode("utf-8"))
 
-        return base64_frames
+        return base64_frames,frames_metadata
         
     async def create_chapters_batch(
         self,
@@ -307,41 +312,44 @@ class ChapterGenerator:
             ChapterCreationResponse: A Pydantic model instance containing chapter information
         """
         try:
-            frames = await self._get_frames(transcript, video_id)
+            frames, frame_metadata = await self._get_frames(transcript, video_id)
             # Apply frame stacking if enabled (grid_size > 1)
             if self.frame_stacking_grid_size > 1 and len(frames) > self.frame_stacking_grid_size:
                 logger.info(f"Applying frame stacking with grid_size={self.frame_stacking_grid_size}")
-                processed_frames = await create_stacked_frames_base64(
-                    frames, 
+                processed_frames, processed_metadata = await create_stacked_frames_base64(
+                    frames,
                     grid_size=self.frame_stacking_grid_size,
-                    enable_stacking=True
+                    enable_stacking=True,
+                    frame_metadata=frame_metadata
                 )
             else:
                 processed_frames = frames
+                processed_metadata = frame_metadata
                 logger.info("Frame stacking disabled or insufficient frames for stacking")
             # Add frame stacking information to system prompt if enabled
             frame_stacking_info = ""
             if self.frame_stacking_grid_size > 1 and len(processed_frames) < len(frames):
                 frame_stacking_info = f"""
-            NOTE: The video frames have been stacked in grids of {self.frame_stacking_grid_size} frames per image to optimize processing. Each image shows multiple sequential frames arranged in a grid format. Analyze all frames within each grid image to understand the temporal progression of the video content.
-            """
+                NOTE: The video frames have been stacked horizontally with {self.frame_stacking_grid_size} frames per image to optimize processing. Each image shows {self.frame_stacking_grid_size} sequential frames arranged from left to right. Analyze all frames within each stacked image to understand the temporal progression of the video content.
+                """
             
-            system_prompt = f""" 
-            You are a VideoAnalyzerGPT. Your job is to find all the details from the video frames of every 2 seconds and from the audio.{frame_stacking_info}
-            Below is the category and sub-category information for the provided transcript: 
-                Category and sub category: {categories}
-            Below are the main subjects and varieties mentioned, if you find other subjects or varieties then add them with comma separation:
-                Subject and specific variety is {subject_variety}.
-            Mention only the English name or text in the response, if text mentioned in the video is in Hindi or any other language then convert them into English.
-            If any text from video frames or transcript is in Hindi or any other language then translate them into English and include it in the response.
-            Topics that you have to find and include in the response:
-            1. Topic of the video or scene theme.
-            2. Main subject or item being discussed in the video.
-            3. Specific variety or type of the subject (e.g. model numbers, versions, types, etc.) that is being discussed.
-            4. A detailed summary which contains all the information discussed and analyzed from the frames.
-            5. Actions taken in the video.
-            6. Text from the images and scenes.
-            Make sure the response language is only English, not Hinglish or Hindi or any other language.
+            system_prompt = f"""
+            You are a VideoAnalyzerGPT. Your task is to analyze video content by examining keyframes and audio transcripts to extract comprehensive information about what is shown and discussed.{frame_stacking_info}
+
+            CONTEXT INFORMATION:
+            - Reference category and sub-category: {categories}
+            - Reference subjects and varieties: {subject_variety}
+            - Frame timing information is provided with each frame to help track when subjects first appear
+
+            GUIDELINES:
+            - Identify the main topic or theme of the video
+            - Categorize the content appropriately (you may use the reference categories or determine more suitable ones based on actual content)
+            - Provide a comprehensive summary covering all visual and audio information, including any specific varieties, types, model numbers, or versions mentioned
+            - Note any actions performed or demonstrated
+            - Extract any visible text from the scenes
+            - Track ALL significant subjects in the subject_registry: Include all people, main objects, animals, or entities that appear consistently or play an important role in the video. For example, if a person named Sam appears with a watermelon, track both Sam (as subject 0) and the watermelon (as subject 1).
+
+            IMPORTANT: All output must be in English only. Translate any Hindi or other language content found in the video frames or transcript to English.
             """
 
             # Handle large inputs by batching only frames, sending full transcript each time
@@ -363,6 +371,21 @@ class ChapterGenerator:
                 for i, batch in enumerate(frame_batches):
                     # First batch uses standard prompt
                     if i == 0:
+                        # Create frame timing info text
+                        frame_timing_parts = []
+                        for idx in range(len(batch)):
+                            meta = processed_metadata[idx]
+                            if 'frames' in meta and isinstance(meta.get('frames'), list):
+                                # Stacked frame with horizontal layout
+                                stack_info = f"Stacked Image {idx} ({meta['stacked_count']} frames, left to right):\n"
+                                for frame_info in meta['frames']:
+                                    stack_info += f"  Frame {frame_info['position']}: {frame_info['timestamp_seconds']}s\n"
+                                frame_timing_parts.append(stack_info.strip())
+                            else:
+                                # Single frame
+                                frame_timing_parts.append(f"Frame {idx}: {meta['timestamp_seconds']}s")
+                        frame_timing_text = "\n".join(frame_timing_parts)
+
                         batch_prompt = [
                             {"role": "system", "content": system_prompt},
                             {
@@ -380,18 +403,35 @@ class ChapterGenerator:
                                     ),
                                     {
                                         "type": "text",
-                                        "text": f"The audio transcription is: {transcript}",
+                                        "text": f"{frame_timing_text}\n\nThe audio transcription is: {transcript}",
                                     },
                                 ],
                             },
                         ]
                     else:
                         # For subsequent batches, include context from previous results
-                        context = f"""You've already analyzed the first {i * MAX_FRAMES_PER_BATCH} frames of this video. 
+                        # Create frame timing info for this batch
+                        batch_start_idx = i * MAX_FRAMES_PER_BATCH
+                        frame_timing_parts = []
+                        for local_idx in range(len(batch)):
+                            global_idx = batch_start_idx + local_idx
+                            meta = processed_metadata[global_idx]
+                            if 'frames' in meta and isinstance(meta.get('frames'), list):
+                                # Stacked frame with horizontal layout
+                                stack_info = f"Stacked Image {global_idx} ({meta['stacked_count']} frames, left to right):\n"
+                                for frame_info in meta['frames']:
+                                    stack_info += f"  Frame {frame_info['position']}: {frame_info['timestamp_seconds']}s\n"
+                                frame_timing_parts.append(stack_info.strip())
+                            else:
+                                # Single frame
+                                frame_timing_parts.append(f"Frame {global_idx}: {meta['timestamp_seconds']}s")
+                        frame_timing_text = "\n".join(frame_timing_parts)
+
+                        context = f"""You've already analyzed the first {i * MAX_FRAMES_PER_BATCH} frames of this video.
                         These are frames {i * MAX_FRAMES_PER_BATCH + 1} to {min((i + 1) * MAX_FRAMES_PER_BATCH, len(processed_frames))}.
-                        
+
                         Previous analysis results: {previous_analysis}
-                        
+
                         Continue your analysis with these additional frames, focusing on new information not captured in previous analyses.
                         Maintain consistency with your previous analysis for the same elements (subject, variety, etc.) unless new visual evidence contradicts it.
                         Pay special attention to any text, actions, or visual elements that appear in these new frames."""
@@ -413,7 +453,7 @@ class ChapterGenerator:
                                     ),
                                     {
                                         "type": "text",
-                                        "text": f"The audio transcription is: {transcript}",
+                                        "text": f"{frame_timing_text}\n\nThe audio transcription is: {transcript}",
                                     },
                                 ],
                             },
@@ -445,11 +485,12 @@ class ChapterGenerator:
                             "content": f"""You are tasked with combining multiple analyses of the same video into a single coherent analysis.
                             Below you'll find analyses from different frame batches of the same video.
                             Create a single comprehensive JSON that combines all the information without redundancy.
-                            
+
                             When integrating information:
                             1. For factual fields (topic, subject, variety), use the most detailed and accurate version
                             2. For summary fields, synthesize all information into a cohesive narrative
                             3. For actions and text from scene, include all unique observations across analyses
+                            4. For subject_registry: merge subjects across batches using consistent subject IDs, combine appearance and identity lists without duplication, and keep the earliest first_seen timestamp for each subject
                             """,
                         },
                         {
@@ -476,6 +517,21 @@ class ChapterGenerator:
                 # Return ChapterCreationResponse instance directly
                 return final_result
             # Original implementation for smaller inputs
+            # Create frame timing info text
+            frame_timing_parts = []
+            for idx in range(len(processed_frames)):
+                meta = processed_metadata[idx]
+                if 'frames' in meta and isinstance(meta.get('frames'), list):
+                    # Stacked frame with horizontal layout
+                    stack_info = f"Stacked Image {idx} ({meta['stacked_count']} frames, left to right):\n"
+                    for frame_info in meta['frames']:
+                        stack_info += f"  Frame {frame_info['position']}: {frame_info['timestamp_seconds']}s\n"
+                    frame_timing_parts.append(stack_info.strip())
+                else:
+                    # Single frame
+                    frame_timing_parts.append(f"Frame {idx}: {meta['timestamp_seconds']}s")
+            frame_timing_text = "\n".join(frame_timing_parts)
+
             prompt = [
                 {"role": "system", "content": system_prompt},
                 {
@@ -491,7 +547,7 @@ class ChapterGenerator:
                             },
                             processed_frames,
                         ),
-                        {"type": "text", "text": f"The audio transcription is: {transcript}"},
+                        {"type": "text", "text": f"{frame_timing_text}\n\nThe audio transcription is: {transcript}"},
                     ],
                 },
             ]
