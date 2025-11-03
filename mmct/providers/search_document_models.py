@@ -103,9 +103,15 @@ class ChapterIndexDocument(BaseModel):
         facetable=True,
         key=False
     )
+<<<<<<< HEAD
     object_collection: str = Field(
         default="[]",
         description="JSON string array of object collection tracking all objects (people, objects, etc.) in the video segment",
+=======
+    subject_registry: str = Field(
+        default="[]",
+        description="JSON string array of subject registry tracking all subjects (people, objects, etc.) in the video segment",
+>>>>>>> c8e6bcb (change subject registry as List of subjects instead of dictionaries as it was consuming extra token and adding no value)
         searchable=True,
         filterable=False,
         retrievable=True,
@@ -480,10 +486,27 @@ class SubjectRegistryDocument(BaseModel):
 >>>>>>> ea4bc92 (align code with main branch changes)
 =======
 
+    url: str = Field(
+        default="",
+        description="URL of the video",
+        searchable=False,
+        filterable=True,
+        retrievable=True,
+        stored=True,
+        sortable=False,
+        facetable=False,
+        key=False
+    )
+
     subject_registry: str = Field(
+<<<<<<< HEAD
         default="{}",
         description="JSON string of merged subject registry containing all subjects (people, objects, etc.) from the entire video",
 >>>>>>> 10ff4c8 (create single subject registry document)
+=======
+        default="[]",
+        description="JSON string array of merged subject registry containing all subjects (people, objects, etc.) from the entire video",
+>>>>>>> c8e6bcb (change subject registry as List of subjects instead of dictionaries as it was consuming extra token and adding no value)
         searchable=True,
         filterable=False,
         retrievable=True,

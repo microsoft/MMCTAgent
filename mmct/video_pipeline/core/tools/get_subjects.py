@@ -40,10 +40,9 @@ async def get_subjects(
             index_name=full_index_name,
             search_text="*",
             filter=video_filter,
-            top=1000,  # Get all subjects for the video
-            select = ['name', 'appearance', 'identity', 'additional_details', 'first_seen']
+            select = ['subject_registry','subject_count']
         )
-        results = [[res['name'], res['appearance'], res['identity'], res['additional_details'],res['first_seen']] for res in results]
+        results = [res['subject_registry'] for res in results]
         
         return results
 
@@ -60,8 +59,8 @@ if __name__ == "__main__":
 
     async def main():
         # Example usage
-        video_id = "d678544d517a57050f6a6881b0eb26496536053c45711ac624104cd2fccc00dc"
-        index_name = "test"  # Replace with actual index name
+        video_id = "808ef24205b8bfe7181818699675f5a4dbfe5974baf5ded99ab5b5b3c8b6f15d"
+        index_name = "bmark-video-mme-incorrect-responses-videos"  # Replace with actual index name
 
         print(f"Fetching subjects for video_id: {video_id}")
         subjects = await get_subjects(video_id, index_name)
