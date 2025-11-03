@@ -27,6 +27,7 @@ share/python-wheels/
 *.egg
 MANIFEST
 mmct_faiss_indices/
+mmct/tests/results/
 local_storage/
 *.mp4
 # PyInstaller
