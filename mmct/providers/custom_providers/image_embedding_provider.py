@@ -22,8 +22,10 @@ class CustomImageEmbeddingProvider(ImageEmbeddingProvider):
                 - model_name: CLIP model name (default: "openai/clip-vit-base-patch32")
                 - device: Device to use - "auto", "cpu", or "cuda" (default: "auto")
                 - max_image_size: Maximum image dimension (default: 224)
-                - normalize_embeddings: Whether to normalize embeddings (default: True)
                 - batch_size: Batch size for processing (default: 8)
+                
+        Note:
+            Embeddings are always L2 normalized for optimal CLIP performance.
         """
         # Convert ImageEmbeddingConfig to dict if needed
         if isinstance(config, ImageEmbeddingConfig):
@@ -33,7 +35,6 @@ class CustomImageEmbeddingProvider(ImageEmbeddingProvider):
         self.model_name = config.get("model_name", "openai/clip-vit-base-patch32")
         self.device = self._get_device()
         self.max_image_size = config.get("max_image_size", 224)
-        self.normalize_embeddings = config.get("normalize_embeddings", True)
         self.batch_size = config.get("batch_size", 8)
 
         self.model: Optional[CLIPModel] = None
@@ -112,10 +113,9 @@ class CustomImageEmbeddingProvider(ImageEmbeddingProvider):
             # Generate embeddings
             with torch.no_grad():
                 image_features = self.model.get_image_features(**inputs)
-
-                # Normalize embeddings if configured
-                if self.normalize_embeddings:
-                    image_features = image_features / image_features.norm(dim=1, keepdim=True)
+                
+                # Always L2 normalize embeddings for CLIP
+                image_features = image_features / image_features.norm(dim=1, keepdim=True)
 
             # Convert to numpy and move to CPU
             embeddings = image_features.cpu().numpy()
@@ -214,10 +214,9 @@ class CustomImageEmbeddingProvider(ImageEmbeddingProvider):
             # Generate embeddings
             with torch.no_grad():
                 text_features = self.model.get_text_features(**inputs)
-
-                # Normalize embeddings if configured
-                if self.normalize_embeddings:
-                    text_features = text_features / text_features.norm(dim=-1, keepdim=True)
+                
+                # Always L2 normalize embeddings for CLIP
+                text_features = text_features / text_features.norm(dim=-1, keepdim=True)
 
             # Convert to numpy and move to CPU
             embeddings = text_features.cpu().numpy()
