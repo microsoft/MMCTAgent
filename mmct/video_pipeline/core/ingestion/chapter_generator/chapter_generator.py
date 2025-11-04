@@ -58,10 +58,9 @@ class ChapterGenerator:
         video_filter = f"video_id eq '{video_id}'"
         combined_filter = f"{time_filter} and {video_filter}"
         results = await self.search_provider.search(
-            query=None,
+            query="*",
             search_text="*",
             filter=combined_filter,
-            order_by=["created_at asc"],
             index_name=self.index_name,
             select = ['keyframe_filename','timestamp_seconds']
 
@@ -70,6 +69,9 @@ class ChapterGenerator:
             file_name = result['keyframe_filename'].split('_')[-1].split('.')[0]
             timestamp_seconds = result['timestamp_seconds']
             frames_metadata.append({'file_name':file_name,'timestamp_seconds':timestamp_seconds})
+
+        # Sort frames_metadata by timestamp_seconds in ascending order
+        frames_metadata.sort(key=lambda x: x['timestamp_seconds'])
 
         # Load the keyframes from local
         base_dir = await get_media_folder()
@@ -292,6 +294,7 @@ class ChapterGenerator:
                 subject="None", variety_of_subject="None"
             ).model_dump_json()
 
+
     async def create_chapter(
         self,
         transcript: str,
@@ -312,6 +315,7 @@ class ChapterGenerator:
             ChapterCreationResponse: A Pydantic model instance containing chapter information
         """
         try:
+
             frames, frame_metadata = await self._get_frames(transcript, video_id)
             # Apply frame stacking if enabled (grid_size > 1)
             if self.frame_stacking_grid_size > 1 and len(frames) > self.frame_stacking_grid_size:
@@ -348,7 +352,7 @@ class ChapterGenerator:
             - Provide a comprehensive summary covering all visual and audio information, including any specific varieties, types, model numbers, or versions mentioned
             - Note any actions performed or demonstrated
             - Extract any visible text from the scenes
-            - Track ALL significant subjects in the subject_registry: Include all people, main objects, animals, or entities that appear consistently or play an important role in the video. For example, if a person named Sam appears with a watermelon, track both Sam (as subject 0) and the watermelon (as subject 1).
+            - Track ALL subjects in the subject_registry: Include all people, main objects, animals, or entities that appear consistently or play an important role in the video. For example, if a person named Sam appears with a watermelon, track both Sam (as subject 0) and the watermelon (as subject 1).
 
             IMPORTANT: All output must be in English only. Translate any Hindi or other language content found in the video frames or transcript to English.
             """
