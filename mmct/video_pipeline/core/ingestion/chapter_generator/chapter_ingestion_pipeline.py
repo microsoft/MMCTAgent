@@ -157,6 +157,10 @@ class ChapterIngestionPipeline:
             start_time = timestamps[0] if timestamps and len(timestamps) > 0 else 0.0
             end_time = timestamps[1] if timestamps and len(timestamps) > 1 else 0.0
 
+            # Extract start and end times from timestamps
+            start_time = timestamps[0] if timestamps and len(timestamps) > 0 else 0.0
+            end_time = timestamps[1] if timestamps and len(timestamps) > 1 else 0.0
+
             obj = ChapterIndexDocument(
                 id=str(uuid.uuid4()),
                 hash_video_id=self.hash_id,

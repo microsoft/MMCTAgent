@@ -594,4 +594,40 @@ class SubjectRegistryDocument(BaseModel):
         facetable=False,
         key=False
     )
+
+    video_summary: str = Field(
+        default="",
+        description="Overall summary of the entire video",
+        searchable=True,
+        filterable=False,
+        retrievable=True,
+        stored=True,
+        sortable=False,
+        facetable=False,
+        key=False
+    )
+
+    video_summary_embedding: List[float] = Field(
+        default_factory=list,
+        description="Vector embedding of the video summary for semantic search",
+        searchable=True,
+        filterable=False,
+        retrievable=False,
+        stored=True,
+        sortable=False,
+        facetable=False,
+        key=False
+    )
+
+    video_duration: float = Field(
+        default=0.0,
+        description="Duration of the video in seconds",
+        searchable=False,
+        filterable=True,
+        retrievable=True,
+        stored=True,
+        sortable=True,
+        facetable=False,
+        key=False
+    )
  

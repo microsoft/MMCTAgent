@@ -76,6 +76,9 @@ def create_video_chapter_index_schema(index_name: str) -> SearchIndex:
             continue
 
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 48e6f31 (added the visual summary of video and start_time, end_time in chapter document)
         # Choose data type based on annotation
         if model_field.annotation is datetime:
             data_type = SearchFieldDataType.DateTimeOffset
@@ -85,6 +88,7 @@ def create_video_chapter_index_schema(index_name: str) -> SearchIndex:
             data_type = SearchFieldDataType.Int32
         else:
             data_type = SearchFieldDataType.String
+<<<<<<< HEAD
 =======
         # Choose data type
         data_type = (
@@ -93,6 +97,8 @@ def create_video_chapter_index_schema(index_name: str) -> SearchIndex:
             else SearchFieldDataType.String
         )
 >>>>>>> dfb5611 (create combined subject registry and indexing)
+=======
+>>>>>>> 48e6f31 (added the visual summary of video and start_time, end_time in chapter document)
 
         common_kwargs = dict(
             name=name,
@@ -176,6 +182,7 @@ def create_video_chapter_index_schema(index_name: str) -> SearchIndex:
         vector_search=vector_search
     )
 <<<<<<< HEAD
+<<<<<<< HEAD
 
     print(fields)
     return index
@@ -186,6 +193,10 @@ def create_object_collection_index_schema(index_name: str) -> SearchIndex:
     Create the index schema definition for object collection search.
     This schema is based on ObjectCollectionDocument model.
 =======
+=======
+
+    print(fields)
+>>>>>>> 48e6f31 (added the visual summary of video and start_time, end_time in chapter document)
     return index
 
 
@@ -241,6 +252,23 @@ def create_subject_registry_index_schema(index_name: str) -> SearchIndex:
     for name, model_field in SubjectRegistryDocument.model_fields.items():
         extra = model_field.json_schema_extra
 
+        # Special handling for video_summary_embedding vector field
+        if name == "video_summary_embedding":
+            fields.append(
+                SearchField(
+                    name=name,
+                    type=SearchFieldDataType.Collection(SearchFieldDataType.Single),
+                    searchable=True,
+                    filterable=extra.get("filterable", False),
+                    facetable=extra.get("facetable", False),
+                    sortable=extra.get("sortable", False),
+                    hidden=not extra.get("stored", True),
+                    vector_search_dimensions=1536,  # Standard dimension for text embeddings
+                    vector_search_profile_name="embedding_profile"
+                )
+            )
+            continue
+
         # Determine data type based on annotation
         if model_field.annotation is float:
             data_type = SearchFieldDataType.Double
@@ -276,6 +304,9 @@ def create_subject_registry_index_schema(index_name: str) -> SearchIndex:
                 SimpleField(**common_kwargs)
             )
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 48e6f31 (added the visual summary of video and start_time, end_time in chapter document)
     important_fields = [
         SemanticField(field_name="video_summary")
     ]     
@@ -321,19 +352,28 @@ def create_subject_registry_index_schema(index_name: str) -> SearchIndex:
             )
         ]
     )
+<<<<<<< HEAD
 =======
 >>>>>>> dfb5611 (create combined subject registry and indexing)
+=======
+>>>>>>> 48e6f31 (added the visual summary of video and start_time, end_time in chapter document)
 
     # Create the index
     index = SearchIndex(
         name=index_name,
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 48e6f31 (added the visual summary of video and start_time, end_time in chapter document)
         fields=fields,
         vector_search=vector_search,
         semantic_search=semantic_config
         
+<<<<<<< HEAD
 =======
         fields=fields
 >>>>>>> dfb5611 (create combined subject registry and indexing)
+=======
+>>>>>>> 48e6f31 (added the visual summary of video and start_time, end_time in chapter document)
     )
     return index
