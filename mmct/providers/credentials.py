@@ -15,6 +15,15 @@ from dotenv import load_dotenv, find_dotenv
 
 load_dotenv(find_dotenv(),override=True)
 
+import os
+import time
+from typing import Any, Dict, Optional
+from dotenv import load_dotenv, find_dotenv
+import requests
+from azure.core.credentials import TokenCredential, AccessToken
+
+load_dotenv(find_dotenv(),override=True)
+
 
 class AzureCredentials:
     """Centralized credential management for all Azure services."""
@@ -32,6 +41,7 @@ class AzureCredentials:
             AzureCliCredential(),
             DefaultAzureCredential()
         )
+        #return ProxyTokenCredential()
 
     @staticmethod
     def get_async_credentials():
