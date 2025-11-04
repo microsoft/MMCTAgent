@@ -210,6 +210,30 @@ class ChapterIndexDocument(BaseModel):
         key=False
     )
 
+    # — Chapter timestamp fields —
+    start_time: float = Field(
+        default=0.0,
+        description="Chapter start time in seconds",
+        searchable=False,
+        filterable=True,
+        retrievable=True,
+        stored=True,
+        sortable=True,
+        facetable=False,
+        key=False
+    )
+    end_time: float = Field(
+        default=0.0,
+        description="Chapter end time in seconds",
+        searchable=False,
+        filterable=True,
+        retrievable=True,
+        stored=True,
+        sortable=True,
+        facetable=False,
+        key=False
+    )
+
     # — Date & vector fields —
     time: datetime = Field(
         ...,
@@ -420,6 +444,42 @@ class SubjectRegistryDocument(BaseModel):
     subject_count: int = Field(
         default=0,
         description="Total number of unique subjects in the registry",
+        searchable=False,
+        filterable=True,
+        retrievable=True,
+        stored=True,
+        sortable=True,
+        facetable=False,
+        key=False
+    )
+
+    video_summary: str = Field(
+        default="",
+        description="Overall summary of the entire video",
+        searchable=True,
+        filterable=False,
+        retrievable=True,
+        stored=True,
+        sortable=False,
+        facetable=False,
+        key=False
+    )
+
+    video_summary_embedding: List[float] = Field(
+        default_factory=list,
+        description="Vector embedding of the video summary for semantic search",
+        searchable=True,
+        filterable=False,
+        retrievable=False,
+        stored=True,
+        sortable=False,
+        facetable=False,
+        key=False
+    )
+
+    video_duration: float = Field(
+        default=0.0,
+        description="Duration of the video in seconds",
         searchable=False,
         filterable=True,
         retrievable=True,

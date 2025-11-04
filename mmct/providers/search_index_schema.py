@@ -59,12 +59,15 @@ def create_video_chapter_index_schema(index_name: str) -> SearchIndex:
             )
             continue
 
-        # Choose data type
-        data_type = (
-            SearchFieldDataType.DateTimeOffset
-            if model_field.annotation is datetime
-            else SearchFieldDataType.String
-        )
+        # Choose data type based on annotation
+        if model_field.annotation is datetime:
+            data_type = SearchFieldDataType.DateTimeOffset
+        elif model_field.annotation is float:
+            data_type = SearchFieldDataType.Double
+        elif model_field.annotation is int:
+            data_type = SearchFieldDataType.Int32
+        else:
+            data_type = SearchFieldDataType.String
 
         common_kwargs = dict(
             name=name,
@@ -147,6 +150,8 @@ def create_video_chapter_index_schema(index_name: str) -> SearchIndex:
         semantic_search=semantic_config,
         vector_search=vector_search
     )
+
+    print(fields)
     return index
 
 
@@ -168,6 +173,23 @@ def create_subject_registry_index_schema(index_name: str) -> SearchIndex:
 
     for name, model_field in SubjectRegistryDocument.model_fields.items():
         extra = model_field.json_schema_extra
+
+        # Special handling for video_summary_embedding vector field
+        if name == "video_summary_embedding":
+            fields.append(
+                SearchField(
+                    name=name,
+                    type=SearchFieldDataType.Collection(SearchFieldDataType.Single),
+                    searchable=True,
+                    filterable=extra.get("filterable", False),
+                    facetable=extra.get("facetable", False),
+                    sortable=extra.get("sortable", False),
+                    hidden=not extra.get("stored", True),
+                    vector_search_dimensions=1536,  # Standard dimension for text embeddings
+                    vector_search_profile_name="embedding_profile"
+                )
+            )
+            continue
 
         # Determine data type based on annotation
         if model_field.annotation is float:
@@ -199,10 +221,58 @@ def create_subject_registry_index_schema(index_name: str) -> SearchIndex:
             fields.append(
                 SimpleField(**common_kwargs)
             )
+    important_fields = [
+        SemanticField(field_name="video_summary")
+    ]     
+    semantic_config = SemanticSearch(
+        configurations=[
+            SemanticConfiguration(
+                name="my-semantic-search-config",
+                prioritized_fields=SemanticPrioritizedFields(
+                    content_fields=important_fields,
+                    keywords_fields=important_fields
+                )
+            )
+        ]
+    )
+
+    # Configure vector search algorithms
+    vector_search = VectorSearch(
+        algorithms=[
+            HnswAlgorithmConfiguration(
+                name="hnsw_config",
+                parameters={
+                    "m": 4,
+                    "efConstruction": 400,
+                    "efSearch": 500,
+                    "metric": "cosine"
+                }
+            ),
+            ExhaustiveKnnAlgorithmConfiguration(
+                name="myExhaustiveKnn",
+                parameters={
+                    "metric": "cosine"
+                }
+            )
+        ],
+        profiles=[
+            VectorSearchProfile(
+                name="embedding_profile",
+                algorithm_configuration_name="hnsw_config"
+            ),
+            VectorSearchProfile(
+                name="myExhaustiveKnnProfile",
+                algorithm_configuration_name="myExhaustiveKnn"
+            )
+        ]
+    )
 
     # Create the index
     index = SearchIndex(
         name=index_name,
-        fields=fields
+        fields=fields,
+        vector_search=vector_search,
+        semantic_search=semantic_config
+        
     )
     return index

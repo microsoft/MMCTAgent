@@ -7,13 +7,13 @@ from mmct.config.settings import MMCTConfig
 from mmct.providers.factory import provider_factory
 from mmct.providers.search_index_schema import create_subject_registry_index_schema
 from mmct.video_pipeline.core.ingestion.models import ChapterCreationResponse, SubjectResponse
+from mmct.video_pipeline.core.ingestion.chapter_generator.video_summary import VideoSummary
+from mmct.video_pipeline.core.ingestion.chapter_generator.utils import create_embedding
 
 
 class MergedSubjectRegistryResponse(BaseModel):
-    """Response model for merged subject registry.
-
-    Uses properly typed SubjectResponse objects to satisfy Azure OpenAI's
-    strict validation requirements for nested structures.
+    """
+    Response model for merged subject registry.
     """
     model_config = {"extra": "forbid"}
 
@@ -42,20 +42,23 @@ class SubjectRegistryProcessor:
         self.llm_provider = provider_factory.create_llm_provider()
         self.search_provider = provider_factory.create_search_provider()
         self.index_name = index_name
+        self.video_summary_processor = VideoSummary()
 
     async def run(
         self,
         chapter_responses: List[ChapterCreationResponse],
         video_id: str,
-        url: Optional[str] = None
+        url: Optional[str] = None,
+        video_duration: Optional[float] = None
     ) -> Optional[List[SubjectResponse]]:
         """
-        Main method to process chapter responses and create merged subject registry.
+        Main method to process chapter responses and create merged subject registry and video summary.
 
         Args:
             chapter_responses: List of ChapterCreationResponse objects containing subject registries
             video_id: Unique identifier for the video
             url: Optional URL of the video
+            video_duration: Duration of the video in seconds
 
         Returns:
             Merged subject registry as a list of SubjectResponse objects, or None if no subjects found
@@ -65,17 +68,26 @@ class SubjectRegistryProcessor:
 
         if not registries:
             logger.info("No subject registries found in chapters")
-            return None
+            merged_registry = None
+        else:
+            # Merge registries using LLM
+            merged_registry = await self._merge_registries(registries)
 
-        # Merge registries using LLM
-        merged_registry = await self._merge_registries(registries)
+            if not merged_registry:
+                logger.warning("Failed to merge subject registries")
 
-        if not merged_registry:
-            logger.warning("Failed to merge subject registries")
-            return None
+        # Create merged video summary from all chapter summaries
+        # Note: chapter_responses are already sorted chronologically by chapter_generator.py
+        video_summary = await self.video_summary_processor.create_video_summary(
+            chapter_responses=chapter_responses
+        )
 
-        # Index the merged registry
-        await self._index_registry(merged_registry, video_id, url)
+        if not video_summary:
+            logger.warning("Failed to create video summary")
+            video_summary = ""
+
+        # Index the merged registry, video summary, and video duration
+        await self._index_registry(merged_registry, video_id, url, video_summary, video_duration)
 
         return merged_registry
 
@@ -181,14 +193,23 @@ class SubjectRegistryProcessor:
             logger.error(f"Failed to merge subject registries: {e}")
             return None
 
-    async def _index_registry(self, registry: List[SubjectResponse], video_id: str, url: Optional[str] = None) -> bool:
+    async def _index_registry(
+        self,
+        registry: Optional[List[SubjectResponse]],
+        video_id: str,
+        url: Optional[str] = None,
+        video_summary: str = "",
+        video_duration: Optional[float] = None
+    ) -> bool:
         """
-        Index the merged subject registry into search index as a single combined document.
+        Index the merged subject registry, video summary, and video duration into search index as a single combined document.
 
         Args:
-            registry: Merged subject registry as a list of SubjectResponse objects
+            registry: Merged subject registry as a list of SubjectResponse objects (can be None)
             video_id: Unique identifier for the video
             url: Optional URL of the video
+            video_summary: Overall summary of the entire video
+            video_duration: Duration of the video in seconds
 
         Returns:
             True if indexing succeeded, False otherwise
@@ -204,22 +225,38 @@ class SubjectRegistryProcessor:
 
             # Serialize the entire merged subject_registry to JSON string
             subject_registry_json = "[]"
+            subject_count = 0
             if registry:
                 try:
                     # Convert the List[SubjectResponse] to JSON-serializable list
                     subject_registry_list = [subject.model_dump() for subject in registry]
                     subject_registry_json = json.dumps(subject_registry_list)
+                    subject_count = len(registry)
                 except Exception as e:
                     logger.warning(f"Failed to serialize merged subject_registry: {e}")
                     subject_registry_json = "[]"
 
-            # Create a single document with the combined subject registry
+            # Create embedding for video summary if it exists
+            video_summary_embedding = []
+            if video_summary:
+                try:
+                    logger.info("Creating embedding for video summary...")
+                    video_summary_embedding = await create_embedding(video_summary)
+                    logger.info(f"Successfully created video summary embedding with dimension {len(video_summary_embedding)}")
+                except Exception as e:
+                    logger.error(f"Failed to create video summary embedding: {e}")
+                    video_summary_embedding = []
+
+            # Create a single document with the combined subject registry, video summary, embedding, and duration
             doc = {
                 "id": str(uuid.uuid4()),
                 "video_id": video_id,
                 "url": url,
                 "subject_registry": subject_registry_json,
-                "subject_count": len(registry)
+                "subject_count": subject_count,
+                "video_summary": video_summary,
+                "video_summary_embedding": video_summary_embedding,
+                "video_duration": video_duration if video_duration is not None else 0.0
             }
 
             # Index the single combined document
@@ -227,7 +264,7 @@ class SubjectRegistryProcessor:
                 documents=[doc],
                 index_name=self.index_name
             )
-            logger.info(f"Successfully indexed combined subject registry with {len(registry)} subjects for video {video_id}")
+            logger.info(f"Successfully indexed combined subject registry with {subject_count} subjects, video summary, embedding, and duration ({video_duration}s) for video {video_id}")
             return True
 
         except Exception as e:

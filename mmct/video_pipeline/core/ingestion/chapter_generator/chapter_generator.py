@@ -49,10 +49,10 @@ class ChapterGenerator:
             start_time = time.fromisoformat(start_time)
         if isinstance(end_time, str):
             end_time = time.fromisoformat(end_time)
-
         # Convert time objects to seconds
         start_seconds = start_time.hour * 3600 + start_time.minute * 60 + start_time.second
         end_seconds = end_time.hour * 3600 + end_time.minute * 60 + end_time.second
+        chapter_timestamps = [start_seconds, end_seconds]
 
         time_filter = f"timestamp_seconds ge {start_seconds} and timestamp_seconds le {end_seconds}"
         video_filter = f"video_id eq '{video_id}'"
@@ -84,7 +84,7 @@ class ChapterGenerator:
                 with open(fpath, "rb") as img_file:
                     base64_frames.append(base64.b64encode(img_file.read()).decode("utf-8"))
 
-        return base64_frames,frames_metadata
+        return base64_frames,frames_metadata, chapter_timestamps
         
     async def create_chapters_batch(
         self,
@@ -92,7 +92,7 @@ class ChapterGenerator:
         video_id: str,
         subject_variety: Dict[str, str],
         categories: str = ""
-    ) -> Tuple[List[ChapterCreationResponse], List[str]]:
+    ) -> Tuple[List[ChapterCreationResponse], List[str], List[List[float]]]:
         """
         Create chapters from chunked transcript segments in parallel.
 
@@ -103,11 +103,12 @@ class ChapterGenerator:
             categories: Category and subcategory information (optional)
 
         Returns:
-            Tuple of (chapter_responses, chapter_transcripts)
+            Tuple of (chapter_responses, chapter_transcripts, chapter_timestamps)
+            where chapter_timestamps is a list of [start_time, end_time] pairs in seconds
         """
         if not chunked_segments:
             logger.warning("No chunked segments available for chapter creation")
-            return [], []
+            return [], [], []
 
         # Create semaphore to limit concurrent Azure OpenAI requests
         semaphore = asyncio.Semaphore(self.max_concurrent_requests)
@@ -121,7 +122,7 @@ class ChapterGenerator:
                 segment: TranscriptSegment object
 
             Returns:
-                Tuple of (idx, chapter_response, seg_text) or None on failure
+                Tuple of (idx, chapter_response, seg_text, chapter_timestamps) or None on failure
             """
             async with semaphore:
                 attempts = 0
@@ -133,8 +134,8 @@ class ChapterGenerator:
 
                 while attempts < max_attempts:
                     try:
-                        # Get ChapterCreationResponse instance
-                        chapter_response = await self.create_chapter(
+                        # Get ChapterCreationResponse instance and timestamps
+                        chapter_response, chapter_timestamps = await self.create_chapter(
                             transcript=seg_text,
                             video_id=video_id,
                             categories=categories,
@@ -143,9 +144,10 @@ class ChapterGenerator:
 
                         logger.info(f"Chapter {idx}: transcript segment: {seg_text}")
                         logger.info(f"Chapter {idx}: raw chapter: {chapter_response}")
+                        logger.info(f"Chapter {idx}: timestamps: {chapter_timestamps}")
 
                         if chapter_response is not None:
-                            return idx, chapter_response, seg_text
+                            return idx, chapter_response, seg_text, chapter_timestamps
                         else:
                             logger.warning(
                                 f"Chapter {idx}: No response received, "
@@ -202,19 +204,21 @@ class ChapterGenerator:
         # Sort by chapter index to maintain order
         successful_chapters.sort(key=lambda x: x[0])
 
-        # Extract chapter responses and transcripts
+        # Extract chapter responses, transcripts, and timestamps
         chapter_responses = []
         chapter_transcripts = []
-        for _, chapter_response, seg in successful_chapters:
+        chapter_timestamps = []
+        for _, chapter_response, seg, timestamps in successful_chapters:
             chapter_responses.append(chapter_response)
             chapter_transcripts.append(seg)
+            chapter_timestamps.append(timestamps)
 
         logger.info(
             f"Chapter Generation Completed! "
             f"Successfully created {len(chapter_responses)} chapters in parallel."
         )
 
-        return chapter_responses, chapter_transcripts
+        return chapter_responses, chapter_transcripts, chapter_timestamps
 
     @staticmethod
     def _format_segment_to_timestamp(segment) -> str:
@@ -316,7 +320,7 @@ class ChapterGenerator:
         """
         try:
 
-            frames, frame_metadata = await self._get_frames(transcript, video_id)
+            frames, frame_metadata, chapter_timestamps = await self._get_frames(transcript, video_id)
             # Apply frame stacking if enabled (grid_size > 1)
             if self.frame_stacking_grid_size > 1 and len(frames) > self.frame_stacking_grid_size:
                 logger.info(f"Applying frame stacking with grid_size={self.frame_stacking_grid_size}")
@@ -520,7 +524,7 @@ class ChapterGenerator:
                     final_result: ChapterCreationResponse = results[0]
 
                 # Return ChapterCreationResponse instance directly
-                return final_result
+                return final_result, chapter_timestamps
             # Original implementation for smaller inputs
             # Create frame timing info text
             frame_timing_parts = []
@@ -566,7 +570,7 @@ class ChapterGenerator:
             response_object: ChapterCreationResponse = response['content']
 
             # Return ChapterCreationResponse instance directly
-            return response_object
+            return response_object, chapter_timestamps
         except Exception as e:
             logger.exception(f"Error Creating chapters: {e}")
             raise

@@ -9,13 +9,14 @@ import uuid
 import asyncio
 import json
 from datetime import datetime
-from typing import List, Dict, Optional, Tuple
+from typing import List, Optional, Tuple
 from loguru import logger
 
 from mmct.providers.search_document_models import ChapterIndexDocument
 from mmct.video_pipeline.core.ingestion.semantic_chunking.semantic_chunker import SemanticChunker
 from mmct.video_pipeline.core.ingestion.chapter_generator.chapter_generator import ChapterGenerator
 from mmct.video_pipeline.core.ingestion.chapter_generator.subject_registry_processor import SubjectRegistryProcessor
+from mmct.video_pipeline.core.ingestion.chapter_generator.utils import create_embedding
 from mmct.providers.factory import provider_factory
 
 from dotenv import load_dotenv, find_dotenv
@@ -73,7 +74,6 @@ class ChapterIngestionPipeline:
             frame_stacking_grid_size=frame_stacking_grid_size,
             keyframe_index=f"keyframes-{index_name}",
         )
-        self.embedding_provider = provider_factory.create_embedding_provider()
 
         # Initialize subject registry processor
         self.subject_registry_processor = SubjectRegistryProcessor(
@@ -87,6 +87,7 @@ class ChapterIngestionPipeline:
         self.chunked_segments = []
         self.chapter_responses = []
         self.chapter_transcripts = []
+        self.chapter_timestamps = []
 
     async def _create_search_index(self):
         """Create search index if it doesn't exist."""
@@ -104,12 +105,6 @@ class ChapterIngestionPipeline:
         if created:
             logger.info(f"Index {self.index_name} created successfully.")
 
-    async def _create_embedding_normal(self, text: str) -> List[float]:
-        """Create embedding for text."""
-        try:
-            return await self.embedding_provider.embedding(text)
-        except Exception as e:
-            raise Exception(f"Failed to create embedding: {e}")
 
 
     async def _create_chapters(self):
@@ -120,14 +115,14 @@ class ChapterIngestionPipeline:
 
         # Use the chapter generator to create chapters in batch
         # Note: max_concurrent_requests is set in ChapterGenerator.__init__
-        self.chapter_responses, self.chapter_transcripts = await self.chapter_generator.create_chapters_batch(
+        self.chapter_responses, self.chapter_transcripts, self.chapter_timestamps = await self.chapter_generator.create_chapters_batch(
             chunked_segments=self.chunked_segments,
             video_id=self.hash_id,
             subject_variety={},
             categories="",
         )
 
-        logger.info(f"Chapter creation completed: {len(self.chapter_responses)} chapters created")
+        logger.info(f"Chapter creation completed: {len(self.chapter_responses)} chapters created with timestamps")
 
     async def _ingest(self, url: Optional[str] = None):
         """
@@ -141,8 +136,8 @@ class ChapterIngestionPipeline:
 
         logger.info(f"Creating documents from {len(self.chapter_responses)} chapters")
 
-        for chapter_response, chapter_transcript in zip(
-            self.chapter_responses, self.chapter_transcripts
+        for chapter_response, chapter_transcript, timestamps in zip(
+            self.chapter_responses, self.chapter_transcripts, self.chapter_timestamps
         ):
             chapter_content_str = chapter_response.__str__(transcript=chapter_transcript)
 
@@ -156,6 +151,10 @@ class ChapterIngestionPipeline:
                 except Exception as e:
                     logger.warning(f"Failed to serialize subject_registry: {e}")
                     subject_registry_json = "[]"
+
+            # Extract start and end times from timestamps
+            start_time = timestamps[0] if timestamps and len(timestamps) > 0 else 0.0
+            end_time = timestamps[1] if timestamps and len(timestamps) > 1 else 0.0
 
             obj = ChapterIndexDocument(
                 id=str(uuid.uuid4()),
@@ -173,11 +172,13 @@ class ChapterIngestionPipeline:
                 parent_id=self.parent_id or "None",
                 parent_duration=str(self.parent_duration) if self.parent_duration is not None else "None",
                 video_duration=str(self.video_duration) if self.video_duration is not None else "None",
+                start_time=start_time,
+                end_time=end_time,
                 blob_audio_url="None",
                 blob_video_url="None",
                 blob_transcript_file_url="None",
                 blob_frames_folder_path=self.keyframe_blob_url or "None",
-                embeddings=await self._create_embedding_normal(chapter_content_str),
+                embeddings=await create_embedding(chapter_content_str),
             )
             doc_objects.append(obj)
 
@@ -227,12 +228,13 @@ class ChapterIngestionPipeline:
         logger.info("Step 2: Generating chapters from semantic chunks...")
         await self._create_chapters()
 
-        # Step 3: Process subject registry
-        logger.info("Step 3: Processing and indexing subject registry...")
+        # Step 3: Process subject registry and video summary
+        logger.info("Step 3: Processing and indexing subject registry and video summary...")
         merged_registry = await self.subject_registry_processor.run(
             chapter_responses=self.chapter_responses,
             video_id=self.hash_id,
-            url=url
+            url=url,
+            video_duration=self.video_duration
         )
         if merged_registry:
             logger.info(f"Subject registry processed: {len(merged_registry)} unique subjects")

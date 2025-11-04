@@ -111,18 +111,18 @@ class AzureSearchProvider(SearchProvider):
 
     def _create_video_chapter_index_schema(self, index_name: str, dim: int = 1536) -> SearchIndex:
         """
-        Create Azure AI Search index schema for video chapters.
+        Create the index schema definition for video chapter search.
+        This schema is based on AISearchDocument model.
 
         Args:
             index_name: Name of the index to create
-            dim: Dimensionality of the text embedding vectors (default: 1536 for text-embedding-ada-002)
 
         Returns:
-            SearchIndex: Azure-specific index schema definition
+            SearchIndex: The index schema definition
         """
         from mmct.providers.search_document_models import ChapterIndexDocument
 
-        # Create index definition using ChapterIndexDocument model fields
+        # Create index definition using AISearchDocument model fields
         fields = []
         searchable_fields_names = []
 
@@ -140,18 +140,21 @@ class AzureSearchProvider(SearchProvider):
                         facetable=extra.get("facetable", False),
                         sortable=extra.get("sortable", False),
                         hidden=not extra.get("stored", True),
-                        vector_search_dimensions=dim,
+                        vector_search_dimensions=dim,  # e.g. 1536 for text-embedding-ada-002
                         vector_search_profile_name="embedding_profile"
                     )
                 )
                 continue
 
-            # Choose data type
-            data_type = (
-                SearchFieldDataType.DateTimeOffset
-                if model_field.annotation is datetime
-                else SearchFieldDataType.String
-            )
+            # Choose data type based on annotation
+            if model_field.annotation is datetime:
+                data_type = SearchFieldDataType.DateTimeOffset
+            elif model_field.annotation is float:
+                data_type = SearchFieldDataType.Double
+            elif model_field.annotation is int:
+                data_type = SearchFieldDataType.Int32
+            else:
+                data_type = SearchFieldDataType.String
 
             common_kwargs = dict(
                 name=name,
@@ -234,6 +237,8 @@ class AzureSearchProvider(SearchProvider):
             semantic_search=semantic_config,
             vector_search=vector_search
         )
+
+        print(fields)
         return index
 
     def _create_keyframe_index_schema(self, index_name: str, dim: int = 512) -> SearchIndex:
