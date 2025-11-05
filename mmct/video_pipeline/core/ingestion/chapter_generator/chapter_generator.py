@@ -742,6 +742,10 @@ Return a complete ChapterCreationResponse with the merged object_collection and 
 
                     logger.info(f"combined batch response (without objects):{combined_response}")
                     final_result: ChapterCreationResponse = combined_response['content']
+                    
+                    # Now perform ONLY subject registry merge in a separate dedicated call
+                    logger.info("Performing separate subject registry merge...")
+                    final_result = await self._merge_and_enrich_subjects(final_result, results)
 
                     # Now perform object collection merge in batches of 3
                     logger.info("Performing object collection merge in batches of 3...")
