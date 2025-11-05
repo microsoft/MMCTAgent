@@ -24,18 +24,34 @@ async def get_context(
     index_name: Annotated[str, "vector index name"],
     video_id: Annotated[str, "video id if provided in the instruction"] = None,
     url: Annotated[str, "url if provided in the instruction to filter out the search results"] = None,
+    start_time: Annotated[float, "start time in seconds to filter documents with overlapping time range"] = None,
+    end_time: Annotated[float, "end time in seconds to filter documents with overlapping time range"] = None,
 ) -> str:
     """
     retreive related documents based on the query from the vector database.
+    Optionally filter by time range overlap: returns documents where their [start_time, end_time] 
+    overlaps with the provided [start_time, end_time] interval.
     """
     global search_provider, embed_provider
     # embedding the query
     embedding = await embed_provider.embedding(query)
 
+    # Build filter query with multiple conditions
+    filter_conditions = []
+    
     if url:
-        filter_query = f"youtube_url eq '{url}'"
+        filter_conditions.append(f"youtube_url eq '{url}'")
     elif video_id:
-        filter_query = f"hash_video_id eq '{video_id}'"
+        filter_conditions.append(f"hash_video_id eq '{video_id}'")
+    
+    # Add time overlap filter if both start_time and end_time are provided
+    # Overlap condition: doc.start_time < end_time AND doc.end_time > start_time
+    if start_time is not None and end_time is not None:
+        filter_conditions.append(f"(start_time lt {end_time} and end_time gt {start_time})")
+    
+    # Combine all filter conditions with 'and'
+    if filter_conditions:
+        filter_query = " and ".join(filter_conditions)
     else:
         filter_query = None  # no filter
 
@@ -69,5 +85,12 @@ if __name__ == "__main__":
     video_id = "hash-video-id"
     query = "user-query"
     index_name = "index-name"
-    results = asyncio.run(get_context(video_id=video_id, query=query,index_name= index_name))
+    # Example: fetch documents with time overlap between 10.0 and 30.0 seconds
+    results = asyncio.run(get_context(
+        video_id=video_id, 
+        query=query,
+        index_name=index_name,
+        start_time=10.0,
+        end_time=30.0
+    ))
     print(results)
