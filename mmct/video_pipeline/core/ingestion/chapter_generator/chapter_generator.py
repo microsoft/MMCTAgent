@@ -299,6 +299,108 @@ class ChapterGenerator:
             ).model_dump_json()
 
 
+    async def _merge_and_enrich_subjects(
+        self,
+        final_result: ChapterCreationResponse,
+        batch_results: List[ChapterCreationResponse]
+    ) -> ChapterCreationResponse:
+        """
+        Perform a dedicated LLM call to merge and enrich subject registries
+        from all batch results, ensuring exhaustive extraction of all subjects with detailed attributes.
+        This is done separately from other field merging to focus solely on subject quality.
+
+        Args:
+            final_result: The combined ChapterCreationResponse (without subject_registry merged yet)
+            batch_results: List of individual batch ChapterCreationResponse objects
+
+        Returns:
+            ChapterCreationResponse with enriched and merged subject_registry
+        """
+        logger.info("Performing dedicated subject registry merge and enrichment...")
+        
+        # Prepare all subject registries from batch results
+        all_subjects = []
+        for i, batch_result in enumerate(batch_results):
+            if batch_result.subject_registry:
+                all_subjects.append({
+                    'batch_number': i + 1,
+                    'subjects': [subject.model_dump() for subject in batch_result.subject_registry]
+                })
+        
+        if not all_subjects:
+            logger.info("No subjects found in any batch, skipping merge")
+            return final_result
+        
+        merge_prompt = [
+            {
+                "role": "system",
+                "content": """You are a SubjectMergerGPT specialized in creating exhaustive, detailed subject registries.
+                Your task is to merge subject information from multiple video frame batches into a single comprehensive registry.
+                
+                MERGING RULES:
+                1. EXTRACT ALL SUBJECTS: Include every person, object, animal, item, or entity mentioned across all batches
+                2. IDENTIFY DUPLICATES: Recognize when the same subject appears in multiple batches (same name, similar descriptions)
+                3. MERGE DUPLICATES INTELLIGENTLY:
+                   - Combine all unique appearance descriptions (remove exact duplicates but keep variations)
+                   - Combine all unique identity descriptions (remove exact duplicates but keep variations)
+                   - Keep the EARLIEST first_seen timestamp
+                   - Merge additional_details into a comprehensive, non-redundant description
+                4. ENRICH ATTRIBUTES: For each subject, ensure maximum detail:
+                   - People: clothing colors/styles/patterns, accessories (glasses, jewelry, hats), physical features (hair color/style, height, build), roles, activities
+                   - Objects: colors, sizes, brands, models, materials, conditions, positions, purposes, quantities
+                   - Animals: species, breeds, colors, markings, sizes, behaviors, conditions
+                   - Vehicles: make, model, color, type, distinctive features, license plates
+                   - Text/Signs: exact text content, location, context, purpose
+                5. CONSISTENT NAMING: Assign clear, descriptive names (e.g., "Person in blue shirt", "Red Toyota Camry", "iPhone 15 Pro", "Welcome sign")
+                6. COMPLETENESS: Don't drop any subject even if it seems minor or appears in only one batch
+                
+                OUTPUT: You must return a COMPLETE ChapterCreationResponse object with ALL fields:
+                - detailed_summary: Use the provided summary (don't modify it)
+                - action_taken: Use the provided value (don't modify it)
+                - text_from_scene: Use the provided value (don't modify it)
+                - subject_registry: This is what you need to create - the exhaustive merged list of subjects
+                
+                CRITICAL: Only merge the subject_registry. Keep other fields exactly as provided.
+                """
+            },
+            {
+                "role": "user",
+                "content": f"""Here are the subject registries from {len(all_subjects)} different frame batches to merge:
+
+{chr(10).join([f"Batch {item['batch_number']}:{chr(10)}{item['subjects']}" for item in all_subjects])}
+
+Context information (DO NOT MODIFY THESE - just use them for the response):
+- detailed_summary: {final_result.detailed_summary}
+- action_taken: {final_result.action_taken}
+- text_from_scene: {final_result.text_from_scene}
+
+Please create a single, exhaustive, merged subject_registry that includes ALL subjects with detailed attributes.
+Return a complete ChapterCreationResponse with the merged subject_registry and the exact same values for other fields."""
+            }
+        ]
+        
+        try:
+            merge_response = await self.llm_provider.chat_completion(
+                messages=merge_prompt,
+                temperature=0,
+                response_format=ChapterCreationResponse,
+            )
+            
+            merged_result: ChapterCreationResponse = merge_response['content']
+            
+            # Update only the subject_registry in final_result, preserving other fields
+            if merged_result.subject_registry:
+                logger.info(f"Subject merge complete: {len(merged_result.subject_registry)} subjects in final registry")
+                final_result.subject_registry = merged_result.subject_registry
+            else:
+                logger.warning("Subject merge returned empty registry, keeping original")
+                
+        except Exception as e:
+            logger.error(f"Error during subject merge: {e}. Keeping original subject_registry")
+        
+        return final_result
+
+
     async def create_chapter(
         self,
         transcript: str,
@@ -351,12 +453,22 @@ class ChapterGenerator:
             - Frame timing information is provided with each frame to help track when subjects first appear
 
             GUIDELINES:
-            - Identify the main topic or theme of the video
-            - Categorize the content appropriately (you may use the reference categories or determine more suitable ones based on actual content)
             - Provide a comprehensive summary covering all visual and audio information, including any specific varieties, types, model numbers, or versions mentioned
             - Note any actions performed or demonstrated
             - Extract any visible text from the scenes
-            - Track ALL subjects in the subject_registry: Include all people, main objects, animals, or entities that appear consistently or play an important role in the video. For example, if a person named Sam appears with a watermelon, track both Sam (as subject 0) and the watermelon (as subject 1).
+            - Track ALL subjects in the subject_registry with EXHAUSTIVE DETAIL:
+              * Include EVERY visible person, object, animal, item, or entity that appears in ANY frame
+              * For people: capture clothing details (colors, styles, patterns), physical features (hair color/style, accessories like glasses/jewelry/hats), distinguishing characteristics, roles or activities
+              * For objects: capture colors, sizes, brands, model numbers, materials, conditions, positions, purposes
+              * For animals: capture species, breed, colors, distinctive markings, sizes, behaviors
+              * For text/signs: capture what the text says and its context (location, purpose)
+              * For vehicles: capture make, model, color, license plate if visible, type
+              * Even include background objects that are clearly visible and identifiable
+              * Capture temporal information: note the exact timestamp when each subject first appears
+              * Include detailed appearance descriptions: be specific about colors (not just "shirt" but "blue collared shirt with white stripes")
+              * Include detailed identity information: job title, relationship to others, purpose of object, context of use
+
+            CRITICAL: Be EXHAUSTIVE and DETAILED. Extract as many subjects as possible with rich attribute information. Don't just focus on main subjects - capture everything visible and identifiable in the frames.
 
             IMPORTANT: All output must be in English only. Translate any Hindi or other language content found in the video frames or transcript to English.
             """
@@ -442,7 +554,13 @@ class ChapterGenerator:
                         Previous analysis results: {previous_analysis}
 
                         Continue your analysis with these additional frames, focusing on new information not captured in previous analyses.
-                        Maintain consistency with your previous analysis for the same elements (subject, variety, etc.) unless new visual evidence contradicts it.
+                        
+                        CRITICAL FOR SUBJECT EXTRACTION:
+                        - Extract ALL subjects visible in these new frames (people, objects, animals, text, vehicles, etc.)
+                        - Provide DETAILED attributes for each subject (clothing, colors, features, brands, models, etc.)
+                        - Don't worry about duplicates with previous batches - the merging process will handle that
+                        - Be EXHAUSTIVE - capture every identifiable entity in these frames
+                        
                         Pay special attention to any text, actions, or visual elements that appear in these new frames."""
 
                         batch_prompt = [
@@ -487,7 +605,7 @@ class ChapterGenerator:
                 logger.info(f"batch results:{results}")
                 # Combine the results from all batches
                 if len(results) > 1:
-                    # Create a summary prompt to combine all results
+                    # Create a summary prompt to combine all results EXCEPT subject_registry
                     summary_prompt = [
                         {
                             "role": "system",
@@ -496,10 +614,12 @@ class ChapterGenerator:
                             Create a single comprehensive JSON that combines all the information without redundancy.
 
                             When integrating information:
-                            1. For factual fields (topic, subject, variety), use the most detailed and accurate version
-                            2. For summary fields, synthesize all information into a cohesive narrative
-                            3. For actions and text from scene, include all unique observations across analyses
-                            4. For subject_registry: merge subjects across batches using consistent subject IDs, combine appearance and identity lists without duplication, and keep the earliest first_seen timestamp for each subject
+                            1. For detailed_summary: synthesize all information into a cohesive narrative
+                            2. For action_taken: include all unique actions observed across analyses
+                            3. For text_from_scene: include all unique text observations across analyses
+                            4. For subject_registry: SET IT TO NULL/EMPTY - DO NOT merge subjects here, they will be merged separately
+                            
+                            IMPORTANT: Leave subject_registry as null or empty. Subject merging will be done in a separate dedicated step.
                             """,
                         },
                         {
@@ -517,8 +637,12 @@ class ChapterGenerator:
                         response_format=ChapterCreationResponse,
                     )
 
-                    logger.info(f"combined batch response:{combined_response}")
+                    logger.info(f"combined batch response (without subjects):{combined_response}")
                     final_result: ChapterCreationResponse = combined_response['content']
+                    
+                    # Now perform ONLY subject registry merge in a separate dedicated call
+                    logger.info("Performing separate subject registry merge...")
+                    final_result = await self._merge_and_enrich_subjects(final_result, results)
 
                 else:
                     final_result: ChapterCreationResponse = results[0]
