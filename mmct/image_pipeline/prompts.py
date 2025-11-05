@@ -64,9 +64,9 @@ async def get_planner_system_prompt(tools_string, criticFlag, includeMetaGuideli
     - You will execute first and perform all your actions.
     - **No repetition**: Do not repeat questions or subtasks. Each repetition incurs a $500 penalty.
     - **Tool usage limits**:
-    - `QueryObjectDetectTool`, `QueryocrTool`, and `QueryrecogTool` may only be used once per conversation. Exceeding this limit incurs a $1000 penalty.
-    - `QueryvitTool` can be used multiple times, but only for distinct queries.
-    - **No hallucinations**: Do not generate answers yourself. Only use tool outputs or conversation history. Hallucinations result in a $1000 penalty.
+    - `ObjectDetect` tool, `ocr` tool, and `recog` tool may only be used multiple times in case of executing subtasks, otherwise should only be called once.
+    - `vit` tool can be used multiple times, but only for distinct queries.
+    - **No hallucinations**: Do not generate answers yourself. Only use tool outputs or conversation history to ensure the results are grounded.
     - If multiple tools are required, all must be called.
     """
 
@@ -75,7 +75,7 @@ async def get_planner_system_prompt(tools_string, criticFlag, includeMetaGuideli
         Critic Agent Usage:
         - Critic Agent should not come first, it should only come in execution after you have provided the final answer and requests the Critic for feedback.
         - Request the Critic agent's feedback only when you have the preliminary answer in hand. you must explicity cite "Ready for Criticism".
-        - Always send the final answer to the Critic agent for review.
+        - Always send the final answer to the Critic agent for review. Request Critic review (mandatory). You may request up to 3 rounds if necessary.
         - If the Critic Agent confirms that your answer is correct and no review has to be done, then conclude the answer according to the Final Answer Guidelines.
         - If the Critic suggests revisions, re-execute tools or update your plan accordingly.
         - Only provide the final answer once the Critic confirms it is correct.
