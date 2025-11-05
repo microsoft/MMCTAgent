@@ -64,7 +64,6 @@ async def get_context(
         filter=filter_query,
         select=[
             "detailed_summary",
-            "topic_of_video",
             "action_taken",
             "text_from_scene",
             "chapter_transcript",

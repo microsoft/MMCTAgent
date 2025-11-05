@@ -78,23 +78,10 @@ class SubjectRegistry(BaseModel):
 class ChapterCreationResponse(BaseModel):
     """Pydantic model for validating responses from the create_chapter function.
     
-    This model represents the structured output from video analysis, including topic information,
-    categorization, species identification, and detailed summary of content.
+    This model represents the structured output from video analysis, including
+    detailed summary of content and subject tracking.
     """
     model_config = ConfigDict(extra="forbid")
-    
-    topic_of_video: str = Field(
-        ...,
-        description="Main topic or theme that is discussed in the video"
-    )
-    category: str = Field(
-        ..., 
-        description="The primary category the video content belongs to"
-    )
-    sub_category: Optional[str] = Field(
-        None, 
-        description="The sub-category the video content belongs to"
-    )
     
     detailed_summary: str = Field(
         ..., 
@@ -125,17 +112,8 @@ class ChapterCreationResponse(BaseModel):
         Returns:
             str: Natural language representation of the chapter
         """
-        # Start with the topic and category
-        text = f"This video is about {self.topic_of_video}. "
-        text += f"It belongs to the {self.category} category"
-
-        # Add subcategory if available
-        if self.sub_category:
-            text += f", specifically in the {self.sub_category} subcategory"
-        text += ". "
-
-        # Add the detailed summary
-        text += f"{self.detailed_summary} "
+        # Start with the detailed summary
+        text = f"{self.detailed_summary} "
 
         # Add actions if available
         if self.action_taken and self.action_taken.lower() != "none":

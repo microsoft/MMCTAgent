@@ -121,7 +121,7 @@ async def query_frame(
         list(dict.fromkeys(frame_filenames)),
         key=lambda x: int(''.join(filter(str.isdigit, os.path.basename(x).split('_')[-1].split('.')[0])) or 0)
     )
-    print(f"Processing {len(frame_filenames)} frames directly from storage provider")
+    logger.info(f"Processing {len(frame_filenames)} frames directly from storage provider")
 
     # Prepare blob paths
     folder_name = "keyframes"
@@ -138,7 +138,7 @@ async def query_frame(
     encoded_images = [result for result in encoded_results
                      if isinstance(result, str) and result is not None]
 
-    print(f"Successfully processed {len(encoded_images)} images directly from storage provider")
+    logger.info(f"Successfully processed {len(encoded_images)} images directly from storage provider")
 
     if not encoded_images:
         return "No valid images could be processed."
