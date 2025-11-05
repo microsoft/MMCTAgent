@@ -4,12 +4,12 @@ import os
 import logging
 from dotenv import load_dotenv
 from typing import Optional
+from loguru import logger
 
 # Suppress autogen internal logging
 logging.getLogger("autogen").setLevel(logging.WARNING)
 logging.getLogger("autogen_agentchat").setLevel(logging.WARNING)
 
-from enum import Enum
 from typing import Annotated
 from autogen_agentchat.agents import AssistantAgent
 from autogen_agentchat.ui import Console
@@ -19,6 +19,7 @@ from autogen_agentchat.base import TaskResult
 from mmct.video_pipeline.core.tools.get_context import get_context
 from mmct.video_pipeline.core.tools.get_relevant_frames import get_relevant_frames
 from mmct.video_pipeline.core.tools.query_frame import query_frame
+from mmct.video_pipeline.core.tools.get_subjects import get_subjects
 from mmct.video_pipeline.core.tools.critic import critic_tool
 from mmct.video_pipeline.prompts_and_description import (
     get_planner_system_prompt,
@@ -35,34 +36,26 @@ from mmct.providers.factory import provider_factory
 load_dotenv(override=True)
 
 
-class VideoQnaTools(Enum):
-    """
-    Enum class for tools - planner has access to all three tools for comprehensive video analysis
-    """
-
-    GET_CONTEXT = (get_context,)
-    GET_RELEVANT_FRAMES = (get_relevant_frames,)
-    QUERY_FRAME = (query_frame,)
-
-
 class VideoQnA:
     """
     VideoQnA with comprehensive multi-tool support for video analysis using Swarm orchestration.
 
     MMCT consists of:
-    - **Planner Agent**: Has access to three tools for comprehensive video analysis:
-      1. get_context: Retrieves transcript and visual summary documents
-      2. get_relevant_frames: Gets specific frame names based on visual queries
-      3. query_frame: Analyzes downloaded frames with vision models
+    - **Planner Agent**: Has access to four tools for comprehensive video analysis:
+      1. get_subjects: Retrieves video summary and subject descriptions (objects, things, etc.)
+      2. get_context: Retrieves transcript and visual summary documents
+      3. get_relevant_frames: Gets specific frame names based on visual queries
+      4. query_frame: Analyzes downloaded frames with vision models
     - **Critic Agent**: Validates or refines the planner's output.
 
     Workflow (with Swarm orchestration):
-    1. Planner starts with get_context for transcript/summary information
-    2. If more visual content needed, uses get_relevant_frames for frame selection
-    3. Uses query_frame to analyze the downloaded frames visually
-    4. Combines textual and visual information for comprehensive answers
-    5. Can hand off to critic for validation and refinement
-    6. Critic can hand back to planner if revisions are needed
+    1. Planner starts with get_subjects for subject overview (counting, scene-related questions)
+    2. Uses get_context for detailed transcript/summary information
+    3. If more visual content needed, uses get_relevant_frames for frame selection
+    4. Uses query_frame to analyze the downloaded frames visually
+    5. Combines textual and visual information for comprehensive answers
+    6. Can hand off to critic for validation and refinement
+    7. Critic can hand back to planner if revisions are needed
 
     Args:
         query (str): The natural language question to be answered based on the video content.
@@ -112,7 +105,7 @@ class VideoQnA:
             # Wrap the base model client so AgentChat uses the cached client everywhere
             self.model_client = ChatCompletionCache(self.model_client, store)
 
-        self.tools = [get_context, get_relevant_frames, query_frame]
+        self.tools = [get_subjects, get_context, get_relevant_frames, query_frame]
         self.planner_agent = None
         self.critic_agent = None
         self.team = None
@@ -130,7 +123,7 @@ class VideoQnA:
             use_critic_agent=self.use_critic_agent,
         )
 
-        # Define Planner agent - has access to get_context, get_relevant_frames, and query_frame tools
+        # Define Planner agent - has access to get_subjects, get_context, get_relevant_frames, and query_frame tools
         self.planner = AssistantAgent(
             name="planner",
             model_client=self.model_client,
@@ -226,10 +219,11 @@ async def video_qna(
     """
     Video QnA with comprehensive multi-tool support for video analysis using Swarm orchestration.
 
-    Answers a user query based on the content of a specified video using three complementary tools:
-    1. get_context: Retrieves transcript and visual summary documents
-    2. get_relevant_frames: Gets specific frame names based on visual queries
-    3. query_frame: Analyzes downloaded frames with vision models
+    Answers a user query based on the content of a specified video using four complementary tools:
+    1. get_subjects: Retrieves video summary and subject descriptions for counting/scene questions
+    2. get_context: Retrieves transcript and visual summary documents
+    3. get_relevant_frames: Gets specific frame names based on visual queries
+    4. query_frame: Analyzes downloaded frames with vision models
 
     The planner intelligently combines textual and visual information for comprehensive responses.
     With Swarm orchestration, agents can dynamically hand off tasks for better collaboration.
@@ -247,11 +241,22 @@ async def video_qna(
     )
     if stream:
         response_generator = await video_qna_instance.run_stream()
-        #return response_generator
-        messages = await Console(response_generator)
-        if isinstance(messages, TaskResult):
-            return messages.messages[-1]
-        return messages
+        
+        # Stream messages through logger instead of Console
+        messages = []
+        async for message in response_generator:
+            # Log the message content without the "Agent Message:" prefix
+            if hasattr(message, 'content') and message.content:
+                logger.info(f"Agent Message:{message.content}")  # Using : as separator for filtering
+            messages.append(message)
+        
+        # Return the final result
+        if messages:
+            last_message = messages[-1]
+            if isinstance(last_message, TaskResult):
+                return last_message.messages[-1] if last_message.messages else last_message
+            return last_message
+        return None
     else:
         return await video_qna_instance.run()
 
