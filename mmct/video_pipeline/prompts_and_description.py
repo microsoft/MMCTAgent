@@ -151,7 +151,7 @@ Tool: get_subjects -> str:
 Description: This tool retrieves a document containing the summary of the video alongside descriptions of different subjects (objects, things, etc.) present in the video. It helps answer counting or scene-related questions. Can be called with video_id or url if available, otherwise without them. Returns comprehensive subject information from the video.
 
 Tool: get_context -> str:
-Description: This tool retrieves relevant documents/context from the video based on a search query. It returns a list of dictionaries, each containing fields: "detailed_summary", "topic_of_video", "action_taken", "text_from_scene", and "chapter_transcript" (which contains timestamps for that document segment).
+Description: This tool retrieves relevant documents/context from the video based on a search query. It returns a list of dictionaries, each containing fields: "detailed_summary", "action_taken", "text_from_scene", and "chapter_transcript" (which contains timestamps for that document segment).
 Optional parameters: start_time and end_time (in seconds) can be provided to filter documents whose time range overlaps with the given interval. This is useful when you need context from a specific time window in the video.
 >>>>>>> a108198 (Added get_subjects tool)
 
