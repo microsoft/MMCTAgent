@@ -46,13 +46,13 @@ async def query_frame(
     frame_ids: Annotated[Optional[list], "List of specific frame filenames to analyze (e.g., ['video_123.jpg', 'video_456.jpg'])"] = None,
     video_id: Annotated[Optional[str], "Unique video identifier hash for frame retrieval"] = None,
     timestamps: Annotated[Optional[list], "List of time range pairs in HH:MM:SS format like [start_time, end_time], e.g., [['00:07:45', '00:09:44']]. Only 1 start_time, end)time pair"] = None,
-    provider_name: Annotated[Optional[str], "Optional search provider name to override config (e.g. 'local_faiss')"] = None
+    # provider_name: Annotated[Optional[str], "Optional search provider name to override config (e.g. 'local_faiss')"] = None
 ) -> str:
     """
     This is query_frame tool which takes a user query and either specific frame IDs or
     timestamps to search for relevant frames in a video.
     """
-
+    provider_name = None
     # Handle video_id validation and truncation for compatibility
     # if video_id and len(video_id) > 64:
     #     video_id = video_id[:64]

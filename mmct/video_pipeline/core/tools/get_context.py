@@ -24,7 +24,6 @@ async def get_context(
     index_name: Annotated[str, "vector index name"],
     video_id: Annotated[str, "video id if provided in the instruction"] = None,
     url: Annotated[str, "url if provided in the instruction to filter out the search results"] = None,
-    use_graph_rag: Annotated[str, "whether to use graph rag or not"] = 'False',
 ) -> str:
     """
     retreive related documents based on the query from the vector database.
@@ -32,12 +31,6 @@ async def get_context(
     global search_provider, embed_provider
     # embedding the query
     embedding = await embed_provider.embedding(query)
-   
-    
-    if use_graph_rag=='True':
-        search_provider = provider_factory.create_search_provider("custom_search")
-        search_results = await search_provider.search(query=query, index_name="temp",embedding=embedding)
-        return search_results
 
     if url:
         filter_query = f"youtube_url eq '{url}'"
@@ -73,5 +66,5 @@ if __name__ == "__main__":
     video_id = "hash-video-id"
     query = "user-query"
     index_name = "index-name"
-    results = asyncio.run(get_context(video_id=video_id, query=query,index_name= index_name,use_graph_rag=True))
+    results = asyncio.run(get_context(video_id=video_id, query=query,index_name= index_name))
     print(results)

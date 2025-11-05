@@ -8,12 +8,10 @@ async def get_context_tool(
     index_name: Annotated[str, "vector index name"],
     video_id: Annotated[str, "video id if provided in the instruction"] = None,
     url: Annotated[str, "url if provided in the instruction"] = None,
-    use_graph_rag: Annotated[str, "whether to use graph rag or not"] = 'False',
 ) -> str:
     return await get_context(
         query=query,
         index_name=index_name,
         video_id=video_id,
         url=url,
-        use_graph_rag=use_graph_rag
     )

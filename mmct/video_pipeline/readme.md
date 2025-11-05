@@ -110,7 +110,6 @@ video_id = None  # Optional: specify specific video ID
 url = None  # Optional: URL for analysis
 use_critic_agent = True  # Enable critical thinking framework
 stream = False  # Flag to stream the logs of the Agentic Flow
-use_graph_rag = False  # Optional: use graph RAG
 cache = False  # Optional: enable caching
 
 video_agent = VideoAgent(
@@ -120,7 +119,6 @@ video_agent = VideoAgent(
     url=url,
     use_critic_agent=use_critic_agent,
     stream=stream,
-    use_graph_rag=use_graph_rag,
     cache=cache
 )
 

@@ -332,6 +332,7 @@ class AzureSearchProvider(SearchProvider):
             # Handle vector search configuration
             if query_type == "vector":
                 query_type = None
+                search_text = None
                 
             # Build vector queries if embedding provided
             if embedding and top and not vector_queries:
