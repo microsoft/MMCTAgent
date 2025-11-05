@@ -336,6 +336,7 @@ class AzureSearchProvider(SearchProvider):
             if query_type == "vector":
                 query_type = None
                 search_text = None
+<<<<<<< HEAD
 
             # Get index schema to find vector fields
             try:
@@ -349,6 +350,8 @@ class AzureSearchProvider(SearchProvider):
             except Exception as ex:
                 logger.warning(f"Could not retrieve index schema: {ex}")
                 vector_field = None
+=======
+>>>>>>> 75d8a67 (updated: azure search config and removed grapgrag param)
                 
             # Build vector queries if embedding provided
             if embedding and top and not vector_queries:
