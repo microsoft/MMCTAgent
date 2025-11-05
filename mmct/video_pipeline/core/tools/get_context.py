@@ -54,6 +54,9 @@ async def get_context(
             "chapter_transcript",
             "hash_video_id",
             "youtube_url",
+            "subject_registry",
+            "end_time",
+            "start_time",
         ],
         embedding=embedding
     )
