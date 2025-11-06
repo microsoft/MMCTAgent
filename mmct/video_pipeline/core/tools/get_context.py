@@ -4,7 +4,7 @@ This is a retreive documents tool which provide the summary with the transcript 
 
 # Importing Libraries
 import os
-from typing_extensions import Annotated
+from typing_extensions import Annotated, Optional
 from mmct.video_pipeline.utils.helper import get_media_folder
 from azure.search.documents.models import VectorizedQuery, VectorFilterMode
 from mmct.providers.factory import provider_factory
@@ -24,13 +24,35 @@ async def get_context(
     index_name: Annotated[str, "vector index name"],
     video_id: Annotated[str, "video id if provided in the instruction"] = None,
     url: Annotated[str, "url if provided in the instruction to filter out the search results"] = None,
-    start_time: Annotated[float, "start time in seconds to filter documents with overlapping time range"] = None,
-    end_time: Annotated[float, "end time in seconds to filter documents with overlapping time range"] = None,
+    start_time: Annotated[Optional[float], "start time in seconds to filter documents with overlapping time range"] = None,
+    end_time: Annotated[Optional[float], "end time in seconds to filter documents with overlapping time range"] = None,
 ) -> str:
     """
-    retreive related documents based on the query from the vector database.
-    Optionally filter by time range overlap: returns documents where their [start_time, end_time] 
-    overlaps with the provided [start_time, end_time] interval.
+    Retrieve detailed chapter-level context from the video using semantic search.
+
+    Description:
+        Retrieves relevant video segments/chapters containing transcript, visual summaries, actions,
+        and text from scenes.
+
+    Input Parameters:
+        - query (str): Search query to find relevant video segments
+        - index_name (str): Vector index name for search
+        - video_id (Optional[str]): Video identifier (use from get_video_analysis if available)
+        - url (Optional[str]): Video URL (alternative to video_id)
+        - start_time (Optional[float]): Start time in seconds to filter documents (returns docs with overlapping time range)
+        - end_time (Optional[float]): End time in seconds to filter documents (returns docs with overlapping time range)
+
+    Output:
+        List of chapter documents, each containing:
+        - chapter_transcript (str): Transcript with timestamps for this segment
+        - detailed_summary (str): Visual summary of what happens in the chapter
+        - action_taken (str): Specific actions performed or demonstrated
+        - text_from_scene (str): Text visible in video (signs, captions, etc.)
+        - object_collection (str): JSON string of objects in this chapter
+        - start_time (float): Chapter start time in seconds
+        - end_time (float): Chapter end time in seconds
+        - hash_video_id (str): Video identifier
+        - youtube_url (str): Video URL
     """
     global search_provider, embed_provider
     # embedding the query
@@ -69,7 +91,7 @@ async def get_context(
             "chapter_transcript",
             "hash_video_id",
             "youtube_url",
-            "subject_registry",
+            "object_collection",
             "end_time",
             "start_time",
         ],

@@ -13,16 +13,29 @@ async def get_video_analysis(
     url: Annotated[Optional[str], "url of the video"] = None
 ) -> List[Dict[str, Any]]:
     """
-    Retrieve video analysis including object collection, video summary, and metadata from the index filtered by video_id or url.
+    Retrieve high-level video analysis including object collection and video summary.
 
-    Args:
-        query: Search query string
-        index_name: Name of the search index
-        video_id: Optional unique identifier for the video
-        url: Optional URL of the video
+    Description:
+        Retrieves comprehensive video analysis from the object collection index, including video summary,
+        object collection with detailed attributes, and metadata.
 
-    Returns:
-        List of video analysis documents matching the given filters.
+    Input Parameters:
+        - query (str): Search query to find relevant video analysis
+        - index_name (str): Name of the search index
+        - video_id (Optional[str]): Unique identifier for the video (use if available)
+        - url (Optional[str]): URL of the video (alternative to video_id)
+
+    Output:
+        List of dictionaries containing:
+        - video_summary (str): Overall narrative and scene context of the video
+        - object_collection (str): JSON string containing list of objects with:
+            * name: Object identifier (e.g., "Person in blue shirt", "Red car")
+            * appearance: List of visual characteristics
+            * identity: List of type, category, role information
+            * first_seen: Timestamp in seconds when object first appears
+            * additional_details: Extra contextual information
+        - object_count (int): Total number of unique objects identified
+        - video_id (str): Video identifier
     """
     # Construct the full index name
     full_index_name = f"object-collection-{index_name}"

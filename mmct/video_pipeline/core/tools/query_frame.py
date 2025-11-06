@@ -41,21 +41,39 @@ async def download_and_encode_blob(file_name: str, folder_name: str, save_locall
         return None
 
 async def query_frame(
-    query: Annotated[str, "user query according to which video content has to be analyzeds. e.g. 'What materials are required to prepare the chilly nursery bed, and what are their uses?','count the person doing exercise in the video?'"],
+    query: Annotated[str, "user query according to which video content has to be analyzed. If options are available and relevant with the query, they should also be passed. e.g. 'What materials are required to prepare the chilly nursery bed, and what are their uses?','count the person doing exercise in the video?'"],
     index_name: Annotated[str, "search index name"],
     frame_ids: Annotated[Optional[list], "List of specific frame filenames to analyze (e.g., ['video_123.jpg', 'video_456.jpg'])"] = None,
     video_id: Annotated[Optional[str], "Unique video identifier hash for frame retrieval"] = None,
-    timestamps: Annotated[Optional[list], "List of time range pairs in HH:MM:SS format like [start_time, end_time], e.g., [['00:07:45', '00:09:44']]. Only 1 start_time, end)time pair"] = None,
-    # provider_name: Annotated[Optional[str], "Optional search provider name to override config (e.g. 'local_faiss')"] = None
+    start_time: Annotated[Optional[float], "start time in seconds"] = None,
+    end_time: Annotated[Optional[float], "end time in seconds"] = None,
 ) -> str:
     """
-    This is query_frame tool which takes a user query and either specific frame IDs or
-    timestamps to search for relevant frames in a video.
+    Analyze specific video frames using vision models for visual verification.
+
+    Description:
+        Uses vision models to analyze video frames and extract visual information.
+        Can work with either specific frame IDs or timestamp ranges.
+
+    Input Parameters:
+        - query (str): Detailed description of what to look for in frames
+                      (e.g., "Count people doing exercises", "What color shirt is the person wearing?")
+        - index_name (str): Search index name for keyframe retrieval
+        - frame_ids (Optional[list]): List of specific frame filenames to analyze (from get_relevant_frames)
+        - video_id (Optional[str]): Video identifier (required if using start_time/end_time)
+        - start_time (Optional[float]): Start time in seconds (use from get_context or object's first_seen)
+        - end_time (Optional[float]): End time in seconds (typically start_time + 5 seconds)
+
+    Output:
+        String containing visual analysis results including:
+        - Detailed observations about visible content
+        - Object positions, counts, and spatial relationships
+        - Actions, poses, gestures, expressions
+        - Colors, appearances, visual attributes
+        - Text visible in frames
+        - Any other visual details relevant to query
     """
     provider_name = None
-    # Handle video_id validation and truncation for compatibility
-    # if video_id and len(video_id) > 64:
-    #     video_id = video_id[:64]
     save_frames_locally  = False
     # Get search endpoint from environment
     search_endpoint = os.getenv('SEARCH_ENDPOINT')
@@ -80,21 +98,8 @@ async def query_frame(
     # Determine which frames to use
     frame_filenames = []
 
-    if timestamps:
-        # Search for frames based on timestamps
-        for timestamp in timestamps:
-            start_time, end_time = timestamp
-            # Convert string timestamps to time objects if needed
-            if isinstance(start_time, str):
-                start_time = time.fromisoformat(start_time)
-            if isinstance(end_time, str):
-                end_time = time.fromisoformat(end_time)
-
-            # Convert time objects to seconds
-            start_seconds = start_time.hour * 3600 + start_time.minute * 60 + start_time.second
-            end_seconds = end_time.hour * 3600 + end_time.minute * 60 + end_time.second
-
-            time_filter = f"timestamp_seconds ge {start_seconds} and timestamp_seconds le {end_seconds}"
+    if not (None in (start_time, end_time)):
+            time_filter = f"timestamp_seconds ge {start_time} and timestamp_seconds le {end_time}"
             video_filter = f"video_id eq '{video_id}'"
             combined_filter = f"{time_filter} and {video_filter}"
             print(combined_filter)
