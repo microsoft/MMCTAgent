@@ -74,17 +74,17 @@ class ObjectCollection(BaseModel):
     )
 
 
-class SubjectRegistry(BaseModel):
-    """Pydantic model for the registry of all subjects tracked in a video segment.
+class ObjectCollection(BaseModel):
+    """Pydantic model for the collection of all objects tracked in a video segment.
 
-    This model maintains a collection of subjects (people, objects, animals, etc.)
+    This model maintains a collection of objects (people, objects, animals, etc.)
     identified and tracked throughout the video.
     """
     model_config = ConfigDict(extra="forbid")
 
-    subjects: Optional[List[SubjectResponse]] = Field(
+    objects: Optional[List[ObjectResponse]] = Field(
         ...,
-        description="List of SubjectResponse objects containing details like appearance, identity, and first appearance timestamp for each subject (e.g., 'iPhone 15 Pro', 'main presenter', 'red car')"
+        description="List of ObjectResponse objects containing details like appearance, identity, and first appearance timestamp for each object (e.g., 'iPhone 15 Pro', 'main presenter', 'red car')"
     )
 
 

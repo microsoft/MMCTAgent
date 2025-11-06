@@ -189,6 +189,7 @@ def create_video_chapter_index_schema(index_name: str) -> SearchIndex:
 
 
 def create_object_collection_index_schema(index_name: str) -> SearchIndex:
+<<<<<<< HEAD
     """
     Create the index schema definition for object collection search.
     This schema is based on ObjectCollectionDocument model.
@@ -205,6 +206,11 @@ def create_subject_registry_index_schema(index_name: str) -> SearchIndex:
     Create the index schema definition for subject registry search.
     This schema is based on SubjectRegistryDocument model.
 >>>>>>> dfb5611 (create combined subject registry and indexing)
+=======
+    """
+    Create the index schema definition for object collection search.
+    This schema is based on ObjectCollectionDocument model.
+>>>>>>> b05446d (rename)
 
     Args:
         index_name: Name of the index to create
@@ -212,6 +218,7 @@ def create_subject_registry_index_schema(index_name: str) -> SearchIndex:
     Returns:
         SearchIndex: The index schema definition
     """
+<<<<<<< HEAD
 <<<<<<< HEAD
     from mmct.providers.search_document_models import ObjectCollectionDocument
 
@@ -245,11 +252,14 @@ def create_subject_registry_index_schema(index_name: str) -> SearchIndex:
             data_type = SearchFieldDataType.Int32
 =======
     from mmct.providers.search_document_models import SubjectRegistryDocument
+=======
+    from mmct.providers.search_document_models import ObjectCollectionDocument
+>>>>>>> b05446d (rename)
 
-    # Create index definition using SubjectRegistryDocument model fields
+    # Create index definition using ObjectCollectionDocument model fields
     fields = []
 
-    for name, model_field in SubjectRegistryDocument.model_fields.items():
+    for name, model_field in ObjectCollectionDocument.model_fields.items():
         extra = model_field.json_schema_extra
 
         # Special handling for video_summary_embedding vector field

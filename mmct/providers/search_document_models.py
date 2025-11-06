@@ -104,6 +104,7 @@ class ChapterIndexDocument(BaseModel):
         key=False
     )
 <<<<<<< HEAD
+<<<<<<< HEAD
     object_collection: str = Field(
         default="[]",
         description="JSON string array of object collection tracking all objects (people, objects, etc.) in the video segment",
@@ -112,6 +113,11 @@ class ChapterIndexDocument(BaseModel):
         default="[]",
         description="JSON string array of subject registry tracking all subjects (people, objects, etc.) in the video segment",
 >>>>>>> c8e6bcb (change subject registry as List of subjects instead of dictionaries as it was consuming extra token and adding no value)
+=======
+    object_collection: str = Field(
+        default="[]",
+        description="JSON string array of object collection tracking all objects (people, objects, etc.) in the video segment",
+>>>>>>> b05446d (rename)
         searchable=True,
         filterable=False,
         retrievable=True,
@@ -397,6 +403,7 @@ class KeyframeDocument(BaseModel):
 
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 class ObjectCollectionDocument(BaseModel):
     """Document model for combined object collection search index."""
 
@@ -415,6 +422,14 @@ class SubjectRegistryDocument(BaseModel):
 =======
         description="Unique subject registry document ID",
 >>>>>>> 10ff4c8 (create single subject registry document)
+=======
+class ObjectCollectionDocument(BaseModel):
+    """Document model for combined object collection search index."""
+
+    id: str = Field(
+        ...,
+        description="Unique object collection document ID",
+>>>>>>> b05446d (rename)
         searchable=False,
         filterable=True,
         retrievable=True,
@@ -439,8 +454,12 @@ class SubjectRegistryDocument(BaseModel):
 
     video_id: str = Field(
         ...,
+<<<<<<< HEAD
         description="Video hash ID this subject registry belongs to",
 >>>>>>> 10ff4c8 (create single subject registry document)
+=======
+        description="Video hash ID this object collection belongs to",
+>>>>>>> b05446d (rename)
         searchable=False,
         filterable=True,
         retrievable=True,
@@ -498,6 +517,7 @@ class SubjectRegistryDocument(BaseModel):
         key=False
     )
 
+<<<<<<< HEAD
     subject_registry: str = Field(
 <<<<<<< HEAD
         default="{}",
@@ -507,6 +527,11 @@ class SubjectRegistryDocument(BaseModel):
         default="[]",
         description="JSON string array of merged subject registry containing all subjects (people, objects, etc.) from the entire video",
 >>>>>>> c8e6bcb (change subject registry as List of subjects instead of dictionaries as it was consuming extra token and adding no value)
+=======
+    object_collection: str = Field(
+        default="[]",
+        description="JSON string array of merged object collection containing all objects (people, objects, etc.) from the entire video",
+>>>>>>> b05446d (rename)
         searchable=True,
         filterable=False,
         retrievable=True,
@@ -582,10 +607,14 @@ class SubjectRegistryDocument(BaseModel):
 >>>>>>> ea4bc92 (align code with main branch changes)
 =======
 
-    subject_count: int = Field(
+    object_count: int = Field(
         default=0,
+<<<<<<< HEAD
         description="Total number of unique subjects in the registry",
 >>>>>>> 10ff4c8 (create single subject registry document)
+=======
+        description="Total number of unique objects in the collection",
+>>>>>>> b05446d (rename)
         searchable=False,
         filterable=True,
         retrievable=True,
