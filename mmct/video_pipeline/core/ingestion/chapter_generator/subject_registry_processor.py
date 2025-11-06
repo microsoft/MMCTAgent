@@ -117,6 +117,7 @@ class SubjectRegistryProcessor:
     async def _merge_registries(self, registries: List[List[SubjectResponse]]) -> Optional[List[SubjectResponse]]:
         """
         Merge multiple subject registries using LLM to handle duplicates.
+        Uses batch processing for large numbers of registries.
 
         Args:
             registries: List of subject registry lists (List[SubjectResponse])
@@ -131,66 +132,182 @@ class SubjectRegistryProcessor:
             logger.info("Only one registry found, no merging needed")
             return registries[0]
 
+        # Use batch merging for multiple registries
+        return await self._merge_registries_in_batches(registries, batch_size=3)
+
+    async def _merge_registries_in_batches(
+        self,
+        registries: List[List[SubjectResponse]],
+        batch_size: int = 3
+    ) -> Optional[List[SubjectResponse]]:
+        """
+        Merge subject registries in batches, passing the result of the previous batch
+        to maintain cohesion across the entire merge process.
+
+        Args:
+            registries: List of subject registry lists (List[SubjectResponse])
+            batch_size: Number of registries to process at once (default: 3)
+
+        Returns:
+            Merged subject registry as a list of SubjectResponse objects
+        """
+        logger.info(f"Starting registry merge in batches of {batch_size}...")
+        
+        # Split registries into groups of batch_size
+        registry_batches = [
+            registries[i:i + batch_size]
+            for i in range(0, len(registries), batch_size)
+        ]
+        
+        logger.info(f"Processing {len(registries)} registries in {len(registry_batches)} merge batches")
+        
+        # Track the accumulated merged result
+        accumulated_merged_registry = None
+        
+        # Process each batch
+        for batch_idx, current_batch in enumerate(registry_batches):
+            logger.info(f"Processing merge batch {batch_idx + 1}/{len(registry_batches)} with {len(current_batch)} registries")
+            
+            # For the first batch, merge without prior context
+            if accumulated_merged_registry is None:
+                accumulated_merged_registry = await self._merge_and_enrich_subjects(
+                    current_batch,
+                    prev_merged_registry=None
+                )
+            else:
+                # For subsequent batches, pass the accumulated result as previous context
+                # This ensures cohesion by passing context forward
+                accumulated_merged_registry = await self._merge_and_enrich_subjects(
+                    current_batch,
+                    prev_merged_registry=accumulated_merged_registry
+                )
+        
+        if accumulated_merged_registry:
+            logger.info(f"Final merged registry contains {len(accumulated_merged_registry)} subjects")
+        else:
+            logger.warning("No subjects found after batch merging")
+        
+        return accumulated_merged_registry
+
+    async def _merge_and_enrich_subjects(
+        self,
+        current_registries: List[List[SubjectResponse]],
+        prev_merged_registry: Optional[List[SubjectResponse]] = None
+    ) -> Optional[List[SubjectResponse]]:
+        """
+        Perform a dedicated LLM call to merge and enrich subject registries,
+        ensuring exhaustive extraction of all subjects with detailed attributes.
+
+        Args:
+            current_registries: List of subject registry lists to merge in this batch
+            prev_merged_registry: Optional list of previously merged subjects from earlier batches
+
+        Returns:
+            Merged subject registry as a list of SubjectResponse objects
+        """
+        logger.info(f"Performing dedicated subject registry merge and enrichment for {len(current_registries)} registries...")
+        
+        # Prepare all subject registries
+        all_subjects = []
+        has_previous_context = prev_merged_registry is not None and len(prev_merged_registry) > 0
+        
+        # If we have previous merged results, add them first
+        if has_previous_context:
+            all_subjects.append({
+                'batch_number': 'Previous Merged Results',
+                'subjects': [subject.model_dump() for subject in prev_merged_registry]
+            })
+        
+        # Add all current registries
+        for i, registry in enumerate(current_registries):
+            if registry:
+                all_subjects.append({
+                    'batch_number': i + 1,
+                    'subjects': [subject.model_dump() for subject in registry]
+                })
+        
+        if not all_subjects:
+            logger.info("No subjects found in any registry, skipping merge")
+            return None
+        
+        # Adjust merge prompt based on whether we have previous context
+        context_instruction = ""
+        if has_previous_context:
+            context_instruction = """
+            NOTE: The first batch contains PREVIOUSLY MERGED subjects from earlier chapters.
+            Your task is to:
+            1. Keep ALL subjects from the previous merged results
+            2. Add any NEW subjects from the new chapter registries
+            3. If a subject from new registries matches one in previous results, MERGE their attributes intelligently
+            4. Maintain cohesion by ensuring the final registry is consistent and comprehensive
+            """
+        
+        system_prompt = f"""You are a SubjectMergerGPT specialized in creating exhaustive, detailed subject registries.
+        Your task is to merge subject information from multiple video chapters into a single comprehensive registry.
+        {context_instruction}
+        
+        MERGING RULES:
+        1. EXTRACT ALL SUBJECTS: Include every person, object, animal, item, or entity mentioned across all registries
+        2. IDENTIFY DUPLICATES: Recognize when the same subject appears in multiple chapters (same name, similar descriptions)
+        3. MERGE DUPLICATES INTELLIGENTLY:
+           - Choose the most descriptive or complete name (prefer specific names over generic ones)
+           - Combine all unique appearance descriptions (remove exact duplicates but keep variations)
+           - Combine all unique identity descriptions (remove exact duplicates but keep variations)
+           - Keep the EARLIEST first_seen timestamp
+           - Merge additional_details into a comprehensive, non-redundant description
+        4. ENRICH ATTRIBUTES: For each subject, ensure maximum detail:
+           - People: clothing colors/styles/patterns, accessories (glasses, jewelry, hats), physical features (hair color/style, height, build), roles, activities
+           - Objects: colors, sizes, brands, models, materials, conditions, positions, purposes, quantities
+           - Animals: species, breeds, colors, markings, sizes, behaviors, conditions
+           - Vehicles: make, model, color, type, distinctive features, license plates
+           - Text/Signs: exact text content, location, context, purpose
+        5. CONSISTENT NAMING: Assign clear, descriptive names (e.g., "Person in blue shirt", "Red Toyota Camry", "iPhone 15 Pro", "Welcome sign")
+        6. COMPLETENESS: Don't drop any subject even if it seems minor or appears in only one chapter
+        
+        OUTPUT: Return a list of merged subjects with these fields:
+        - name: string (the subject's name or identifier)
+        - appearance: list of strings (visual characteristics)
+        - identity: list of strings (type, category, role, etc.)
+        - first_seen: float (timestamp in seconds when subject first appeared)
+        - additional_details: string or null (any extra context)
+        
+        CRITICAL: Be EXHAUSTIVE and DETAILED. Preserve all unique subjects while intelligently merging duplicates.
+        """
+        
+        registries_json = json.dumps(all_subjects, indent=2)
+        
+        user_prompt = f"""Here are the subject registries from {len(all_subjects)} different video chapters to merge:
+
+{registries_json}
+
+Please create a single, exhaustive, merged subject registry that includes ALL subjects with detailed attributes.
+Carefully identify duplicate subjects that refer to the same entity and merge them according to the rules."""
+        
         try:
-            # Convert Pydantic models to dicts for JSON serialization
-            registries_dicts = []
-            for registry in registries:
-                registry_list = [subject_obj.model_dump() for subject_obj in registry]
-                registries_dicts.append(registry_list)
-
-            registries_json = json.dumps(registries_dicts, indent=2)
-
-            system_prompt = """You are a SubjectRegistryMergerGPT. Your task is to merge multiple partial subject registries from different clips of the same video into one coherent registry.
-
-            MERGE RULES:
-            1. PRESERVE ALL UNIQUE SUBJECTS - Do not lose any information or subjects from the input registries
-            2. IDENTIFY AND MERGE DUPLICATES - If two or more subjects clearly refer to the same entity (same person, object, or animal), merge them intelligently:
-            - Choose the most descriptive or complete name (prefer specific names over generic ones)
-            - Keep the EARLIEST `first_seen` timestamp across all occurrences
-            - Combine ALL appearance descriptions from all instances (remove exact duplicates, but keep meaningful variations)
-            - Combine ALL identity descriptions from all instances (remove exact duplicates, but keep meaningful variations)
-            - Merge additional_details into a comprehensive, coherent description that includes all relevant information
-            3. MAINTAIN STRUCTURE - Each merged subject must have:
-            - name: string (the subject's name or identifier)
-            - appearance: list of strings (visual characteristics)
-            - identity: list of strings (type, category, role, etc.)
-            - first_seen: float (timestamp in seconds)
-            - additional_details: string or null (any extra context)
-            4. OUTPUT FORMAT - Return a list of subject objects with the above fields
-
-            EXAMPLES OF MERGING:
-            - If "red car" appears at 10s and "red sports car" at 30s with similar descriptions → merge into "red sports car" with first_seen=10.0
-            - If "presenter" and "main host" clearly refer to the same person → merge into one with combined descriptions
-            - If "iPhone" and "smartphone" both refer to the same device → merge appropriately"""
-
-            user_prompt = f"""Merge these partial subject registries from the same video into a single coherent registry:
-
-            {registries_json}
-
-            Carefully identify duplicate subjects that refer to the same entity and merge them according to the rules. Preserve all unique subjects."""
-
             messages = [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ]
-
-            logger.info(f"Merging {len(registries)} subject registries using LLM...")
-
+            
             result = await self.llm_provider.chat_completion(
                 messages=messages,
                 temperature=0.0,
                 response_format=MergedSubjectRegistryResponse,
             )
-
+            
             # Extract the parsed response
             merged_response: MergedSubjectRegistryResponse = result['content']
             merged_registry = merged_response.merged_subjects
-
-            logger.info(f"Successfully merged registries: {len(merged_registry)} unique subjects")
+            
+            if merged_registry:
+                logger.info(f"Subject merge complete: {len(merged_registry)} subjects in merged registry")
+            else:
+                logger.warning("Subject merge returned empty registry")
+            
             return merged_registry
-
+                
         except Exception as e:
-            logger.error(f"Failed to merge subject registries: {e}")
+            logger.error(f"Error during subject merge: {e}. Returning None")
             return None
 
     async def _index_registry(

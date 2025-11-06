@@ -302,7 +302,8 @@ class ChapterGenerator:
     async def _merge_and_enrich_subjects(
         self,
         final_result: ChapterCreationResponse,
-        batch_results: List[ChapterCreationResponse]
+        batch_results: List[ChapterCreationResponse],
+        prev_merged_subject_registry: ChapterCreationResponse = None
     ) -> ChapterCreationResponse:
         """
         Perform a dedicated LLM call to merge and enrich subject registries
@@ -312,14 +313,29 @@ class ChapterGenerator:
         Args:
             final_result: The combined ChapterCreationResponse (without subject_registry merged yet)
             batch_results: List of individual batch ChapterCreationResponse objects
+            prev_merged_subject_registry: Optional ChapterCreationResponse with previously merged subjects from earlier batches
 
         Returns:
             ChapterCreationResponse with enriched and merged subject_registry
         """
-        logger.info("Performing dedicated subject registry merge and enrichment...")
+        logger.info(f"Performing dedicated subject registry merge and enrichment for {len(batch_results)} batches...")
         
         # Prepare all subject registries from batch results
         all_subjects = []
+        has_previous_context = (
+            prev_merged_subject_registry is not None 
+            and prev_merged_subject_registry.subject_registry is not None 
+            and len(prev_merged_subject_registry.subject_registry) > 0
+        )
+        
+        # If we have previous merged results, add them first
+        if has_previous_context:
+            all_subjects.append({
+                'batch_number': 'Previous Merged Results',
+                'subjects': [subject.model_dump() for subject in prev_merged_subject_registry.subject_registry]
+            })
+        
+        # Add all batch results
         for i, batch_result in enumerate(batch_results):
             if batch_result.subject_registry:
                 all_subjects.append({
@@ -331,11 +347,24 @@ class ChapterGenerator:
             logger.info("No subjects found in any batch, skipping merge")
             return final_result
         
+        # Adjust merge prompt based on whether we have previous context
+        context_instruction = ""
+        if has_previous_context:
+            context_instruction = """
+            NOTE: The first batch contains PREVIOUSLY MERGED subjects from earlier batches.
+            Your task is to:
+            1. Keep ALL subjects from the previous merged results
+            2. Add any NEW subjects from the new batches
+            3. If a subject from new batches matches one in previous results, MERGE their attributes intelligently
+            4. Maintain cohesion by ensuring the final registry is consistent and comprehensive
+            """
+        
         merge_prompt = [
             {
                 "role": "system",
-                "content": """You are a SubjectMergerGPT specialized in creating exhaustive, detailed subject registries.
+                "content": f"""You are a SubjectMergerGPT specialized in creating exhaustive, detailed subject registries.
                 Your task is to merge subject information from multiple video frame batches into a single comprehensive registry.
+                {context_instruction}
                 
                 MERGING RULES:
                 1. EXTRACT ALL SUBJECTS: Include every person, object, animal, item, or entity mentioned across all batches
@@ -388,15 +417,89 @@ Return a complete ChapterCreationResponse with the merged subject_registry and t
             
             merged_result: ChapterCreationResponse = merge_response['content']
             
-            # Update only the subject_registry in final_result, preserving other fields
-            if merged_result.subject_registry:
-                logger.info(f"Subject merge complete: {len(merged_result.subject_registry)} subjects in final registry")
-                final_result.subject_registry = merged_result.subject_registry
+            # Create a new ChapterCreationResponse with merged subject_registry
+            result_with_merged_subjects = ChapterCreationResponse(
+                detailed_summary=final_result.detailed_summary,
+                action_taken=final_result.action_taken,
+                text_from_scene=final_result.text_from_scene,
+                subject_registry=merged_result.subject_registry if merged_result.subject_registry else []
+            )
+            
+            if result_with_merged_subjects.subject_registry:
+                logger.info(f"Subject merge complete: {len(result_with_merged_subjects.subject_registry)} subjects in merged registry")
             else:
-                logger.warning("Subject merge returned empty registry, keeping original")
+                logger.warning("Subject merge returned empty registry")
+            
+            return result_with_merged_subjects
                 
         except Exception as e:
-            logger.error(f"Error during subject merge: {e}. Keeping original subject_registry")
+            logger.error(f"Error during subject merge: {e}. Returning result without merge")
+            return final_result
+
+
+    async def _merge_subjects_in_batches(
+        self,
+        final_result: ChapterCreationResponse,
+        batch_results: List[ChapterCreationResponse],
+        batch_size: int = 3
+    ) -> ChapterCreationResponse:
+        """
+        Merge subjects in batches of specified size, passing the result of the previous batch
+        to maintain cohesion across the entire merge process.
+
+        Args:
+            final_result: The combined ChapterCreationResponse (without subject_registry merged yet)
+            batch_results: List of individual batch ChapterCreationResponse objects
+            batch_size: Number of batch_results to process at once (default: 3)
+
+        Returns:
+            ChapterCreationResponse with fully enriched and merged subject_registry
+        """
+        logger.info(f"Starting subject merge in batches of {batch_size}...")
+        
+        # If we have no results or only 1 result, process directly
+        if len(batch_results) <= 1:
+            if batch_results:
+                final_result.subject_registry = batch_results[0].subject_registry
+            return final_result
+        
+        # Split batch_results into groups of batch_size
+        result_batches = [
+            batch_results[i:i + batch_size]
+            for i in range(0, len(batch_results), batch_size)
+        ]
+        
+        logger.info(f"Processing {len(batch_results)} results in {len(result_batches)} merge batches")
+        
+        # Track the accumulated merged result
+        accumulated_merged_result = None
+        
+        # Process each batch
+        for batch_idx, current_batch in enumerate(result_batches):
+            logger.info(f"Processing merge batch {batch_idx + 1}/{len(result_batches)} with {len(current_batch)} results")
+            
+            # For the first batch, merge without prior context
+            if accumulated_merged_result is None:
+                accumulated_merged_result = await self._merge_and_enrich_subjects(
+                    final_result, 
+                    current_batch,
+                    prev_merged_subject_registry=None
+                )
+            else:
+                # For subsequent batches, pass the accumulated result as previous context
+                # This ensures cohesion by passing context forward
+                accumulated_merged_result = await self._merge_and_enrich_subjects(
+                    final_result,
+                    current_batch,
+                    prev_merged_subject_registry=accumulated_merged_result
+                )
+        
+        # Update final_result with the fully merged subject registry
+        if accumulated_merged_result and accumulated_merged_result.subject_registry:
+            logger.info(f"Final merged subject registry contains {len(accumulated_merged_result.subject_registry)} subjects")
+            final_result.subject_registry = accumulated_merged_result.subject_registry
+        else:
+            logger.warning("No subjects found after batch merging")
         
         return final_result
 
@@ -640,9 +743,9 @@ Return a complete ChapterCreationResponse with the merged subject_registry and t
                     logger.info(f"combined batch response (without subjects):{combined_response}")
                     final_result: ChapterCreationResponse = combined_response['content']
                     
-                    # Now perform ONLY subject registry merge in a separate dedicated call
-                    logger.info("Performing separate subject registry merge...")
-                    final_result = await self._merge_and_enrich_subjects(final_result, results)
+                    # Now perform subject registry merge in batches of 3
+                    logger.info("Performing subject registry merge in batches of 3...")
+                    final_result = await self._merge_subjects_in_batches(final_result, results, batch_size=3)
 
                 else:
                     final_result: ChapterCreationResponse = results[0]
