@@ -15,7 +15,7 @@ from loguru import logger
 from mmct.providers.search_document_models import ChapterIndexDocument
 from mmct.video_pipeline.core.ingestion.semantic_chunking.semantic_chunker import SemanticChunker
 from mmct.video_pipeline.core.ingestion.chapter_generator.chapter_generator import ChapterGenerator
-from mmct.video_pipeline.core.ingestion.chapter_generator.subject_registry_processor import SubjectRegistryProcessor
+from mmct.video_pipeline.core.ingestion.chapter_generator.object_collection_processor import ObjectCollectionProcessor
 from mmct.video_pipeline.core.ingestion.chapter_generator.utils import create_embedding
 from mmct.providers.factory import provider_factory
 
@@ -75,9 +75,9 @@ class ChapterIngestionPipeline:
             keyframe_index=f"keyframes-{index_name}",
         )
 
-        # Initialize subject registry processor
-        self.subject_registry_processor = SubjectRegistryProcessor(
-            index_name=f"subject-registry-{index_name}"
+        # Initialize object collection processor
+        self.object_collection_processor = ObjectCollectionProcessor(
+            index_name=f"object-collection-{index_name}"
         )
 
         # Create search provider with custom index_name for this pipeline
@@ -141,16 +141,16 @@ class ChapterIngestionPipeline:
         ):
             chapter_content_str = chapter_response.__str__(transcript=chapter_transcript)
 
-            # Serialize subject_registry to JSON string
-            subject_registry_json = "[]"
-            if chapter_response.subject_registry:
+            # Serialize object_collection to JSON string
+            object_collection_json = "[]"
+            if chapter_response.object_collection:
                 try:
-                    # Convert the List[SubjectResponse] to JSON-serializable list
-                    subject_registry_list = [subject.model_dump() for subject in chapter_response.subject_registry]
-                    subject_registry_json = json.dumps(subject_registry_list)
+                    # Convert the List[ObjectResponse] to JSON-serializable list
+                    object_collection_list = [obj.model_dump() for obj in chapter_response.object_collection]
+                    object_collection_json = json.dumps(object_collection_list)
                 except Exception as e:
-                    logger.warning(f"Failed to serialize subject_registry: {e}")
-                    subject_registry_json = "[]"
+                    logger.warning(f"Failed to serialize object_collection: {e}")
+                    object_collection_json = "[]"
 
             # Extract start and end times from timestamps
             start_time = timestamps[0] if timestamps and len(timestamps) > 0 else 0.0
@@ -165,7 +165,7 @@ class ChapterIngestionPipeline:
                 category="None",
                 sub_category="None",
                 text_from_scene=chapter_response.text_from_scene or "None",
-                subject_registry=subject_registry_json,
+                object_collection=object_collection_json,
                 youtube_url=url or "None",
                 time=current_time,
                 chapter_transcript=chapter_transcript,
@@ -228,18 +228,18 @@ class ChapterIngestionPipeline:
         logger.info("Step 2: Generating chapters from semantic chunks...")
         await self._create_chapters()
 
-        # Step 3: Process subject registry and video summary
-        logger.info("Step 3: Processing and indexing subject registry and video summary...")
-        merged_registry = await self.subject_registry_processor.run(
+        # Step 3: Process object collection and video summary
+        logger.info("Step 3: Processing and indexing object collection and video summary...")
+        merged_registry = await self.object_collection_processor.run(
             chapter_responses=self.chapter_responses,
             video_id=self.hash_id,
             url=url,
             video_duration=self.video_duration
         )
         if merged_registry:
-            logger.info(f"Subject registry processed: {len(merged_registry)} unique subjects")
+            logger.info(f"Object collection processed: {len(merged_registry)} unique objects")
         else:
-            logger.info("No subjects found in chapters")
+            logger.info("No objects found in chapters")
 
         # Step 4: Ingest to search index
         logger.info("Step 4: Ingesting chapters to search index...")

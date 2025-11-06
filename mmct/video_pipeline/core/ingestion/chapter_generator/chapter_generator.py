@@ -299,112 +299,112 @@ class ChapterGenerator:
             ).model_dump_json()
 
 
-    async def _merge_and_enrich_subjects(
+    async def _merge_and_enrich_objects(
         self,
         final_result: ChapterCreationResponse,
         batch_results: List[ChapterCreationResponse],
-        prev_merged_subject_registry: ChapterCreationResponse = None
+        prev_merged_object_collection: ChapterCreationResponse = None
     ) -> ChapterCreationResponse:
         """
-        Perform a dedicated LLM call to merge and enrich subject registries
-        from all batch results, ensuring exhaustive extraction of all subjects with detailed attributes.
-        This is done separately from other field merging to focus solely on subject quality.
+        Perform a dedicated LLM call to merge and enrich object collections
+        from all batch results, ensuring exhaustive extraction of all objects with detailed attributes.
+        This is done separately from other field merging to focus solely on object quality.
 
         Args:
-            final_result: The combined ChapterCreationResponse (without subject_registry merged yet)
+            final_result: The combined ChapterCreationResponse (without object_collection merged yet)
             batch_results: List of individual batch ChapterCreationResponse objects
-            prev_merged_subject_registry: Optional ChapterCreationResponse with previously merged subjects from earlier batches
+            prev_merged_object_collection: Optional ChapterCreationResponse with previously merged objects from earlier batches
 
         Returns:
-            ChapterCreationResponse with enriched and merged subject_registry
+            ChapterCreationResponse with enriched and merged object_collection
         """
-        logger.info(f"Performing dedicated subject registry merge and enrichment for {len(batch_results)} batches...")
-        
-        # Prepare all subject registries from batch results
-        all_subjects = []
+        logger.info(f"Performing dedicated object collection merge and enrichment for {len(batch_results)} batches...")
+
+        # Prepare all object collections from batch results
+        all_objects = []
         has_previous_context = (
-            prev_merged_subject_registry is not None 
-            and prev_merged_subject_registry.subject_registry is not None 
-            and len(prev_merged_subject_registry.subject_registry) > 0
+            prev_merged_object_collection is not None
+            and prev_merged_object_collection.object_collection is not None
+            and len(prev_merged_object_collection.object_collection) > 0
         )
-        
+
         # If we have previous merged results, add them first
         if has_previous_context:
-            all_subjects.append({
+            all_objects.append({
                 'batch_number': 'Previous Merged Results',
-                'subjects': [subject.model_dump() for subject in prev_merged_subject_registry.subject_registry]
+                'objects': [obj.model_dump() for obj in prev_merged_object_collection.object_collection]
             })
-        
+
         # Add all batch results
         for i, batch_result in enumerate(batch_results):
-            if batch_result.subject_registry:
-                all_subjects.append({
+            if batch_result.object_collection:
+                all_objects.append({
                     'batch_number': i + 1,
-                    'subjects': [subject.model_dump() for subject in batch_result.subject_registry]
+                    'objects': [obj.model_dump() for obj in batch_result.object_collection]
                 })
-        
-        if not all_subjects:
-            logger.info("No subjects found in any batch, skipping merge")
+
+        if not all_objects:
+            logger.info("No objects found in any batch, skipping merge")
             return final_result
         
         # Adjust merge prompt based on whether we have previous context
         context_instruction = ""
         if has_previous_context:
             context_instruction = """
-            NOTE: The first batch contains PREVIOUSLY MERGED subjects from earlier batches.
+            NOTE: The first batch contains PREVIOUSLY MERGED objects from earlier batches.
             Your task is to:
-            1. Keep ALL subjects from the previous merged results
-            2. Add any NEW subjects from the new batches
-            3. If a subject from new batches matches one in previous results, MERGE their attributes intelligently
-            4. Maintain cohesion by ensuring the final registry is consistent and comprehensive
+            1. Keep ALL objects from the previous merged results
+            2. Add any NEW objects from the new batches
+            3. If an object from new batches matches one in previous results, MERGE their attributes intelligently
+            4. Maintain cohesion by ensuring the final collection is consistent and comprehensive
             """
-        
+
         merge_prompt = [
             {
                 "role": "system",
-                "content": f"""You are a SubjectMergerGPT specialized in creating exhaustive, detailed subject registries.
-                Your task is to merge subject information from multiple video frame batches into a single comprehensive registry.
+                "content": f"""You are an ObjectMergerGPT specialized in creating exhaustive, detailed object collections.
+                Your task is to merge object information from multiple video frame batches into a single comprehensive collection.
                 {context_instruction}
-                
+
                 MERGING RULES:
-                1. EXTRACT ALL SUBJECTS: Include every person, object, animal, item, or entity mentioned across all batches
-                2. IDENTIFY DUPLICATES: Recognize when the same subject appears in multiple batches (same name, similar descriptions)
+                1. EXTRACT ALL OBJECTS: Include every person, object, animal, item, or entity mentioned across all batches
+                2. IDENTIFY DUPLICATES: Recognize when the same object appears in multiple batches (same name, similar descriptions)
                 3. MERGE DUPLICATES INTELLIGENTLY:
                    - Combine all unique appearance descriptions (remove exact duplicates but keep variations)
                    - Combine all unique identity descriptions (remove exact duplicates but keep variations)
                    - Keep the EARLIEST first_seen timestamp
                    - Merge additional_details into a comprehensive, non-redundant description
-                4. ENRICH ATTRIBUTES: For each subject, ensure maximum detail:
+                4. ENRICH ATTRIBUTES: For each object, ensure maximum detail:
                    - People: clothing colors/styles/patterns, accessories (glasses, jewelry, hats), physical features (hair color/style, height, build), roles, activities
                    - Objects: colors, sizes, brands, models, materials, conditions, positions, purposes, quantities
                    - Animals: species, breeds, colors, markings, sizes, behaviors, conditions
                    - Vehicles: make, model, color, type, distinctive features, license plates
                    - Text/Signs: exact text content, location, context, purpose
                 5. CONSISTENT NAMING: Assign clear, descriptive names (e.g., "Person in blue shirt", "Red Toyota Camry", "iPhone 15 Pro", "Welcome sign")
-                6. COMPLETENESS: Don't drop any subject even if it seems minor or appears in only one batch
-                
+                6. COMPLETENESS: Don't drop any object even if it seems minor or appears in only one batch
+
                 OUTPUT: You must return a COMPLETE ChapterCreationResponse object with ALL fields:
                 - detailed_summary: Use the provided summary (don't modify it)
                 - action_taken: Use the provided value (don't modify it)
                 - text_from_scene: Use the provided value (don't modify it)
-                - subject_registry: This is what you need to create - the exhaustive merged list of subjects
-                
-                CRITICAL: Only merge the subject_registry. Keep other fields exactly as provided.
+                - object_collection: This is what you need to create - the exhaustive merged list of objects
+
+                CRITICAL: Only merge the object_collection. Keep other fields exactly as provided.
                 """
             },
             {
                 "role": "user",
-                "content": f"""Here are the subject registries from {len(all_subjects)} different frame batches to merge:
+                "content": f"""Here are the object collections from {len(all_objects)} different frame batches to merge:
 
-{chr(10).join([f"Batch {item['batch_number']}:{chr(10)}{item['subjects']}" for item in all_subjects])}
+{chr(10).join([f"Batch {item['batch_number']}:{chr(10)}{item['objects']}" for item in all_objects])}
 
 Context information (DO NOT MODIFY THESE - just use them for the response):
 - detailed_summary: {final_result.detailed_summary}
 - action_taken: {final_result.action_taken}
 - text_from_scene: {final_result.text_from_scene}
 
-Please create a single, exhaustive, merged subject_registry that includes ALL subjects with detailed attributes.
-Return a complete ChapterCreationResponse with the merged subject_registry and the exact same values for other fields."""
+Please create a single, exhaustive, merged object_collection that includes ALL objects with detailed attributes.
+Return a complete ChapterCreationResponse with the merged object_collection and the exact same values for other fields."""
             }
         ]
         
@@ -414,53 +414,53 @@ Return a complete ChapterCreationResponse with the merged subject_registry and t
                 temperature=0,
                 response_format=ChapterCreationResponse,
             )
-            
+
             merged_result: ChapterCreationResponse = merge_response['content']
-            
-            # Create a new ChapterCreationResponse with merged subject_registry
-            result_with_merged_subjects = ChapterCreationResponse(
+
+            # Create a new ChapterCreationResponse with merged object_collection
+            result_with_merged_objects = ChapterCreationResponse(
                 detailed_summary=final_result.detailed_summary,
                 action_taken=final_result.action_taken,
                 text_from_scene=final_result.text_from_scene,
-                subject_registry=merged_result.subject_registry if merged_result.subject_registry else []
+                object_collection=merged_result.object_collection if merged_result.object_collection else []
             )
-            
-            if result_with_merged_subjects.subject_registry:
-                logger.info(f"Subject merge complete: {len(result_with_merged_subjects.subject_registry)} subjects in merged registry")
+
+            if result_with_merged_objects.object_collection:
+                logger.info(f"Object merge complete: {len(result_with_merged_objects.object_collection)} objects in merged collection")
             else:
-                logger.warning("Subject merge returned empty registry")
-            
-            return result_with_merged_subjects
-                
+                logger.warning("Object merge returned empty collection")
+
+            return result_with_merged_objects
+
         except Exception as e:
-            logger.error(f"Error during subject merge: {e}. Returning result without merge")
+            logger.error(f"Error during object merge: {e}. Returning result without merge")
             return final_result
 
 
-    async def _merge_subjects_in_batches(
+    async def _merge_objects_in_batches(
         self,
         final_result: ChapterCreationResponse,
         batch_results: List[ChapterCreationResponse],
         batch_size: int = 3
     ) -> ChapterCreationResponse:
         """
-        Merge subjects in batches of specified size, passing the result of the previous batch
+        Merge objects in batches of specified size, passing the result of the previous batch
         to maintain cohesion across the entire merge process.
 
         Args:
-            final_result: The combined ChapterCreationResponse (without subject_registry merged yet)
+            final_result: The combined ChapterCreationResponse (without object_collection merged yet)
             batch_results: List of individual batch ChapterCreationResponse objects
             batch_size: Number of batch_results to process at once (default: 3)
 
         Returns:
-            ChapterCreationResponse with fully enriched and merged subject_registry
+            ChapterCreationResponse with fully enriched and merged object_collection
         """
-        logger.info(f"Starting subject merge in batches of {batch_size}...")
-        
+        logger.info(f"Starting object merge in batches of {batch_size}...")
+
         # If we have no results or only 1 result, process directly
         if len(batch_results) <= 1:
             if batch_results:
-                final_result.subject_registry = batch_results[0].subject_registry
+                final_result.object_collection = batch_results[0].object_collection
             return final_result
         
         # Split batch_results into groups of batch_size
@@ -477,30 +477,30 @@ Return a complete ChapterCreationResponse with the merged subject_registry and t
         # Process each batch
         for batch_idx, current_batch in enumerate(result_batches):
             logger.info(f"Processing merge batch {batch_idx + 1}/{len(result_batches)} with {len(current_batch)} results")
-            
+
             # For the first batch, merge without prior context
             if accumulated_merged_result is None:
-                accumulated_merged_result = await self._merge_and_enrich_subjects(
-                    final_result, 
+                accumulated_merged_result = await self._merge_and_enrich_objects(
+                    final_result,
                     current_batch,
-                    prev_merged_subject_registry=None
+                    prev_merged_object_collection=None
                 )
             else:
                 # For subsequent batches, pass the accumulated result as previous context
                 # This ensures cohesion by passing context forward
-                accumulated_merged_result = await self._merge_and_enrich_subjects(
+                accumulated_merged_result = await self._merge_and_enrich_objects(
                     final_result,
                     current_batch,
-                    prev_merged_subject_registry=accumulated_merged_result
+                    prev_merged_object_collection=accumulated_merged_result
                 )
-        
-        # Update final_result with the fully merged subject registry
-        if accumulated_merged_result and accumulated_merged_result.subject_registry:
-            logger.info(f"Final merged subject registry contains {len(accumulated_merged_result.subject_registry)} subjects")
-            final_result.subject_registry = accumulated_merged_result.subject_registry
+
+        # Update final_result with the fully merged object collection
+        if accumulated_merged_result and accumulated_merged_result.object_collection:
+            logger.info(f"Final merged object collection contains {len(accumulated_merged_result.object_collection)} objects")
+            final_result.object_collection = accumulated_merged_result.object_collection
         else:
-            logger.warning("No subjects found after batch merging")
-        
+            logger.warning("No objects found after batch merging")
+
         return final_result
 
 
@@ -559,7 +559,7 @@ Return a complete ChapterCreationResponse with the merged subject_registry and t
             - Provide a comprehensive summary covering all visual and audio information, including any specific varieties, types, model numbers, or versions mentioned
             - Note any actions performed or demonstrated
             - Extract any visible text from the scenes
-            - Track ALL subjects in the subject_registry with EXHAUSTIVE DETAIL:
+            - Track ALL objects in the object_collection with EXHAUSTIVE DETAIL:
               * Include EVERY visible person, object, animal, item, or entity that appears in ANY frame
               * For people: capture clothing details (colors, styles, patterns), physical features (hair color/style, accessories like glasses/jewelry/hats), distinguishing characteristics, roles or activities
               * For objects: capture colors, sizes, brands, model numbers, materials, conditions, positions, purposes
@@ -567,11 +567,11 @@ Return a complete ChapterCreationResponse with the merged subject_registry and t
               * For text/signs: capture what the text says and its context (location, purpose)
               * For vehicles: capture make, model, color, license plate if visible, type
               * Even include background objects that are clearly visible and identifiable
-              * Capture temporal information: note the exact timestamp when each subject first appears
+              * Capture temporal information: note the exact timestamp when each object first appears
               * Include detailed appearance descriptions: be specific about colors (not just "shirt" but "blue collared shirt with white stripes")
               * Include detailed identity information: job title, relationship to others, purpose of object, context of use
 
-            CRITICAL: Be EXHAUSTIVE and DETAILED. Extract as many subjects as possible with rich attribute information. Don't just focus on main subjects - capture everything visible and identifiable in the frames.
+            CRITICAL: Be EXHAUSTIVE and DETAILED. Extract as many objects as possible with rich attribute information. Don't just focus on main objects - capture everything visible and identifiable in the frames.
 
             IMPORTANT: All output must be in English only. Translate any Hindi or other language content found in the video frames or transcript to English.
             """
@@ -657,10 +657,10 @@ Return a complete ChapterCreationResponse with the merged subject_registry and t
                         Previous analysis results: {previous_analysis}
 
                         Continue your analysis with these additional frames, focusing on new information not captured in previous analyses.
-                        
-                        CRITICAL FOR SUBJECT EXTRACTION:
-                        - Extract ALL subjects visible in these new frames (people, objects, animals, text, vehicles, etc.)
-                        - Provide DETAILED attributes for each subject (clothing, colors, features, brands, models, etc.)
+
+                        CRITICAL FOR OBJECT EXTRACTION:
+                        - Extract ALL objects visible in these new frames (people, objects, animals, text, vehicles, etc.)
+                        - Provide DETAILED attributes for each object (clothing, colors, features, brands, models, etc.)
                         - Don't worry about duplicates with previous batches - the merging process will handle that
                         - Be EXHAUSTIVE - capture every identifiable entity in these frames
                         
@@ -720,9 +720,9 @@ Return a complete ChapterCreationResponse with the merged subject_registry and t
                             1. For detailed_summary: synthesize all information into a cohesive narrative
                             2. For action_taken: include all unique actions observed across analyses
                             3. For text_from_scene: include all unique text observations across analyses
-                            4. For subject_registry: SET IT TO NULL/EMPTY - DO NOT merge subjects here, they will be merged separately
-                            
-                            IMPORTANT: Leave subject_registry as null or empty. Subject merging will be done in a separate dedicated step.
+                            4. For object_collection: SET IT TO NULL/EMPTY - DO NOT merge objects here, they will be merged separately
+
+                            IMPORTANT: Leave object_collection as null or empty. Object merging will be done in a separate dedicated step.
                             """,
                         },
                         {
@@ -740,12 +740,12 @@ Return a complete ChapterCreationResponse with the merged subject_registry and t
                         response_format=ChapterCreationResponse,
                     )
 
-                    logger.info(f"combined batch response (without subjects):{combined_response}")
+                    logger.info(f"combined batch response (without objects):{combined_response}")
                     final_result: ChapterCreationResponse = combined_response['content']
-                    
-                    # Now perform subject registry merge in batches of 3
-                    logger.info("Performing subject registry merge in batches of 3...")
-                    final_result = await self._merge_subjects_in_batches(final_result, results, batch_size=3)
+
+                    # Now perform object collection merge in batches of 3
+                    logger.info("Performing object collection merge in batches of 3...")
+                    final_result = await self._merge_objects_in_batches(final_result, results, batch_size=3)
 
                 else:
                     final_result: ChapterCreationResponse = results[0]

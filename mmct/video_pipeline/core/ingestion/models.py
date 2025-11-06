@@ -30,74 +30,74 @@ class SubjectVarietyResponse(BaseModel):
         description="Name of the specific variety or type of subject mentioned in the video, or 'None' if not found"
     )
 
-class SubjectResponse(BaseModel):
-    """Pydantic model representing a single subject tracked in the video.
+class ObjectResponse(BaseModel):
+    """Pydantic model representing a single object tracked in the video.
 
-    A subject can be a person, object, animal, or any other entity that appears
+    An object can be a person, object, animal, or any other entity that appears
     consistently throughout the video and is relevant to the content.
     """
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(
         ...,
-        description="Name of the subject if known, otherwise a short descriptive identity (e.g., 'iPhone 15 Pro', 'red car', 'main presenter', 'golden retriever')"
+        description="Name of the object if known, otherwise a short descriptive identity (e.g., 'iPhone 15 Pro', 'red car', 'main presenter', 'golden retriever')"
     )
     appearance: List[str] = Field(
         ...,
-        description="List of appearance descriptions for this subject (e.g., visual characteristics, color, shape, distinctive features)"
+        description="List of appearance descriptions for this object (e.g., visual characteristics, color, shape, distinctive features)"
     )
     identity: List[str] = Field(
         ...,
-        description="List of identity descriptions for this subject (e.g., type, category, role, model number, brand, purpose)"
+        description="List of identity descriptions for this object (e.g., type, category, role, model number, brand, purpose)"
     )
     first_seen: float = Field(
         ...,
-        description="Timestamp in seconds when this subject first appears in the video"
+        description="Timestamp in seconds when this object first appears in the video"
     )
     additional_details: Optional[str] = Field(
         None,
-        description="Any additional relevant information about this subject that doesn't fit into the other categories (e.g., behavior, context, interactions, unique observations)"
+        description="Any additional relevant information about this object that doesn't fit into the other categories (e.g., behavior, context, interactions, unique observations)"
     )
 
 
-class SubjectRegistry(BaseModel):
-    """Pydantic model for the registry of all subjects tracked in a video segment.
+class ObjectCollection(BaseModel):
+    """Pydantic model for the collection of all objects tracked in a video segment.
 
-    This model maintains a collection of subjects (people, objects, animals, etc.)
+    This model maintains a collection of objects (people, objects, animals, etc.)
     identified and tracked throughout the video.
     """
     model_config = ConfigDict(extra="forbid")
 
-    subjects: Optional[List[SubjectResponse]] = Field(
+    objects: Optional[List[ObjectResponse]] = Field(
         ...,
-        description="List of SubjectResponse objects containing details like appearance, identity, and first appearance timestamp for each subject (e.g., 'iPhone 15 Pro', 'main presenter', 'red car')"
+        description="List of ObjectResponse objects containing details like appearance, identity, and first appearance timestamp for each object (e.g., 'iPhone 15 Pro', 'main presenter', 'red car')"
     )
 
 
 
 class ChapterCreationResponse(BaseModel):
     """Pydantic model for validating responses from the create_chapter function.
-    
+
     This model represents the structured output from video analysis, including
-    detailed summary of content and subject tracking.
+    detailed summary of content and object tracking.
     """
     model_config = ConfigDict(extra="forbid")
-    
+
     detailed_summary: str = Field(
-        ..., 
+        ...,
         description="Comprehensive summary of the video content including frame analysis"
     )
     action_taken: Optional[str] = Field(
-        None, 
+        None,
         description="Actions performed or demonstrated in the video"
     )
     text_from_scene: Optional[str] = Field(
         None,
         description="Text extracted from the video scenes"
     )
-    subject_registry: Optional[List[SubjectResponse]] = Field(
+    object_collection: Optional[List[ObjectResponse]] = Field(
         default=None,
-        description="Registry of all subjects (people, objects, animals, etc.) tracked in this video segment."
+        description="Collection of all objects (people, objects, animals, etc.) tracked in this video segment."
     )
     
     def __str__(self, transcript: str = None) -> str:
@@ -123,14 +123,14 @@ class ChapterCreationResponse(BaseModel):
         if self.text_from_scene and self.text_from_scene.lower() != "none":
             text += f"Text visible in the video includes: {self.text_from_scene}. "
 
-        # Add subject registry information if available
-        if self.subject_registry:
-            text += "Subjects in the video: "
-            subject_descriptions = []
-            for subject_info in self.subject_registry:
-                subject_desc = f"{subject_info.name} (first seen at {subject_info.first_seen}s)"
-                subject_descriptions.append(subject_desc)
-            text += ", ".join(subject_descriptions) + ". "
+        # Add object collection information if available
+        if self.object_collection:
+            text += "Objects in the video: "
+            object_descriptions = []
+            for object_info in self.object_collection:
+                object_desc = f"{object_info.name} (first seen at {object_info.first_seen}s)"
+                object_descriptions.append(object_desc)
+            text += ", ".join(object_descriptions) + ". "
         
         # Add transcript if provided
         if transcript:

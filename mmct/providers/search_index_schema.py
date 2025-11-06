@@ -155,10 +155,10 @@ def create_video_chapter_index_schema(index_name: str) -> SearchIndex:
     return index
 
 
-def create_subject_registry_index_schema(index_name: str) -> SearchIndex:
+def create_object_collection_index_schema(index_name: str) -> SearchIndex:
     """
-    Create the index schema definition for subject registry search.
-    This schema is based on SubjectRegistryDocument model.
+    Create the index schema definition for object collection search.
+    This schema is based on ObjectCollectionDocument model.
 
     Args:
         index_name: Name of the index to create
@@ -166,12 +166,12 @@ def create_subject_registry_index_schema(index_name: str) -> SearchIndex:
     Returns:
         SearchIndex: The index schema definition
     """
-    from mmct.providers.search_document_models import SubjectRegistryDocument
+    from mmct.providers.search_document_models import ObjectCollectionDocument
 
-    # Create index definition using SubjectRegistryDocument model fields
+    # Create index definition using ObjectCollectionDocument model fields
     fields = []
 
-    for name, model_field in SubjectRegistryDocument.model_fields.items():
+    for name, model_field in ObjectCollectionDocument.model_fields.items():
         extra = model_field.json_schema_extra
 
         # Special handling for video_summary_embedding vector field
