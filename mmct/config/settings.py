@@ -4,6 +4,9 @@ from typing import Optional
 from dotenv import load_dotenv, find_dotenv
 import os
 
+# Get the .env file path from environment variable, default to ".env"
+DOTENV_PATH = os.getenv("DOTENV_PATH", ".env")
+
 
 class LLMConfig(BaseSettings):
     """LLM provider configuration."""
@@ -23,7 +26,7 @@ class LLMConfig(BaseSettings):
     temperature: float = Field(default=0.0, env="LLM_TEMPERATURE")
 
     model_config = SettingsConfigDict(
-        env_file=".env", 
+        env_file=DOTENV_PATH, 
         env_file_encoding="utf-8",
         validate_assignment=True, 
         extra="ignore",
@@ -32,7 +35,7 @@ class LLMConfig(BaseSettings):
     
     def __init__(self, **kwargs):
         # Force load environment variables before validation
-        load_dotenv(find_dotenv())
+        load_dotenv(DOTENV_PATH)
         
         # If no explicit values provided, use environment variables
         if not kwargs:
@@ -68,7 +71,7 @@ class SearchConfig(BaseSettings):
     timeout: int = Field(default=30, env="SEARCH_TIMEOUT")
 
     model_config = SettingsConfigDict(
-        env_file=".env", 
+        env_file=DOTENV_PATH, 
         env_file_encoding="utf-8",
         validate_assignment=True, 
         extra="ignore",
@@ -77,7 +80,7 @@ class SearchConfig(BaseSettings):
     
     def __init__(self, **kwargs):
         # Force load environment variables before validation
-        load_dotenv(find_dotenv())
+        load_dotenv(DOTENV_PATH)
         
         # If no explicit values provided, use environment variables
         if not kwargs:
@@ -107,7 +110,7 @@ class EmbeddingConfig(BaseSettings):
     timeout: int = Field(default=200, env="EMBEDDING_TIMEOUT")
 
     model_config = SettingsConfigDict(
-        env_file=".env", 
+        env_file=DOTENV_PATH, 
         env_file_encoding="utf-8",
         validate_assignment=True, 
         extra="ignore",
@@ -116,7 +119,7 @@ class EmbeddingConfig(BaseSettings):
     
     def __init__(self, **kwargs):
         # Force load environment variables before validation
-        load_dotenv(find_dotenv())
+        load_dotenv(DOTENV_PATH)
         
         # If no explicit values provided, use environment variables with fallbacks to LLM config
         if not kwargs:
@@ -150,7 +153,7 @@ class ImageEmbeddingConfig(BaseSettings):
     batch_size: int = Field(default=8, env="IMAGE_EMBEDDING_BATCH_SIZE")
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=DOTENV_PATH,
         env_file_encoding="utf-8",
         validate_assignment=True,
         extra="ignore",
@@ -159,10 +162,10 @@ class ImageEmbeddingConfig(BaseSettings):
 
     def __init__(self, **kwargs):
         # Force load environment variables before validation
-        from dotenv import load_dotenv, find_dotenv
+        from dotenv import load_dotenv
         import os
 
-        load_dotenv(find_dotenv())
+        load_dotenv(DOTENV_PATH)
 
         # If no explicit values provided, use environment variables with defaults
         if not kwargs:
@@ -203,7 +206,7 @@ class TranscriptionConfig(BaseSettings):
 
     def __init__(self, **kwargs):
         # Force load environment variables before validation
-        load_dotenv(find_dotenv())
+        load_dotenv(DOTENV_PATH)
 
         # If no explicit values provided, use environment variables
         if not kwargs:
@@ -222,7 +225,7 @@ class TranscriptionConfig(BaseSettings):
         super().__init__(**kwargs)
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=DOTENV_PATH,
         env_file_encoding="utf-8",
         validate_assignment=True,
         extra="ignore",
@@ -242,7 +245,7 @@ class StorageConfig(BaseSettings):
 
     def __init__(self, **kwargs):
         # Force load environment variables before validation
-        load_dotenv(find_dotenv())
+        load_dotenv(DOTENV_PATH)
 
         # If no explicit values provided, use environment variables
         if not kwargs:
@@ -258,7 +261,7 @@ class StorageConfig(BaseSettings):
         super().__init__(**kwargs)
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=DOTENV_PATH,
         env_file_encoding="utf-8",
         validate_assignment=True,
         extra="ignore",
@@ -274,7 +277,7 @@ class SecurityConfig(BaseSettings):
     managed_identity_client_id: Optional[str] = Field(default=None, env="MANAGED_IDENTITY_CLIENT_ID")
 
     model_config = SettingsConfigDict(
-        env_file=".env", 
+        env_file=DOTENV_PATH, 
         env_file_encoding="utf-8",
         validate_assignment=True, 
         extra="ignore",
@@ -293,7 +296,7 @@ class LoggingConfig(BaseSettings):
     retention_days: int = Field(default=7, env="LOG_RETENTION_DAYS")
 
     model_config = SettingsConfigDict(
-        env_file=".env", 
+        env_file=DOTENV_PATH, 
         env_file_encoding="utf-8",
         validate_assignment=True, 
         extra="ignore",
@@ -311,7 +314,7 @@ class MMCTConfig(BaseSettings):
     environment: str = Field(default="development", env="ENVIRONMENT")
 
     model_config = SettingsConfigDict(
-        env_file=".env", 
+        env_file=DOTENV_PATH, 
         env_file_encoding="utf-8",
         validate_assignment=True, 
         extra="ignore",
@@ -320,7 +323,7 @@ class MMCTConfig(BaseSettings):
     
     def __init__(self, **kwargs):
         # Force load environment variables before initializing
-        load_dotenv(find_dotenv())
+        load_dotenv(DOTENV_PATH)
         
         super().__init__(**kwargs)
         # Initialize cached configurations
@@ -336,48 +339,48 @@ class MMCTConfig(BaseSettings):
     def llm(self) -> LLMConfig:
         if self._llm is None:
             # Force load environment variables first
-            load_dotenv(find_dotenv(), override=True)
+            load_dotenv(DOTENV_PATH, override=True)
             self._llm = LLMConfig()
         return self._llm
     
     @property
     def search(self) -> SearchConfig:
         if self._search is None:
-            load_dotenv(find_dotenv(), override=True)
+            load_dotenv(DOTENV_PATH, override=True)
             self._search = SearchConfig()
         return self._search
     
     @property
     def embedding(self) -> EmbeddingConfig:
         if self._embedding is None:
-            load_dotenv(find_dotenv(), override=True)
+            load_dotenv(DOTENV_PATH, override=True)
             self._embedding = EmbeddingConfig()
         return self._embedding
     
     @property
     def transcription(self) -> TranscriptionConfig:
         if self._transcription is None:
-            load_dotenv(find_dotenv(), override=True)
+            load_dotenv(DOTENV_PATH, override=True)
             self._transcription = TranscriptionConfig()
         return self._transcription
     
     @property
     def storage(self) -> StorageConfig:
         if self._storage is None:
-            load_dotenv(find_dotenv(), override=True)
+            load_dotenv(DOTENV_PATH, override=True)
             self._storage = StorageConfig()
         return self._storage
     
     @property
     def security(self) -> SecurityConfig:
         if self._security is None:
-            load_dotenv(find_dotenv(), override=True)
+            load_dotenv(DOTENV_PATH, override=True)
             self._security = SecurityConfig()
         return self._security
     
     @property
     def logging(self) -> LoggingConfig:
         if self._logging is None:
-            load_dotenv(find_dotenv(), override=True)
+            load_dotenv(DOTENV_PATH, override=True)
             self._logging = LoggingConfig()
         return self._logging
