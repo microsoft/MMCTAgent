@@ -137,8 +137,8 @@ class VideoQnA:
         )
 
         text_mention_termination = TextMentionTermination("TERMINATE")
-        max_messages_termination = MaxMessageTermination(max_messages=20)
-        termination = text_mention_termination | max_messages_termination
+        # max_messages_termination = MaxMessageTermination(max_messages=20)
+        termination = text_mention_termination
 
         if self.use_critic_agent:
             self.critic = AssistantAgent(
@@ -241,7 +241,7 @@ async def video_qna(
     )
     if stream:
         response_generator = await video_qna_instance.run_stream()
-        
+        # messages = await Console(response_generator)
         # Stream messages through logger instead of Console
         messages = []
         async for message in response_generator:

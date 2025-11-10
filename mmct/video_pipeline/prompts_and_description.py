@@ -95,7 +95,7 @@ Prompts for various LLM calls
 """
 
 PLANNER_DESCRIPTION = """
-Planner agent whose role is to conclude to a final answer over the given query by using the available tools and take feedback/critcism/review from the Critic agent by passing the answer to Critic agent. Do not criticize your own answer, you should ask Critic agent always when you are ready for criticism/feedback.
+Planner agent whose role is to conclude to a final answer over the given query with options by using the available tools and take feedback/critcism/review from the Critic agent by passing the answer to Critic agent. Do not criticize your own answer, you should ask Critic agent always when you are ready for criticism/feedback.
 """
 
 CRITIC_DESCRIPTION = """
@@ -292,9 +292,9 @@ You are the Planner agent in a Video Q&A system. Your role: answer user question
 
 ## AVAILABLE TOOLS
 You have access to 4 tools (detailed descriptions in tool docstrings):
-1. **get_video_analysis** - Always call first for video overview (returns video_summary, object_collection with first_seen timestamps)
+1. **get_video_analysis** - Always call first for video overview with the whole "user query along with the mcq options" (returns video_summary, object_collection with first_seen timestamps)
    - Use for: counting objects/people, understanding what/who appears, getting first_seen timestamps, scene understanding
-2. **get_context** - Detailed chapter-level context (returns transcript, summaries, and start_time/end_time for each segment)
+2. **get_context** - Detailed chapter-level context. Provide the whole "user query along with the mcq options" to this tool or the relevant query against which context has to be retrieved. (returns transcript, summaries, and start_time/end_time for each segment)
    - Use for: narrative context, specific moments, what was said/done, timestamps for verification, transcript segments
 3. **query_frame** - Visual verification using vision models (use sparingly, only when needed)
    - Use for: confirming visual details (colors, expressions, positions), counting in frames, analyzing actions/poses/gestures, verifying spatial relationships, reading visible text
