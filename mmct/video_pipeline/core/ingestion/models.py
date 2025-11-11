@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Dict
 from pydantic import BaseModel, Field, ConfigDict
 
 class TranslationResponse(BaseModel):
@@ -30,46 +30,74 @@ class SubjectVarietyResponse(BaseModel):
         description="Name of the specific variety or type of subject mentioned in the video, or 'None' if not found"
     )
 
+class ObjectResponse(BaseModel):
+    """Pydantic model representing a single object tracked in the video.
+
+    An object can be a person, object, animal, or any other entity that appears
+    consistently throughout the video and is relevant to the content.
+    """
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(
+        ...,
+        description="Name of the object if known, otherwise a short descriptive identity (e.g., 'iPhone 15 Pro', 'red car', 'main presenter', 'golden retriever')"
+    )
+    appearance: List[str] = Field(
+        ...,
+        description="List of appearance descriptions for this object (e.g., visual characteristics, color, shape, distinctive features)"
+    )
+    identity: List[str] = Field(
+        ...,
+        description="List of identity descriptions for this object (e.g., type, category, role, model number, brand, purpose)"
+    )
+    first_seen: float = Field(
+        ...,
+        description="Timestamp in seconds when this object first appears in the video"
+    )
+    additional_details: Optional[str] = Field(
+        None,
+        description="Any additional relevant information about this object that doesn't fit into the other categories (e.g., behavior, context, interactions, unique observations)"
+    )
+
+
+class ObjectCollection(BaseModel):
+    """Pydantic model for the collection of all objects tracked in a video segment.
+
+    This model maintains a collection of objects (people, objects, animals, etc.)
+    identified and tracked throughout the video.
+    """
+    model_config = ConfigDict(extra="forbid")
+
+    objects: Optional[List[ObjectResponse]] = Field(
+        ...,
+        description="List of ObjectResponse objects containing details like appearance, identity, and first appearance timestamp for each object (e.g., 'iPhone 15 Pro', 'main presenter', 'red car')"
+    )
+
+
 
 class ChapterCreationResponse(BaseModel):
     """Pydantic model for validating responses from the create_chapter function.
-    
-    This model represents the structured output from video analysis, including topic information,
-    categorization, species identification, and detailed summary of content.
+
+    This model represents the structured output from video analysis, including
+    detailed summary of content and object tracking.
     """
     model_config = ConfigDict(extra="forbid")
-    
-    Topic_of_video: str = Field(
-        ..., 
-        description="Main topic or theme that is discussed in the video"
-    )
-    Category: str = Field(
-        ..., 
-        description="The primary category the video content belongs to"
-    )
-    Sub_category: Optional[str] = Field(
-        None, 
-        description="The sub-category the video content belongs to"
-    )
-    subject: Optional[str] = Field(
-        None, 
-        description="Name of the main subject or item discussed in the video"
-    )
-    variety_of_subject: Optional[str] = Field(
-        None, 
-        description="Specific variety or type of subject mentioned in the video"
-    )
-    Detailed_summary: str = Field(
-        ..., 
+
+    detailed_summary: str = Field(
+        ...,
         description="Comprehensive summary of the video content including frame analysis"
     )
-    Action_taken: Optional[str] = Field(
-        None, 
+    action_taken: Optional[str] = Field(
+        None,
         description="Actions performed or demonstrated in the video"
     )
-    Text_from_scene: Optional[str] = Field(
-        None, 
+    text_from_scene: Optional[str] = Field(
+        None,
         description="Text extracted from the video scenes"
+    )
+    object_collection: Optional[List[ObjectResponse]] = Field(
+        default=None,
+        description="Collection of all objects (people, objects, animals, etc.) tracked in this video segment."
     )
     
     def __str__(self, transcript: str = None) -> str:
@@ -84,32 +112,25 @@ class ChapterCreationResponse(BaseModel):
         Returns:
             str: Natural language representation of the chapter
         """
-        # Start with the topic and category
-        text = f"This video is about {self.Topic_of_video}. "
-        text += f"It belongs to the {self.Category} category"
-        
-        # Add subcategory if available
-        if self.Sub_category:
-            text += f", specifically in the {self.Sub_category} subcategory"
-        text += ". "
-        
-        # Add subject information if available
-        if self.subject and self.subject.lower() != "none":
-            text += f"The video discusses {self.subject}"
-            if self.variety_of_subject and self.variety_of_subject.lower() != "none":
-                text += f", particularly the {self.variety_of_subject} variety"
-            text += ". "
-        
-        # Add the detailed summary
-        text += f"{self.Detailed_summary} "
-        
+        # Start with the detailed summary
+        text = f"{self.detailed_summary} "
+
         # Add actions if available
-        if self.Action_taken and self.Action_taken.lower() != "none":
-            text += f"The following actions are demonstrated in the video: {self.Action_taken}. "
-        
+        if self.action_taken and self.action_taken.lower() != "none":
+            text += f"The following actions are demonstrated in the video: {self.action_taken}. "
+
         # Add text from scene if available
-        if self.Text_from_scene and self.Text_from_scene.lower() != "none":
-            text += f"Text visible in the video includes: {self.Text_from_scene}. "
+        if self.text_from_scene and self.text_from_scene.lower() != "none":
+            text += f"Text visible in the video includes: {self.text_from_scene}. "
+
+        # Add object collection information if available
+        if self.object_collection:
+            text += "Objects in the video: "
+            object_descriptions = []
+            for object_info in self.object_collection:
+                object_desc = f"{object_info.name} (first seen at {object_info.first_seen}s)"
+                object_descriptions.append(object_desc)
+            text += ", ".join(object_descriptions) + ". "
         
         # Add transcript if provided
         if transcript:

@@ -7,13 +7,16 @@ It coordinates semantic chunking, chapter generation, and search index ingestion
 
 import uuid
 import asyncio
+import json
 from datetime import datetime
-from typing import List, Dict, Optional, Tuple
+from typing import List, Optional, Tuple
 from loguru import logger
 
 from mmct.providers.search_document_models import ChapterIndexDocument
 from mmct.video_pipeline.core.ingestion.semantic_chunking.semantic_chunker import SemanticChunker
-from mmct.video_pipeline.core.ingestion.chapter_generator.generate_chapter import ChapterGenerator
+from mmct.video_pipeline.core.ingestion.chapter_generator.chapter_generator import ChapterGenerator
+from mmct.video_pipeline.core.ingestion.chapter_generator.object_collection_processor import ObjectCollectionProcessor
+from mmct.video_pipeline.core.ingestion.chapter_generator.utils import create_embedding
 from mmct.providers.factory import provider_factory
 
 from dotenv import load_dotenv, find_dotenv
@@ -71,16 +74,20 @@ class ChapterIngestionPipeline:
             frame_stacking_grid_size=frame_stacking_grid_size,
             keyframe_index=f"keyframes-{index_name}",
         )
-        self.embedding_provider = provider_factory.create_embedding_provider()
 
-        # Create search provider - it will use the configured provider (Azure/FAISS/etc)
+        # Initialize object collection processor
+        self.object_collection_processor = ObjectCollectionProcessor(
+            index_name=f"object-collection-{index_name}"
+        )
+
+        # Create search provider with custom index_name for this pipeline
         self.search_provider = provider_factory.create_search_provider()
 
         # Pipeline state
         self.chunked_segments = []
-        self.subject_data = {"subject": "None", "variety_of_subject": "None"}
         self.chapter_responses = []
         self.chapter_transcripts = []
+        self.chapter_timestamps = []
 
     async def _create_search_index(self):
         """Create search index if it doesn't exist."""
@@ -98,37 +105,7 @@ class ChapterIngestionPipeline:
         if created:
             logger.info(f"Index {self.index_name} created successfully.")
 
-    async def _create_embedding_normal(self, text: str) -> List[float]:
-        """Create embedding for text."""
-        try:
-            return await self.embedding_provider.embedding(text)
-        except Exception as e:
-            raise Exception(f"Failed to create embedding: {e}")
 
-    async def _extract_subject_and_variety(self) -> Dict[str, str]:
-        """
-        Extract subject and variety information from chunked segments.
-
-        Returns:
-            Dict with 'subject' and 'variety_of_subject' keys
-        """
-        if not self.chunked_segments:
-            return {"subject": "None", "variety_of_subject": "None"}
-
-        # Create titled transcript from chunks
-        titled_transcript = "\nVideo Transcript: " + " ".join(
-            [seg.sentence for seg in self.chunked_segments]
-        )
-        logger.info(f"Created titled transcript from {len(self.chunked_segments)} segments")
-
-        # Get subject and variety using chapter generator
-        subject_variety_json = await self.chapter_generator._extract_subject_and_variety(
-            transcript=titled_transcript
-        )
-        subject_data = eval(subject_variety_json)
-        logger.info(f"Extracted subject data: {subject_data}")
-
-        return subject_data
 
     async def _create_chapters(self):
         """Create chapters using ChapterGenerator class."""
@@ -138,14 +115,14 @@ class ChapterIngestionPipeline:
 
         # Use the chapter generator to create chapters in batch
         # Note: max_concurrent_requests is set in ChapterGenerator.__init__
-        self.chapter_responses, self.chapter_transcripts = await self.chapter_generator.create_chapters_batch(
+        self.chapter_responses, self.chapter_transcripts, self.chapter_timestamps = await self.chapter_generator.create_chapters_batch(
             chunked_segments=self.chunked_segments,
             video_id=self.hash_id,
-            subject_variety=self.subject_data,
+            subject_variety={},
             categories="",
         )
 
-        logger.info(f"Chapter creation completed: {len(self.chapter_responses)} chapters created")
+        logger.info(f"Chapter creation completed: {len(self.chapter_responses)} chapters created with timestamps")
 
     async def _ingest(self, url: Optional[str] = None):
         """
@@ -159,32 +136,49 @@ class ChapterIngestionPipeline:
 
         logger.info(f"Creating documents from {len(self.chapter_responses)} chapters")
 
-        for chapter_response, chapter_transcript in zip(
-            self.chapter_responses, self.chapter_transcripts
+        for chapter_response, chapter_transcript, timestamps in zip(
+            self.chapter_responses, self.chapter_transcripts, self.chapter_timestamps
         ):
             chapter_content_str = chapter_response.__str__(transcript=chapter_transcript)
+
+            # Serialize object_collection to JSON string
+            object_collection_json = "[]"
+            if chapter_response.object_collection:
+                try:
+                    # Convert the List[ObjectResponse] to JSON-serializable list
+                    object_collection_list = [obj.model_dump() for obj in chapter_response.object_collection]
+                    object_collection_json = json.dumps(object_collection_list)
+                except Exception as e:
+                    logger.warning(f"Failed to serialize object_collection: {e}")
+                    object_collection_json = "[]"
+
+            # Extract start and end times from timestamps
+            start_time = timestamps[0] if timestamps and len(timestamps) > 0 else 0.0
+            end_time = timestamps[1] if timestamps and len(timestamps) > 1 else 0.0
+
             obj = ChapterIndexDocument(
                 id=str(uuid.uuid4()),
                 hash_video_id=self.hash_id,
-                topic_of_video=chapter_response.Topic_of_video or "None",
-                action_taken=chapter_response.Action_taken or "None",
-                detailed_summary=chapter_response.Detailed_summary or "None",
-                category=chapter_response.Category or "None",
-                sub_category=chapter_response.Sub_category or "None",
-                text_from_scene=chapter_response.Text_from_scene or "None",
+                topic_of_video="None",
+                action_taken=chapter_response.action_taken or "None",
+                detailed_summary=chapter_response.detailed_summary or "None",
+                category="None",
+                sub_category="None",
+                text_from_scene=chapter_response.text_from_scene or "None",
+                object_collection=object_collection_json,
                 youtube_url=url or "None",
                 time=current_time,
                 chapter_transcript=chapter_transcript,
-                subject=self.subject_data["subject"] or "None",
-                variety=self.subject_data["variety_of_subject"] or "None",
                 parent_id=self.parent_id or "None",
                 parent_duration=str(self.parent_duration) if self.parent_duration is not None else "None",
                 video_duration=str(self.video_duration) if self.video_duration is not None else "None",
+                start_time=start_time,
+                end_time=end_time,
                 blob_audio_url="None",
                 blob_video_url="None",
                 blob_transcript_file_url="None",
                 blob_frames_folder_path=self.keyframe_blob_url or "None",
-                embeddings=await self._create_embedding_normal(chapter_content_str),
+                embeddings=await create_embedding(chapter_content_str),
             )
             doc_objects.append(obj)
 
@@ -230,13 +224,22 @@ class ChapterIngestionPipeline:
             logger.error("Semantic chunking failed - no segments created")
             return None, None, is_exist
 
-        # Step 2: Extract subject and variety
-        logger.info("Step 2: Extracting subject and variety information...")
-        self.subject_data = await self._extract_subject_and_variety()
-
-        # Step 3: Generate chapters
-        logger.info("Step 3: Generating chapters from semantic chunks...")
+        # Step 2: Generate chapters
+        logger.info("Step 2: Generating chapters from semantic chunks...")
         await self._create_chapters()
+
+        # Step 3: Process object collection and video summary
+        logger.info("Step 3: Processing and indexing object collection and video summary...")
+        merged_registry = await self.object_collection_processor.run(
+            chapter_responses=self.chapter_responses,
+            video_id=self.hash_id,
+            url=url,
+            video_duration=self.video_duration
+        )
+        if merged_registry:
+            logger.info(f"Object collection processed: {len(merged_registry)} unique objects")
+        else:
+            logger.info("No objects found in chapters")
 
         # Step 4: Ingest to search index
         logger.info("Step 4: Ingesting chapters to search index...")

@@ -78,7 +78,6 @@ class VideoAgent:
         use_critic_agent: Optional[bool] = True,
         stream: bool = False,
         llm_provider: Optional[object] = None,
-        use_graph_rag: Optional[bool] = False,
         cache: Optional[bool] = False
     ):
         # Store parameters
@@ -88,7 +87,6 @@ class VideoAgent:
         self.url = url
         self.use_critic_agent = use_critic_agent
         self.stream = stream
-        self.use_graph_rag = use_graph_rag
         self.cache = cache
         # Initialize configuration and logging
         self.config = MMCTConfig()
@@ -118,7 +116,6 @@ class VideoAgent:
                 index_name=self.index_name,
                 stream=self.stream,
                 llm_provider=self.llm_provider,
-                use_graph_rag=self.use_graph_rag,
                 cache = self.cache
             )
 

@@ -5,7 +5,7 @@ Pydantic models for search index documents.
 """
 
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 from pydantic import BaseModel, Field
 
 
@@ -103,26 +103,15 @@ class ChapterIndexDocument(BaseModel):
         facetable=True,
         key=False
     )
-    subject: str = Field(
-        ...,
-        description="Main subject or item mentioned",
+    object_collection: str = Field(
+        default="[]",
+        description="JSON string array of object collection tracking all objects (people, objects, etc.) in the video segment",
         searchable=True,
-        filterable=True,
+        filterable=False,
         retrievable=True,
         stored=True,
         sortable=False,
-        facetable=True,
-        key=False
-    )
-    variety: str = Field(
-        ...,
-        description="Variety or type of subject",
-        searchable=True,
-        filterable=True,
-        retrievable=True,
-        stored=True,
-        sortable=False,
-        facetable=True,
+        facetable=False,
         key=False
     )
     hash_video_id: str = Field(
@@ -217,6 +206,30 @@ class ChapterIndexDocument(BaseModel):
         retrievable=True,
         stored=True,
         sortable=False,
+        facetable=False,
+        key=False
+    )
+
+    # — Chapter timestamp fields —
+    start_time: float = Field(
+        default=0.0,
+        description="Chapter start time in seconds",
+        searchable=False,
+        filterable=True,
+        retrievable=True,
+        stored=True,
+        sortable=True,
+        facetable=False,
+        key=False
+    )
+    end_time: float = Field(
+        default=0.0,
+        description="Chapter end time in seconds",
+        searchable=False,
+        filterable=True,
+        retrievable=True,
+        stored=True,
+        sortable=True,
         facetable=False,
         key=False
     )
@@ -375,3 +388,104 @@ class KeyframeDocument(BaseModel):
         facetable=False,
         key=False
     )
+
+
+class ObjectCollectionDocument(BaseModel):
+    """Document model for combined object collection search index."""
+
+    id: str = Field(
+        ...,
+        description="Unique object collection document ID",
+        searchable=False,
+        filterable=True,
+        retrievable=True,
+        stored=True,
+        sortable=True,
+        facetable=False,
+        key=True
+    )
+
+    video_id: str = Field(
+        ...,
+        description="Video hash ID this object collection belongs to",
+        searchable=False,
+        filterable=True,
+        retrievable=True,
+        stored=True,
+        sortable=False,
+        facetable=False,
+        key=False
+    )
+
+    url: str = Field(
+        default="",
+        description="URL of the video",
+        searchable=False,
+        filterable=True,
+        retrievable=True,
+        stored=True,
+        sortable=False,
+        facetable=False,
+        key=False
+    )
+
+    object_collection: str = Field(
+        default="[]",
+        description="JSON string array of merged object collection containing all objects (people, objects, etc.) from the entire video",
+        searchable=True,
+        filterable=False,
+        retrievable=True,
+        stored=True,
+        sortable=False,
+        facetable=False,
+        key=False
+    )
+
+    object_count: int = Field(
+        default=0,
+        description="Total number of unique objects in the collection",
+        searchable=False,
+        filterable=True,
+        retrievable=True,
+        stored=True,
+        sortable=True,
+        facetable=False,
+        key=False
+    )
+
+    video_summary: str = Field(
+        default="",
+        description="Overall summary of the entire video",
+        searchable=True,
+        filterable=False,
+        retrievable=True,
+        stored=True,
+        sortable=False,
+        facetable=False,
+        key=False
+    )
+
+    video_summary_embedding: List[float] = Field(
+        default_factory=list,
+        description="Vector embedding of the video summary for semantic search",
+        searchable=True,
+        filterable=False,
+        retrievable=False,
+        stored=True,
+        sortable=False,
+        facetable=False,
+        key=False
+    )
+
+    video_duration: float = Field(
+        default=0.0,
+        description="Duration of the video in seconds",
+        searchable=False,
+        filterable=True,
+        retrievable=True,
+        stored=True,
+        sortable=True,
+        facetable=False,
+        key=False
+    )
+ 

@@ -11,6 +11,9 @@ from azure.identity.aio import (
     AzureCliCredential as AsyncAzureCliCredential,
     ChainedTokenCredential as AsyncChainedTokenCredential
 )
+from dotenv import load_dotenv, find_dotenv
+
+load_dotenv(find_dotenv(),override=True)
 
 
 class AzureCredentials:

@@ -110,14 +110,14 @@ class AzureStorageProvider(StorageProvider):
 
         client = None
         try:
-            logger.info(f"Uploading file: {src_file_path}")
+            logger.debug(f"Uploading file: {src_file_path}")
             folder_name = kwargs.pop("folder_name")
             client = self.service_client.get_blob_client(container=folder_name, blob=file_name)
             async with aiofiles.open(src_file_path, "rb") as f:
                 data = await f.read()
             await client.upload_blob(data, overwrite=True)
 
-            logger.info(f"Successfully uploaded file: {src_file_path}")
+            logger.debug(f"Successfully uploaded file: {src_file_path}")
             url = f"{self.service_client.url}/{folder_name}/{file_name}"
             return url
         except Exception as e:

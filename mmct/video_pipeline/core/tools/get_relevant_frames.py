@@ -10,23 +10,33 @@ from mmct.video_pipeline.core.tools.utils.search_keyframes import KeyframeSearch
 
 
 async def get_relevant_frames(
-    query: Annotated[str, 'query to be look for frames'], 
+    query: Annotated[str, 'query to be look for frames'],
     video_id: Annotated[str, 'video id'],
     index_name: Annotated[str, 'search index name'],
-    top_k: Annotated[int, 'number of relevant frames to fetch'] = 10,
+    top_k: Annotated[int, 'number of relevant frames to fetch'] = 5,
     provider_name: Annotated[Optional[str], 'optional search provider name, e.g. "local_faiss" or "azure_ai_search"'] = None,
 ) -> List[str]:
     """
-    Fetch relevant frames for a query and return keyframe filenames.
-    
-    Args:
-        query: Text query to search for
-        video_id: Hash-based video ID to filter by
-        top_k: Number of relevant frames to fetch
-        index_name: Search index name
-        
-    Returns:
-        List of keyframe filenames
+    Discover relevant frame IDs based on visual queries when timestamps are unknown.
+
+    Description:
+        Searches keyframe index to find relevant frames based on visual embeddings.
+        Returns frame IDs that can be passed to query_frame.
+
+    Input Parameters:
+        - query (str): Visual description of what to search for (e.g., "frames showing person exercising")
+        - video_id (str): Video identifier to filter frames
+        - index_name (str): Search index name for keyframe search
+        - top_k (int): Number of relevant frames to retrieve (default: 10)
+        - provider_name (Optional[str]): Search provider name (e.g., "local_faiss", "azure_ai_search")
+
+    Output:
+        List of keyframe filenames (strings) that can be passed to query_frame for visual analysis
+
+    Workflow:
+        1. Searches keyframe index using visual embeddings
+        2. Returns frame IDs as a list
+        3. Pass these frame IDs to query_frame for actual visual analysis
     """
     try:
         
