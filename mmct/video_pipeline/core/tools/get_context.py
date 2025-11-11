@@ -27,6 +27,7 @@ async def get_context(
     start_time: Annotated[Optional[float], "start time in seconds to filter documents with overlapping time range"] = None,
     end_time: Annotated[Optional[float], "end time in seconds to filter documents with overlapping time range"] = None,
     fields_to_retrieve: Annotated[Optional[list], "list of fields to retrieve from the chapter index"] = None,
+    top: Annotated[Optional[int], "number of top results to retrieve"] = 3,
 ) -> str:
     """
     Retrieve detailed chapter-level context from the video using semantic search.
@@ -52,6 +53,7 @@ async def get_context(
             * end_time: Chapter end time in seconds
             * hash_video_id: Video identifier
             * youtube_url: Video URL
+        - top: Number of top results to retrieve
 
     Output:
         List of chapter documents, each containing:
@@ -93,7 +95,7 @@ async def get_context(
         index_name=index_name,
         search_text=None,
         query_type="vector",
-        top=5,
+        top=top,
         filter=filter_query,
         select=fields_to_retrieve,
         embedding=embedding

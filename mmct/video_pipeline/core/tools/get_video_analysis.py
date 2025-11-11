@@ -11,6 +11,7 @@ async def get_video_analysis(
     index_name: Annotated[str, "name of the search index"],
     video_id: Annotated[Optional[str], "unique identifier for the video"] = None,
     url: Annotated[Optional[str], "url of the video"] = None,
+    top: Annotated[Optional[int], "number of top results to retrieve"] = 3,
     fields_to_retrieve: Annotated[Optional[List[str]], "list of fields to retrieve from the object collection index"] = None,
 ) -> List[Dict[str, Any]]:
     """
@@ -35,6 +36,7 @@ async def get_video_analysis(
                 - additional_details: Extra contextual information
             * object_count: Total number of unique objects identified
             * video_id: Video identifier
+        - top: Number of top results to retrieve
 
 
     Output:
@@ -68,6 +70,7 @@ async def get_video_analysis(
             search_text="*",
             filter=filter_query,
             query_type="semantic",
+            top=top,
             select=fields_to_retrieve,
         )
         return list(results)
