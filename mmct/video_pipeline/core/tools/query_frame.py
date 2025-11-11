@@ -43,8 +43,8 @@ async def download_and_encode_blob(file_name: str, folder_name: str, save_locall
 async def query_frame(
     query: Annotated[str, "user query according to which video content has to be analyzed. If options are available and relevant with the query, they should also be passed. e.g. 'What materials are required to prepare the chilly nursery bed, and what are their uses?','count the person doing exercise in the video?'"],
     index_name: Annotated[str, "search index name"],
-    frame_ids: Annotated[Optional[list], "List of specific frame filenames to analyze (e.g., ['video_123.jpg', 'video_456.jpg'])"] = None,
-    video_id: Annotated[Optional[str], "Unique video identifier hash for frame retrieval"] = None,
+    frame_ids: Annotated[Optional[list], "List of frame filenames to analyze (e.g., ['video_123.jpg', 'video_456.jpg'])"] = None,
+    video_id: Annotated[Optional[str], "Unique video identifier hash for frame retrieval. Mandatory if frame_ids are provided"] = None,
     start_time: Annotated[Optional[float], "start time in seconds"] = None,
     end_time: Annotated[Optional[float], "end time in seconds"] = None,
 ) -> str:

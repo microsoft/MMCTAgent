@@ -13,7 +13,7 @@ async def get_relevant_frames(
     query: Annotated[str, 'query to be look for frames'],
     video_id: Annotated[str, 'video id'],
     index_name: Annotated[str, 'search index name'],
-    top_k: Annotated[int, 'number of relevant frames to fetch'] = 10,
+    top_k: Annotated[int, 'number of relevant frames to fetch'] = 5,
     provider_name: Annotated[Optional[str], 'optional search provider name, e.g. "local_faiss" or "azure_ai_search"'] = None,
 ) -> List[str]:
     """

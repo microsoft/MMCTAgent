@@ -10,7 +10,8 @@ async def get_video_analysis(
     query: Annotated[str, "query to search for video analysis including objects, summary, and context"],
     index_name: Annotated[str, "name of the search index"],
     video_id: Annotated[Optional[str], "unique identifier for the video"] = None,
-    url: Annotated[Optional[str], "url of the video"] = None
+    url: Annotated[Optional[str], "url of the video"] = None,
+    fields_to_retrieve: Annotated[Optional[List[str]], "list of fields to retrieve from the object collection index"] = None,
 ) -> List[Dict[str, Any]]:
     """
     Retrieve high-level video analysis including object collection and video summary.
@@ -24,19 +25,23 @@ async def get_video_analysis(
         - index_name (str): Name of the search index
         - video_id (Optional[str]): Unique identifier for the video (use if available)
         - url (Optional[str]): URL of the video (alternative to video_id)
+        - fields_to_retrieve: Available fields:
+            * video_summary: Overall narrative and scene context of the video
+            * object_collection: JSON string containing list of objects with:
+                - name: Object identifier (e.g., "Person in blue shirt", "Red car")
+                - appearance: List of visual characteristics
+                - identity: List of type, category, role information
+                - first_seen: Timestamp in seconds when object first appears
+                - additional_details: Extra contextual information
+            * object_count: Total number of unique objects identified
+            * video_id: Video identifier
+
 
     Output:
-        List of dictionaries containing:
-        - video_summary (str): Overall narrative and scene context of the video
-        - object_collection (str): JSON string containing list of objects with:
-            * name: Object identifier (e.g., "Person in blue shirt", "Red car")
-            * appearance: List of visual characteristics
-            * identity: List of type, category, role information
-            * first_seen: Timestamp in seconds when object first appears
-            * additional_details: Extra contextual information
-        - object_count (int): Total number of unique objects identified
-        - video_id (str): Video identifier
+        List of dictionaries containing request fields
     """
+
+    print("in get_video_analysis function")
     # Construct the full index name
     full_index_name = f"object-collection-{index_name}"
 
@@ -63,7 +68,7 @@ async def get_video_analysis(
             search_text="*",
             filter=filter_query,
             query_type="semantic",
-            select=["object_collection", "object_count", "video_summary","video_id"],
+            select=fields_to_retrieve,
         )
         return list(results)
 
@@ -72,7 +77,7 @@ async def get_video_analysis(
         return []
     finally:
         await search_provider.close()
-
+        
 
 if __name__ == "__main__":
     import asyncio

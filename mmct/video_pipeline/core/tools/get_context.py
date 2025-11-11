@@ -22,10 +22,11 @@ except Exception as e:
 async def get_context(
     query: Annotated[str, "query for which documents needs to fetch"],
     index_name: Annotated[str, "vector index name"],
-    video_id: Annotated[str, "video id if provided in the instruction"] = None,
+    video_id: Annotated[str, "video id if provided in the instruction"]=None,
     url: Annotated[str, "url if provided in the instruction to filter out the search results"] = None,
     start_time: Annotated[Optional[float], "start time in seconds to filter documents with overlapping time range"] = None,
     end_time: Annotated[Optional[float], "end time in seconds to filter documents with overlapping time range"] = None,
+    fields_to_retrieve: Annotated[Optional[list], "list of fields to retrieve from the chapter index"] = None,
 ) -> str:
     """
     Retrieve detailed chapter-level context from the video using semantic search.
@@ -41,6 +42,16 @@ async def get_context(
         - url (Optional[str]): Video URL (alternative to video_id)
         - start_time (Optional[float]): Start time in seconds to filter documents (returns docs with overlapping time range)
         - end_time (Optional[float]): End time in seconds to filter documents (returns docs with overlapping time range)
+        - fields_to_retrieve - Available fields:
+            * chapter_transcript: Transcript with timestamps for this segment
+            * detailed_summary: Visual summary of what happens in the chapter
+            * action_taken: Specific actions performed or demonstrated
+            * text_from_scene: Text visible in video (signs, captions, etc.)
+            * object_collection: JSON string of objects in this chapter
+            * start_time: Chapter start time in seconds
+            * end_time: Chapter end time in seconds
+            * hash_video_id: Video identifier
+            * youtube_url: Video URL
 
     Output:
         List of chapter documents, each containing:
@@ -84,17 +95,7 @@ async def get_context(
         query_type="vector",
         top=5,
         filter=filter_query,
-        select=[
-            "detailed_summary",
-            "action_taken",
-            "text_from_scene",
-            "chapter_transcript",
-            "hash_video_id",
-            "youtube_url",
-            "object_collection",
-            "end_time",
-            "start_time",
-        ],
+        select=fields_to_retrieve,
         embedding=embedding
     )
     return search_results
