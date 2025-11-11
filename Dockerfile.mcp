@@ -1,0 +1,17 @@
+FROM geckocontainerregistry.azurecr.io/mmct-base:latest
+
+# Set working directory
+WORKDIR /app
+
+# Copy .env file
+COPY .env .
+
+# Expose the MCP server port
+EXPOSE 8000
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
+
+# Run the MCP server
+CMD ["python", "mcp_server/main.py"]
