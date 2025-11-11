@@ -539,8 +539,17 @@ When answer options are provided:
   - Do NOT introduce a new answer formulation outside the provided choices.
   - Always include the options while querying the `query_frame` tool to ensure accurate verification.
 
-- If NO options are provided:
-  - Answer normally according to the standard workflow.
+## MULTIPLE-CHOICE QUESTIONS
+When answer options are provided:
+- Final answer MUST select from the given options
+- Determine factual answer using workflow above, then map to closest option
+- If evidence doesn't clearly support any option: "Not enough information to confidently select one of the provided options."
+- Never rewrite or modify the provided options
+
+## HELPFUL TIPS
+- video_id and hash_video_id refer to the same identifier
+
+---
 
 Begin.
 Question: {{input}}
