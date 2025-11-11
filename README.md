@@ -33,12 +33,12 @@ MMCTAgent is a state-of-the-art multi-modal AI framework that brings human-like 
 ### Why MMCTAgent?
 
 - **🧠 Self Reflection Framework**: MMCTAgent emulates iteratively analyzing multi-modal information, decomposing complex queries, planning strategies, and dynamically evolving its reasoning. Designed as a research framework, MMCTAgent integrates critical thinking elements such as verification of final answers and self-reflection through a novel approach that defines a vision-based critic and identifies task-specific evaluation criteria, thereby enhancing its decision-making abilities.
-- **🔬 Enables Qurying over Multimodal Collections**: It enables modular design to plug-in right audio, visual extraction and processing tools, combined with Multimodal LLMs to ingest and query over large number of videos and image data.
+- **🔬 Enables Querying over Multimodal Collections**: It enables modular design to plug-in right audio, visual extraction and processing tools, combined with Multimodal LLMs to ingest and query over large number of videos and image data.
 - **🚀 Easy Integration**: Its modular design allows for easy integration into existing workflows and adding domain-specific tools, facilitating adoption across various domains requiring advanced visual reasoning capabilities.
 
 <p align="center">
   <a href="https://arxiv.org/abs/2405.18358">
-    <img src="docs/multimedia/VideoPipeline.png" alt="Video Pipeline - Main Architecture" width="80%" />
+    <img src="docs/multimedia/VideoPipelineUpdated.png" alt="Video Pipeline - Main Architecture" width="80%" />
   </a>
 </p>
 
@@ -89,7 +89,8 @@ Optimized for deep video understanding:
 
    Applies a fixed toolchain orchestrated by the Planner:
 
-- `GET_CONTEXT` – Extracts transcript and visual summary chunks relevant to the query.
+- `GET_VIDEO_ANALYSIS` – Retrieves the most relevant video for the query, along with its summary and detected objects.
+- `GET_CONTEXT` – Extracts transcript, visual summary chunks and object collection info relevant to the query.
 - `GET_RELEVANT_FRAMES` – Provides semantically similar keyframes related to the query. This tool is based on the CLIP embedding.
 - `QUERY_FRAME` – Queries specific video keyframes to extract detailed information and provide additional visual context to the Planner.
 
