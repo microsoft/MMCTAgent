@@ -1,11 +1,26 @@
 ## Initial Evaluations of MMCTAgent
 
-| Dataset   | Claude 3 Opus* | Claude 3 Sonnet* | Claude 3 Haiku* | GPT-4V* | Gemini 1.0 Ultra* | Gemini 1.5 Pro* | Gemini 1.0 Pro* | MMCT w/o Critic | MMCT w Critic |
+| Image Dataset   | Claude 3 Opus* | Claude 3 Sonnet* | Claude 3 Haiku* | GPT-4V* | Gemini 1.0 Ultra* | Gemini 1.5 Pro* | Gemini 1.0 Pro* | MMCT w/o Critic | MMCT w Critic |
 |-----------|----------------|------------------|-----------------|---------|-------------------|-----------------|-----------------|-----------------|---------------|
 | MMMU      | 59.40          | 53.10            | 50.20           | 56.80   | 59.40             | 58.50           | 47.90           | 59.34           | **63.57**     |
 | MathVista | 50.50          | 47.90            | 46.40           | 49.90   | 53.00             | 52.10           | 45.20           | 53.30           | **56.50**     |
 | MMVET     | 51.70          | 51.30            | -               | 60.20   | -                 | 64.20           | -               | 70.51           | **74.24**     |
 | MMBench   | 63.30          | 67.80            | 60.70           | 77.00   | -                 | 73.60           | -               | 80.21           | **84.20**     |
+
+For EgoSchema video Dataset:
+| Method             | Acc. |
+|--------------------|------|
+| GPT-4V [2]         | 63.5 |
+| Gemini 1.0 Pro [32]| 61.5 |
+| LLoVi [46]         | 57.6 |
+| MC-ViT-L [6]       | 62.6 |
+| Video-LLaVa [14]   | 36.8 |
+| ViperGPT [31]      | 15.8 |
+| VideoAgent [34]    | 60.2 |
+| VideoAgent-M [9]   | 62.8 |
+| MMCT w/o Critic    | 68.8 |
+| **MMCT w Critic**  | **71.2** |
+
 
 ## Current Evaluations
 | Image Datasets | GPT-4V | MMCT with GPT-4V | GPT-4o | MMCT with GPT-4o | GPT-5 | MMCT with GPT-5 |
