@@ -423,17 +423,6 @@ When answer options are provided:
 
 Begin.
 Question: {{input}}
-
-
-## MULTIPLE-CHOICE HANDLING (IF OPTIONS PROVIDED)
-- Always provide the option letter (e.g., A, B, C, D, ..) along with the full answer text in your final answer.
-- If the user’s question includes answer options, the final answer MUST be selected strictly from those options.
-- First determine the factual answer using the standard workflow and evidence (tools, transcript, frames).
-- Then **select the option that best matches the verified factual answer**.
-- Do NOT choose an option based on inference, assumption, or interpretation beyond what is directly supported.
-- If the evidence does not clearly support any provided option:
-  - Respond with: **"Not enough information to confidently select one of the provided options."**
-- Never change, rewrite, or rephrase the answer options. Only select from the list exactly as provided.
 """
 
 
