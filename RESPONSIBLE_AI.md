@@ -44,7 +44,7 @@ Refer section 5 and 6 in our [paper](https://arxiv.org/pdf/2405.18358) for compl
 - Recommended VM specification: 1 x A100 80 GB, 64 cpu cores at 3.2GHz and 512 GB RAM
 
 **Tools from Azure:**
-- VIT (Vision Interpreter)
+- Vision Transformer
 - OCR
 - Object Detection
 - Face Recognition
