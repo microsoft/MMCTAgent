@@ -19,7 +19,9 @@ Ensure to install the requirements from the `requirements.txt` present in the ba
 python main.py
 ```
 
-Server runs on `http://0.0.0.0:8000` by default.
+Server runs on `http://0.0.0.0:8000` by default on `streamable-http` transport. 
+
+Learn more about the [MCP transport configuration](https://deepwiki.com/jlowin/fastmcp/7.1-transport-protocols).
 </details>
 
 <details>

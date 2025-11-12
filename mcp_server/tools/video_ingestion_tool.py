@@ -43,7 +43,8 @@ async def video_ingestion_tool(
     language: Languages,
     transcription_service: Optional[str] = None,
     url: Optional[str] = None,
-    transcript_path: Optional[str] = None,
+    transcript_url: Optional[str] = None,
+    transcript_file_name: Optional[str] = None,
     use_computer_vision_tool: Optional[bool] = False,
     disable_console_log: Annotated[bool, "boolean flag to disable console logs"] = False,
     hash_video_id: Annotated[str, "unique Hash Video Id"] = None,
@@ -62,20 +63,30 @@ async def video_ingestion_tool(
                     logger.warning(f"Failed to download video, status code: {response.status}")
                     raise Exception(f"Failed to download video, status code: {response.status}")
 
+        async with aiohttp.ClientSession() as session:
+            async with session.get(transcript_url) as response:
+                if response.status == 200:
+                    async with aiofiles.open(transcript_file_name, "wb") as f:
+                        await f.write(await response.read())
+                    logger.info(f"Transcript saved to {transcript_file_name}")
+                else:
+                    logger.warning(f"Failed to download transcript, status code: {response.status}")
+                    raise Exception(f"Failed to download transcript, status code: {response.status}")
+
         ingestion_tool = IngestionPipeline(
             video_path=os.path.join(os.getcwd(), file_name),
             index_name=index_name,
             language=language,
             transcription_service=transcription_service,
             url=url,
-            transcript_path=transcript_path,
+            transcript_path=os.path.join(os.getcwd(), transcript_file_name) if transcript_file_name else None,
             use_computer_vision_tool=use_computer_vision_tool,
             disable_console_log=disable_console_log,
             hash_video_id=hash_video_id,
             frame_stacking_grid_size=frame_stacking_grid_size,
         )
 
-        await ingestion_tool()
+        await ingestion_tool.run()
     except Exception as e:
         raise e
     finally:
