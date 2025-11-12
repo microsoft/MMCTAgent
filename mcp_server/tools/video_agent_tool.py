@@ -1,6 +1,9 @@
 from mcp_server.server import mcp
 from typing import Optional, Annotated
 from mmct.video_pipeline import VideoAgent
+from mmct.video_pipeline.core.tools.query_federator import query_federator
+from loguru import logger
+import sys
 
 @mcp.tool(
     name="video_agent_tool",
@@ -34,16 +37,22 @@ async def video_agent_tool(
     url: Optional[str] = None,
     use_critic_agent: Optional[bool] = True,
 ):
-    video_agent = VideoAgent(
+    # Configure logger to output to console
+    # Remove default handler and add custom console handler
+    logger.remove()  # Remove default handlers
+    logger.add(
+        sys.stdout,
+        format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
+        level="INFO",
+        colorize=True
+    )
+    
+    response = await query_federator(
         query=query,
         index_name=index_name,
         video_id=video_id,
         url=url,
         use_critic_agent=use_critic_agent,
-        stream=True,  # Always enable streaming for log capture
     )
-    
-    # Run the agent
-    response = await video_agent()
     
     return response
