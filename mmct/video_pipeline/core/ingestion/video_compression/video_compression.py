@@ -127,13 +127,17 @@ class VideoCompressor:
         self.logger.info(f"Target video bitrate: {bitrate} kbps")
         return bitrate
 
-    def _run_and_log(self, command, description):
+    async def _run_and_log(self, command, description):
+        import asyncio
+        
         self.logger.info(f"Starting: {description} of {self.input_path}")
-        process = subprocess.Popen(
-            command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False
+        process = await asyncio.create_subprocess_exec(
+            *command,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
         )
-        out, err = process.communicate()
-        self.logger.debug(f"--- {description} stderr ---\n{err.strip()}")
+        out, err = await process.communicate()
+        self.logger.debug(f"--- {description} stderr ---\n{err.decode().strip()}")
         if process.returncode != 0:
             self.logger.error(f"{description} failed. See log for details.")
         else:
@@ -152,7 +156,7 @@ class VideoCompressor:
     # ------------------------------------------------------------------
     # Fast single-pass compression
     # ------------------------------------------------------------------
-    def _compress_fast(self):
+    async def _compress_fast(self):
         """
         Fast proxy-style compression:
         - single pass
@@ -212,12 +216,12 @@ class VideoCompressor:
         audio_opts = ["-c:a", self.audio_codec, "-b:a", f"{self.audio_bitrate}k"]
 
         cmd = base_cmd + video_opts + audio_opts + [self.output_path]
-        self._run_and_log(cmd, "Fast Compression (single pass)")
+        await self._run_and_log(cmd, "Fast Compression (single pass)")
 
     # ------------------------------------------------------------------
     # Original two-pass compression
     # ------------------------------------------------------------------
-    def _compress_twopass(self):
+    async def _compress_twopass(self):
         """Two-pass size-targeted compression (slower but more precise)."""
         base_cmd = ["ffmpeg", "-y", "-i", str(self.input_path)]
 
@@ -275,22 +279,22 @@ class VideoCompressor:
         if not self.use_gpu:
             cmd2.extend(["-threads", self.threads])
 
-        self._run_and_log(cmd1, "First Pass")
-        self._run_and_log(cmd2, "Second Pass")
+        await self._run_and_log(cmd1, "First Pass")
+        await self._run_and_log(cmd2, "Second Pass")
         self._cleanup_temp_files()
 
     # ------------------------------------------------------------------
     # Main entrypoint
     # ------------------------------------------------------------------
-    def compress(self):
+    async def compress(self):
         """
         fast_mode=True  -> single-pass proxy compression (recommended for analytics)
         fast_mode=False -> 2-pass size-constrained compression
         """
         if self.fast_mode:
-            self._compress_fast()
+            await self._compress_fast()
         else:
-            self._compress_twopass()
+            await self._compress_twopass()
 
         # Validate output
         try:
@@ -314,6 +318,7 @@ class VideoCompressor:
 # ----------------------------------------------------------------------
 if __name__ == "__main__":
     import argparse
+    import asyncio
 
     parser = argparse.ArgumentParser(description="Compress video files to target size or proxy")
     parser.add_argument("input_path", help="Path to input video file")
@@ -347,4 +352,4 @@ if __name__ == "__main__":
         crf=args.crf,
         nvenc_cq=args.nvenc_cq,
     )
-    compressor.compress()
+    asyncio.run(compressor.compress())
