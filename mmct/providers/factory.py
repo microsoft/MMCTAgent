@@ -52,6 +52,10 @@ class ProviderFactory:
         # Add other search providers here
     }
     
+    # Cache for reusable provider instances (singleton pattern)
+    _search_provider_cache: Dict[str, SearchProvider] = {}
+    _embedding_provider_cache: Dict[str, EmbeddingProvider] = {}
+    
     _vision_providers: Dict[str, Type[VisionProvider]] = {
         'azure': AzureVisionProvider,
         'openai': OpenAIVisionProvider,
@@ -97,12 +101,13 @@ class ProviderFactory:
         return provider_class(config.llm.model_dump())
     
     @classmethod
-    def create_embedding_provider(cls, provider_name: str = None) -> EmbeddingProvider:
+    def create_embedding_provider(cls, provider_name: str = None, enable_cache: bool = True) -> EmbeddingProvider:
         """
-        Create embedding provider instance.
+        Create embedding provider instance with optional caching.
 
         Args:
             provider_name: Name of the provider (optional, defaults to config)
+            enable_cache: If True, reuse cached instance for better performance (default: True)
 
         Returns:
             EmbeddingProvider instance
@@ -114,6 +119,11 @@ class ProviderFactory:
         if provider_name is None:
             provider_name = config.embedding.provider
 
+        # Check cache first if caching is enabled
+        if enable_cache and provider_name in cls._embedding_provider_cache:
+            logger.debug(f"Reusing cached embedding provider: {provider_name}")
+            return cls._embedding_provider_cache[provider_name]
+
         if provider_name not in cls._embedding_providers:
             raise ConfigurationException(
                 f"Unknown embedding provider: {provider_name}. "
@@ -122,15 +132,22 @@ class ProviderFactory:
 
         provider_class = cls._embedding_providers[provider_name]
         logger.info(f"Creating embedding provider: {provider_name}")
-        return provider_class(config.embedding.model_dump())
+        provider_instance = provider_class(config.embedding.model_dump())
+
+        # Cache the instance if caching is enabled
+        if enable_cache:
+            cls._embedding_provider_cache[provider_name] = provider_instance
+
+        return provider_instance
     
     @classmethod
-    def create_search_provider(cls, provider_name: str = None) -> SearchProvider:
+    def create_search_provider(cls, provider_name: str = None, enable_cache: bool = True) -> SearchProvider:
         """
-        Create search provider instance.
+        Create search provider instance with optional caching.
 
         Args:
             provider_name: Name of the provider (optional, defaults to config)
+            enable_cache: If True, reuse cached instance for better performance (default: True)
 
         Returns:
             SearchProvider instance
@@ -141,6 +158,11 @@ class ProviderFactory:
         config = MMCTConfig()
         if provider_name is None:
             provider_name = config.search.provider
+
+        # Check cache first if caching is enabled
+        if enable_cache and provider_name in cls._search_provider_cache:
+            logger.debug(f"Reusing cached search provider: {provider_name}")
+            return cls._search_provider_cache[provider_name]
 
         if provider_name not in cls._search_providers:
             raise ConfigurationException(
@@ -165,6 +187,10 @@ class ProviderFactory:
                 setattr(provider_instance, "provider", provider_name)
             except Exception:
                 pass
+
+        # Cache the instance if caching is enabled
+        if enable_cache:
+            cls._search_provider_cache[provider_name] = provider_instance
 
         return provider_instance
     

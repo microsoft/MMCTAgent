@@ -8,3 +8,8 @@ class LLMProvider(ABC):
     async def chat_completion(self, messages: List[Dict], **kwargs) -> Dict[str, Any]:
         """Generate chat completion response."""
         pass
+
+    @abstractmethod
+    def get_autogen_client(self):
+        """Generate autogen model client"""
+        pass
