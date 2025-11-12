@@ -53,6 +53,7 @@ class ProviderFactory:
     }
     
     # Cache for reusable provider instances (singleton pattern)
+    _llm_provider_cache: Dict[str, LLMProvider] = {}
     _search_provider_cache: Dict[str, SearchProvider] = {}
     _embedding_provider_cache: Dict[str, EmbeddingProvider] = {}
     
@@ -73,12 +74,13 @@ class ProviderFactory:
     }
 
     @classmethod
-    def create_llm_provider(cls, provider_name: str = None) -> LLMProvider:
+    def create_llm_provider(cls, provider_name: str = None, enable_cache: bool = True) -> LLMProvider:
         """
-        Create LLM provider instance.
+        Create LLM provider instance with optional caching.
 
         Args:
             provider_name: Name of the provider (optional, defaults to config)
+            enable_cache: If True, reuse cached instance for better performance (default: True)
 
         Returns:
             LLMProvider instance
@@ -90,6 +92,11 @@ class ProviderFactory:
         if provider_name is None:
             provider_name = config.llm.provider
 
+        # Check cache first if caching is enabled
+        if enable_cache and provider_name in cls._llm_provider_cache:
+            logger.debug(f"Reusing cached LLM provider: {provider_name}")
+            return cls._llm_provider_cache[provider_name]
+
         if provider_name not in cls._llm_providers:
             raise ConfigurationException(
                 f"Unknown LLM provider: {provider_name}. "
@@ -98,7 +105,13 @@ class ProviderFactory:
 
         provider_class = cls._llm_providers[provider_name]
         logger.info(f"Creating LLM provider: {provider_name}")
-        return provider_class(config.llm.model_dump())
+        provider_instance = provider_class(config.llm.model_dump())
+
+        # Cache the instance if caching is enabled
+        if enable_cache:
+            cls._llm_provider_cache[provider_name] = provider_instance
+
+        return provider_instance
     
     @classmethod
     def create_embedding_provider(cls, provider_name: str = None, enable_cache: bool = True) -> EmbeddingProvider:
