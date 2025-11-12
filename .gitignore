@@ -12,7 +12,14 @@ media/
 build/
 develop-eggs/
 dist/
+mmct/tests/ingestion_data/
 downloads/
+examples/local_storage/
+examples/media/
+examples/logs/
+examples/original_chapter_jsons/
+examples/result_csvs/
+examples/scripts/
 eggs/
 .eggs/
 lib/
@@ -197,3 +204,8 @@ cython_debug/
 .cursorignore
 .cursorindexingignore
 .github/copilot-instructions.md
+.env.geckoai
+.env.geckoai2
+.env.geckoai3
+.env.geckoai4
+.env.geckoai5
