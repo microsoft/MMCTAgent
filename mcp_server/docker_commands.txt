@@ -1,0 +1,5 @@
+az acr login --name geckocontainerregistry
+docker build -t geckocontainerregistry.azurecr.io/mmct-mcp:latest -f Dockerfile.mcp .
+docker push geckocontainerregistry.azurecr.io/mmct-mcp:latest
+docker push geckocontainerregistry.azurecr.io/mmct-base:latest
+docker system prune -a --volumes

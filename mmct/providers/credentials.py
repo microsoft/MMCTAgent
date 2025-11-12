@@ -11,7 +11,13 @@ from azure.identity.aio import (
     AzureCliCredential as AsyncAzureCliCredential,
     ChainedTokenCredential as AsyncChainedTokenCredential
 )
+
+import os
+import time
+from typing import Any, Dict, Optional
 from dotenv import load_dotenv, find_dotenv
+import requests
+from azure.core.credentials import TokenCredential, AccessToken
 
 load_dotenv(find_dotenv(),override=True)
 
