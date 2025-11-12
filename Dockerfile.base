@@ -26,21 +26,17 @@ RUN apt-get update && \
 # Set working directory
 WORKDIR /app
 
-# Copy project files for dependency resolution
+# Copy only dependency files for installation
 COPY pyproject.toml .
 COPY requirements.txt .
 COPY setup.py .
 COPY README.md .
 
-# Copy core package and available directories
-COPY mmct/ mmct/
-COPY config/ config/
-COPY docs/ docs/
-COPY mcp_server/ mcp_server/
-
-# Install Python dependencies
+# Install Python dependencies (excluding editable install)
 RUN pip install --upgrade pip>=24.3
-RUN pip install --no-cache-dir -r requirements.txt
+RUN grep -v '^-e' requirements.txt > requirements_base.txt && \
+    pip install --no-cache-dir -r requirements_base.txt && \
+    rm requirements_base.txt
 
 # Create directories for runtime
 RUN mkdir -p /app/media /app/logs

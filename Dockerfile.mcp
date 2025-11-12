@@ -3,6 +3,14 @@ FROM geckocontainerregistry.azurecr.io/mmct-base:latest
 # Set working directory
 WORKDIR /app
 
+# Copy application code
+COPY mmct/ mmct/
+COPY config/ config/
+COPY mcp_server/ mcp_server/
+
+# Install the package in editable mode
+RUN pip install -e .
+
 # Copy .env file
 COPY .env .
 
