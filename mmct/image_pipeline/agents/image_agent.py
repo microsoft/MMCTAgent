@@ -209,6 +209,8 @@ class ImageAgent:
                 Make sure 'critic' agent comes only when planner ask for criticism or feedback.
                 For your information - There are only two agents - 'planner' & 'critic'
                 Only select one agent.
+
+                - Limit the Planner–Critic feedback loop to **maximum 3 rounds**.
                 """
                 self.team = SelectorGroupChat(
                     [self.planner_agent, self.critic_agent],
