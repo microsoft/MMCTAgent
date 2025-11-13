@@ -241,18 +241,21 @@ async def video_qna(
     )
     if stream:
         response_generator = await video_qna_instance.run_stream()
-        # messages = await Console(response_generator)
+        messages = await Console(response_generator)
         # Stream messages through logger instead of Console
-        messages = []
-        async for message in response_generator:
+        # messages = []
+        # async for message in response_generator:
             # Log the message content without the "Agent Message:" prefix
-            if hasattr(message, 'content') and message.content:
-                logger.info(f"Agent Message:{message.content}")  # Using : as separator for filtering
-            messages.append(message)
+           #  if hasattr(message, 'content') and message.content:
+                # logger.info(f"Agent Message:{message.content}")  # Using : as separator for filtering
+            # messages.append(message)
         
         # Return the final result
         if messages:
-            last_message = messages[-1]
+            if isinstance(messages, list):
+                last_message = messages[-1]
+            else:
+                last_message = messages
             if isinstance(last_message, TaskResult):
                 return last_message.messages[-1] if last_message.messages else last_message
             return last_message
