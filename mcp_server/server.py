@@ -17,5 +17,5 @@ async def health_check(request):
     return JSONResponse({
         "status": "healthy",
         "service": "MMCT Agent MCP Server",
-        "version": "1.0.0"
+        "version": "2.0.0"
     })

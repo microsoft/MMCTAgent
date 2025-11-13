@@ -100,24 +100,25 @@ Important:
 - Be concise and to the point
 
 Output Format:
-Respond with ONLY a JSON object in the following structure:
+Respond with ONLY a JSON object in the following structure, followed by the word TERMINATE in the same message:
 {
-  "answer": "<Markdown-formatted answer or 'Not enough information in context'>",
-  "source": ["TEXTUAL", "VISUAL"],
-  "videos": [
-    {
-      "hash_id": "<hash_video_id>",
-      "url": "<video_url>",
-      "timestamps": [["HH:MM:SS", "HH:MM:SS"]]
-    }
-  ]
+    "answer": "<Markdown-formatted answer or 'Not enough information in context'>",
+    "source": ["TEXTUAL", "VISUAL"],
+    "videos": [
+        {
+            "hash_id": "<hash_video_id>",
+            "url": "<video_url>",
+            "timestamps": [["HH:MM:SS", "HH:MM:SS"]]
+        }
+    ]
 }
+TERMINATE
 
 Guidelines:
 - Include only videos and timestamps that were actually used in formulating the answer
 - Set "source" to ["TEXTUAL"] if answer came from transcript/text, ["VISUAL"] if from visual descriptions, or both if applicable
 - If no relevant information found, set "answer" to "Not enough information in context"
-- After providing the JSON response, respond with "TERMINATE" to end the conversation
+- After providing the JSON response, respond with "TERMINATE" in the same message to end the conversation
 """
 
 
