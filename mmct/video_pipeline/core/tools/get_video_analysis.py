@@ -5,6 +5,9 @@ from dotenv import load_dotenv, find_dotenv
 
 load_dotenv(find_dotenv())
 
+# Initialize search provider
+search_provider = provider_factory.create_search_provider()
+embed_provider = provider_factory.create_embedding_provider()
 
 async def get_video_analysis(
     query: Annotated[str, "query to search for video analysis including objects, summary, and context"],
@@ -43,17 +46,8 @@ async def get_video_analysis(
         List of dictionaries containing request fields
     """
 
-    print("in get_video_analysis function")
     # Construct the full index name
     full_index_name = f"object-collection-{index_name}"
-
-    # Get search endpoint from environment
-    search_endpoint = os.getenv("SEARCH_ENDPOINT")
-    if not search_endpoint:
-        raise ValueError("SEARCH_ENDPOINT environment variable not set")
-
-    # Initialize search provider
-    search_provider = provider_factory.create_search_provider()
 
     try:
         # Build filter query
@@ -62,16 +56,21 @@ async def get_video_analysis(
             filter_query = f"url eq '{url}'"
         elif video_id:
             filter_query = f"video_id eq '{video_id}'"
-        #create embedding of query and pass
-        # Search for all video analysis matching the filter
+        
+        # embedding generation for the query
+        embedding = await embed_provider.embedding(query)
+
+        # Search for relevant video analysis matching the filter
         results = await search_provider.search(
             query=query,
             index_name=full_index_name,
             search_text="*",
             filter=filter_query,
+            embedding=embedding,
             query_type="semantic",
             top=top,
             select=fields_to_retrieve,
+            embedding_field_name="video_summary_embedding"
         )
         return list(results)
 
@@ -87,12 +86,12 @@ if __name__ == "__main__":
 
     async def main():
         # Example usage
-        index_name = "test"
-        video_id = "d678544d517a57050f6a6881b0eb26496536053c45711ac624104cd2fccc00dc"
+        index_name = "<index-name>"
+        video_id = "<video-id>" # if available
 
-        print(f"Fetching video analysis for video_id: {video_id}")
+        # print(f"Fetching video analysis for video_id: {video_id}")
         analysis = await get_video_analysis(
-            query="sample query",
+            query="<your-query-here>",
             index_name=index_name,
             video_id=video_id
         )
