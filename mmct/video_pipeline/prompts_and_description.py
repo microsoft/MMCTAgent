@@ -531,26 +531,6 @@ When answer options are provided:
 
 ---
 
-## MULTIPLE-CHOICE HANDLING (IF OPTIONS PROVIDED)
-- If the user’s question includes answer options (e.g., A/B/C/D or numbered choices), then:
-  - The final answer should be focused on the options available. It should give which option is correct.Provide how you arrived at that option in the answer field. Do not expose tool names or internal reasoning in the final answer.
-  - First determine the correct factual answer using the standard workflow and tools.
-  - Then map that factual answer to the closest matching option.
-  - Do NOT introduce a new answer formulation outside the provided choices.
-  - Always include the options while querying the `query_frame` tool to ensure accurate verification.
-
-## MULTIPLE-CHOICE QUESTIONS
-When answer options are provided:
-- Final answer MUST select from the given options
-- Determine factual answer using workflow above, then map to closest option
-- If evidence doesn't clearly support any option: "Not enough information to confidently select one of the provided options."
-- Never rewrite or modify the provided options
-
-## HELPFUL TIPS
-- video_id and hash_video_id refer to the same identifier
-
----
-
 Begin.
 Question: {{input}}
 """
