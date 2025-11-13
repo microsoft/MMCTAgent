@@ -74,20 +74,6 @@ class ObjectCollection(BaseModel):
     )
 
 
-class ObjectCollection(BaseModel):
-    """Pydantic model for the collection of all objects tracked in a video segment.
-
-    This model maintains a collection of objects (people, objects, animals, etc.)
-    identified and tracked throughout the video.
-    """
-    model_config = ConfigDict(extra="forbid")
-
-    objects: Optional[List[ObjectResponse]] = Field(
-        ...,
-        description="List of ObjectResponse objects containing details like appearance, identity, and first appearance timestamp for each object (e.g., 'iPhone 15 Pro', 'main presenter', 'red car')"
-    )
-
-
 
 class ChapterCreationResponse(BaseModel):
     """Pydantic model for validating responses from the create_chapter function.
@@ -109,19 +95,9 @@ class ChapterCreationResponse(BaseModel):
         None,
         description="Text extracted from the video scenes"
     )
-<<<<<<< HEAD
     object_collection: Optional[List[ObjectResponse]] = Field(
         default=None,
-<<<<<<< HEAD
         description="Collection of all objects (people, objects, animals, etc.) tracked in this video segment."
-=======
-        description="Registry of all subjects (people, objects, animals, etc.) tracked in this video segment. Dictionary mapping subject names to their corresponding SubjectResponse objects. The key is the subject's name (e.g., 'iPhone 15 Pro', 'main presenter', 'red car')"
->>>>>>> dfb5611 (create combined subject registry and indexing)
-=======
-    subject_registry: Optional[List[SubjectResponse]] = Field(
-        default=None,
-        description="Registry of all subjects (people, objects, animals, etc.) tracked in this video segment."
->>>>>>> c8e6bcb (change subject registry as List of subjects instead of dictionaries as it was consuming extra token and adding no value)
     )
     
     def __str__(self, transcript: str = None) -> str:
@@ -147,7 +123,6 @@ class ChapterCreationResponse(BaseModel):
         if self.text_from_scene and self.text_from_scene.lower() != "none":
             text += f"Text visible in the video includes: {self.text_from_scene}. "
 
-<<<<<<< HEAD
         # Add object collection information if available
         if self.object_collection:
             text += "Objects in the video: "
@@ -156,16 +131,6 @@ class ChapterCreationResponse(BaseModel):
                 object_desc = f"{object_info.name} (first seen at {object_info.first_seen}s)"
                 object_descriptions.append(object_desc)
             text += ", ".join(object_descriptions) + ". "
-=======
-        # Add subject registry information if available
-        if self.subject_registry:
-            text += "Subjects in the video: "
-            subject_descriptions = []
-            for subject_info in self.subject_registry:
-                subject_desc = f"{subject_info.name} (first seen at {subject_info.first_seen}s)"
-                subject_descriptions.append(subject_desc)
-            text += ", ".join(subject_descriptions) + ". "
->>>>>>> dfb5611 (create combined subject registry and indexing)
         
         # Add transcript if provided
         if transcript:

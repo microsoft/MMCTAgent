@@ -89,25 +89,41 @@ class AzureSearchProvider(SearchProvider):
         """
         Get or create a SearchClient for the specified index.
         Uses caching to avoid creating multiple clients for the same index.
-        
+        Handles closed clients by recreating them when needed.
+
         Args:
             index_name: Name of the index. If None, uses the default index.
-            
+
         Returns:
             SearchClient instance for the specified index
         """
         # Use default index name if not specified
         if not index_name:
             index_name = self._default_index_name
-        
+
         # Check cache for existing client
         if index_name in self._client_cache:
             return self._client_cache[index_name]
-        
+
         # Create and cache new client
         new_client = self._create_search_client(index_name)
         self._client_cache[index_name] = new_client
         return new_client
+
+    def _invalidate_client_cache(self, index_name: Optional[str] = None):
+        """
+        Invalidate cached client(s) when they become unusable.
+
+        Args:
+            index_name: Specific index to invalidate, or None to clear all
+        """
+        if index_name:
+            if index_name in self._client_cache:
+                logger.debug(f"Invalidating cached client for index '{index_name}'")
+                del self._client_cache[index_name]
+        else:
+            logger.debug("Clearing all cached clients")
+            self._client_cache.clear()
 
     def _create_video_chapter_index_schema(self, index_name: str, dim: int = 1536) -> SearchIndex:
         """
@@ -326,6 +342,7 @@ class AzureSearchProvider(SearchProvider):
 
             # Get appropriate client for the index
             client = self._get_client_for_index(index_name)
+            client_retry_attempted = False
 
             # Handle semantic search configuration
             if query_type == "semantic":
@@ -336,9 +353,9 @@ class AzureSearchProvider(SearchProvider):
             if query_type == "vector":
                 query_type = None
                 search_text = None
-<<<<<<< HEAD
 
             # Get index schema to find vector fields
+            vector_field = "embeddings"  # Default vector field name
             try:
                 index = await self.index_client.get_index(index_name or self._default_index_name)
                 vector_fields = [
@@ -346,13 +363,29 @@ class AzureSearchProvider(SearchProvider):
                     for f in index.fields
                     if getattr(f, "vector_search_dimensions", None)
                 ]
-                vector_field = vector_fields[0] if vector_fields else None
+                if vector_fields:
+                    vector_field = vector_fields[0]
+                    logger.debug(f"Using vector field: {vector_field}")
             except Exception as ex:
-                logger.warning(f"Could not retrieve index schema: {ex}")
-                vector_field = None
-=======
->>>>>>> 75d8a67 (updated: azure search config and removed grapgrag param)
-                
+                # If index_client was closed, try recreating it once
+                if "closed" in str(ex).lower() or "transport" in str(ex).lower():
+                    try:
+                        logger.info("Index client appears closed, reinitializing...")
+                        self.index_client = self._initialize_index_client()
+                        index = await self.index_client.get_index(index_name or self._default_index_name)
+                        vector_fields = [
+                            f.name
+                            for f in index.fields
+                            if getattr(f, "vector_search_dimensions", None)
+                        ]
+                        if vector_fields:
+                            vector_field = vector_fields[0]
+                            logger.debug(f"Using vector field: {vector_field} after reinit")
+                    except Exception as reinit_ex:
+                        logger.warning(f"Could not reinitialize and retrieve index schema: {reinit_ex}. Using default vector field: {vector_field}")
+                else:
+                    logger.warning(f"Could not retrieve index schema: {ex}. Using default vector field: {vector_field}")
+
             # Build vector queries if embedding provided
             if embedding and top and not vector_queries:
                 vector_query = VectorizedQuery(
@@ -360,19 +393,44 @@ class AzureSearchProvider(SearchProvider):
                 )
                 vector_queries = [vector_query]
 
-            
-            
-            # Execute search
-            results = await client.search(
-                search_text=search_text,
-                top=top,
-                query_type=query_type,
-                vector_queries=vector_queries,
-                semantic_configuration_name=semantic_configuration_name,
-                **kwargs
-            )
-            
-            return [dict(result) async for result in results]
+
+
+            # Execute search with retry logic for closed connections
+            try:
+                results = await client.search(
+                    search_text=search_text,
+                    top=top,
+                    query_type=query_type,
+                    vector_queries=vector_queries,
+                    semantic_configuration_name=semantic_configuration_name,
+                    **kwargs
+                )
+
+                return [dict(result) async for result in results]
+            except Exception as search_ex:
+                # Check if this is a connection/transport error
+                error_msg = str(search_ex).lower()
+                if not client_retry_attempted and ("disconnected" in error_msg or "closed" in error_msg or "transport" in error_msg):
+                    logger.warning(f"Client connection issue detected: {search_ex}. Invalidating cache and retrying...")
+                    # Invalidate the cached client and retry once
+                    self._invalidate_client_cache(index_name)
+                    client = self._get_client_for_index(index_name)
+                    client_retry_attempted = True
+
+                    # Retry the search with fresh client
+                    results = await client.search(
+                        search_text=search_text,
+                        top=top,
+                        query_type=query_type,
+                        vector_queries=vector_queries,
+                        semantic_configuration_name=semantic_configuration_name,
+                        **kwargs
+                    )
+
+                    return [dict(result) async for result in results]
+                else:
+                    # Not a connection error or already retried, re-raise
+                    raise
         except Exception as e:
             logger.error(f"Azure AI Search failed: {e}")
             raise ProviderException(f"Azure AI Search failed: {e}")
@@ -578,18 +636,26 @@ class AzureSearchProvider(SearchProvider):
     async def close(self):
         """Close all search clients and cleanup resources."""
         try:
-            # Close all cached clients
-            for index_name, client in self._client_cache.items():
-                logger.info(f"Closing Azure AI Search client for index '{index_name}'")
-                await client.close()
-            
+            # Close all cached search clients
+            for index_name, client in list(self._client_cache.items()):
+                try:
+                    logger.info(f"Closing Azure AI Search client for index '{index_name}'")
+                    await client.close()
+                except Exception as client_ex:
+                    logger.debug(f"Client close error for index '{index_name}': {client_ex}")
+
             # Clear the cache
             self._client_cache.clear()
-            
-            # Close index client
+
+            # Close index client if it exists and hasn't been closed already
             if self.index_client:
-                logger.info("Closing Azure AI Search Index client")
-                await self.index_client.close()
+                try:
+                    logger.info("Closing Azure AI Search Index client")
+                    await self.index_client.close()
+                    self.index_client = None
+                except Exception as close_ex:
+                    # Client might already be closed, ignore the error
+                    logger.debug(f"Index client close error (may already be closed): {close_ex}")
         except Exception as e:
             logger.error(f"Error during client cleanup: {e}")
             # Don't raise exception during cleanup to avoid masking original errors

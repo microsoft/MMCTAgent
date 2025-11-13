@@ -103,21 +103,9 @@ class ChapterIndexDocument(BaseModel):
         facetable=True,
         key=False
     )
-<<<<<<< HEAD
-<<<<<<< HEAD
     object_collection: str = Field(
         default="[]",
         description="JSON string array of object collection tracking all objects (people, objects, etc.) in the video segment",
-=======
-    subject_registry: str = Field(
-        default="[]",
-        description="JSON string array of subject registry tracking all subjects (people, objects, etc.) in the video segment",
->>>>>>> c8e6bcb (change subject registry as List of subjects instead of dictionaries as it was consuming extra token and adding no value)
-=======
-    object_collection: str = Field(
-        default="[]",
-        description="JSON string array of object collection tracking all objects (people, objects, etc.) in the video segment",
->>>>>>> b05446d (rename)
         searchable=True,
         filterable=False,
         retrievable=True,
@@ -402,34 +390,12 @@ class KeyframeDocument(BaseModel):
     )
 
 
-<<<<<<< HEAD
-<<<<<<< HEAD
 class ObjectCollectionDocument(BaseModel):
     """Document model for combined object collection search index."""
 
     id: str = Field(
         ...,
         description="Unique object collection document ID",
-=======
-class SubjectRegistryDocument(BaseModel):
-    """Document model for combined subject registry search index."""
-
-    id: str = Field(
-        ...,
-<<<<<<< HEAD
-        description="Unique subject document ID",
->>>>>>> ea4bc92 (align code with main branch changes)
-=======
-        description="Unique subject registry document ID",
->>>>>>> 10ff4c8 (create single subject registry document)
-=======
-class ObjectCollectionDocument(BaseModel):
-    """Document model for combined object collection search index."""
-
-    id: str = Field(
-        ...,
-        description="Unique object collection document ID",
->>>>>>> b05446d (rename)
         searchable=False,
         filterable=True,
         retrievable=True,
@@ -438,28 +404,10 @@ class ObjectCollectionDocument(BaseModel):
         facetable=False,
         key=True
     )
-<<<<<<< HEAD
-<<<<<<< HEAD
 
     video_id: str = Field(
         ...,
         description="Video hash ID this object collection belongs to",
-=======
- 
-    video_id: str = Field(
-        ...,
-        description="Video hash ID this subject belongs to",
->>>>>>> ea4bc92 (align code with main branch changes)
-=======
-
-    video_id: str = Field(
-        ...,
-<<<<<<< HEAD
-        description="Video hash ID this subject registry belongs to",
->>>>>>> 10ff4c8 (create single subject registry document)
-=======
-        description="Video hash ID this object collection belongs to",
->>>>>>> b05446d (rename)
         searchable=False,
         filterable=True,
         retrievable=True,
@@ -468,42 +416,6 @@ class ObjectCollectionDocument(BaseModel):
         facetable=False,
         key=False
     )
-<<<<<<< HEAD
-<<<<<<< HEAD
-
-    url: str = Field(
-        default="",
-        description="URL of the video",
-        searchable=False,
-=======
- 
-    name: str = Field(
-        ...,
-        description="Name of the subject (person, object, animal, etc.)",
-        searchable=True,
->>>>>>> ea4bc92 (align code with main branch changes)
-        filterable=True,
-        retrievable=True,
-        stored=True,
-        sortable=False,
-<<<<<<< HEAD
-        facetable=False,
-        key=False
-    )
-
-    object_collection: str = Field(
-        default="[]",
-        description="JSON string array of merged object collection containing all objects (people, objects, etc.) from the entire video",
-=======
-        facetable=True,
-        key=False
-    )
- 
-    appearance: str = Field(
-        ...,
-        description="Pipe-separated list of appearance descriptions",
->>>>>>> ea4bc92 (align code with main branch changes)
-=======
 
     url: str = Field(
         default="",
@@ -517,21 +429,9 @@ class ObjectCollectionDocument(BaseModel):
         key=False
     )
 
-<<<<<<< HEAD
-    subject_registry: str = Field(
-<<<<<<< HEAD
-        default="{}",
-        description="JSON string of merged subject registry containing all subjects (people, objects, etc.) from the entire video",
->>>>>>> 10ff4c8 (create single subject registry document)
-=======
-        default="[]",
-        description="JSON string array of merged subject registry containing all subjects (people, objects, etc.) from the entire video",
->>>>>>> c8e6bcb (change subject registry as List of subjects instead of dictionaries as it was consuming extra token and adding no value)
-=======
     object_collection: str = Field(
         default="[]",
         description="JSON string array of merged object collection containing all objects (people, objects, etc.) from the entire video",
->>>>>>> b05446d (rename)
         searchable=True,
         filterable=False,
         retrievable=True,
@@ -540,81 +440,10 @@ class ObjectCollectionDocument(BaseModel):
         facetable=False,
         key=False
     )
-<<<<<<< HEAD
-<<<<<<< HEAD
 
     object_count: int = Field(
         default=0,
         description="Total number of unique objects in the collection",
-        searchable=False,
-        filterable=True,
-        retrievable=True,
-        stored=True,
-        sortable=True,
-        facetable=False,
-        key=False
-    )
-
-    video_summary: str = Field(
-        default="",
-        description="Overall summary of the entire video",
-=======
- 
-    identity: str = Field(
-        ...,
-        description="Pipe-separated list of identity descriptions",
->>>>>>> ea4bc92 (align code with main branch changes)
-        searchable=True,
-        filterable=False,
-        retrievable=True,
-        stored=True,
-        sortable=False,
-        facetable=False,
-        key=False
-    )
-<<<<<<< HEAD
-
-    video_summary_embedding: List[float] = Field(
-        default_factory=list,
-        description="Vector embedding of the video summary for semantic search",
-        searchable=True,
-        filterable=False,
-        retrievable=False,
-=======
- 
-    additional_details: Optional[str] = Field(
-        None,
-        description="Additional information about the subject",
-        searchable=True,
-        filterable=False,
-        retrievable=True,
->>>>>>> ea4bc92 (align code with main branch changes)
-        stored=True,
-        sortable=False,
-        facetable=False,
-        key=False
-    )
-<<<<<<< HEAD
-
-    video_duration: float = Field(
-        default=0.0,
-        description="Duration of the video in seconds",
-=======
- 
-    first_seen: float = Field(
-        ...,
-        description="Timestamp in seconds when subject first appears",
->>>>>>> ea4bc92 (align code with main branch changes)
-=======
-
-    object_count: int = Field(
-        default=0,
-<<<<<<< HEAD
-        description="Total number of unique subjects in the registry",
->>>>>>> 10ff4c8 (create single subject registry document)
-=======
-        description="Total number of unique objects in the collection",
->>>>>>> b05446d (rename)
         searchable=False,
         filterable=True,
         retrievable=True,

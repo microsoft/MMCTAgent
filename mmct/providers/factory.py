@@ -53,9 +53,9 @@ class ProviderFactory:
     }
     
     # Cache for reusable provider instances (singleton pattern)
-    _llm_provider_cache: Dict[str, LLMProvider] = {}
-    _search_provider_cache: Dict[str, SearchProvider] = {}
-    _embedding_provider_cache: Dict[str, EmbeddingProvider] = {}
+    # _llm_provider_cache: Dict[str, LLMProvider] = {}
+    # _search_provider_cache: Dict[str, SearchProvider] = {}
+    # _embedding_provider_cache: Dict[str, EmbeddingProvider] = {}
     
     _vision_providers: Dict[str, Type[VisionProvider]] = {
         'azure': AzureVisionProvider,
@@ -93,9 +93,9 @@ class ProviderFactory:
             provider_name = config.llm.provider
 
         # Check cache first if caching is enabled
-        if enable_cache and provider_name in cls._llm_provider_cache:
-            logger.debug(f"Reusing cached LLM provider: {provider_name}")
-            return cls._llm_provider_cache[provider_name]
+        # if enable_cache and provider_name in cls._llm_provider_cache:
+        #     logger.debug(f"Reusing cached LLM provider: {provider_name}")
+        #     return cls._llm_provider_cache[provider_name]
 
         if provider_name not in cls._llm_providers:
             raise ConfigurationException(
@@ -108,8 +108,8 @@ class ProviderFactory:
         provider_instance = provider_class(config.llm.model_dump())
 
         # Cache the instance if caching is enabled
-        if enable_cache:
-            cls._llm_provider_cache[provider_name] = provider_instance
+        # if enable_cache:
+        #     cls._llm_provider_cache[provider_name] = provider_instance
 
         return provider_instance
     
@@ -133,9 +133,9 @@ class ProviderFactory:
             provider_name = config.embedding.provider
 
         # Check cache first if caching is enabled
-        if enable_cache and provider_name in cls._embedding_provider_cache:
-            logger.debug(f"Reusing cached embedding provider: {provider_name}")
-            return cls._embedding_provider_cache[provider_name]
+        # if enable_cache and provider_name in cls._embedding_provider_cache:
+        #     logger.debug(f"Reusing cached embedding provider: {provider_name}")
+        #     return cls._embedding_provider_cache[provider_name]
 
         if provider_name not in cls._embedding_providers:
             raise ConfigurationException(
@@ -148,8 +148,8 @@ class ProviderFactory:
         provider_instance = provider_class(config.embedding.model_dump())
 
         # Cache the instance if caching is enabled
-        if enable_cache:
-            cls._embedding_provider_cache[provider_name] = provider_instance
+        # if enable_cache:
+        #     cls._embedding_provider_cache[provider_name] = provider_instance
 
         return provider_instance
     
@@ -173,9 +173,9 @@ class ProviderFactory:
             provider_name = config.search.provider
 
         # Check cache first if caching is enabled
-        if enable_cache and provider_name in cls._search_provider_cache:
-            logger.debug(f"Reusing cached search provider: {provider_name}")
-            return cls._search_provider_cache[provider_name]
+        # if enable_cache and provider_name in cls._search_provider_cache:
+        #     logger.debug(f"Reusing cached search provider: {provider_name}")
+        #     return cls._search_provider_cache[provider_name]
 
         if provider_name not in cls._search_providers:
             raise ConfigurationException(
@@ -202,8 +202,8 @@ class ProviderFactory:
                 pass
 
         # Cache the instance if caching is enabled
-        if enable_cache:
-            cls._search_provider_cache[provider_name] = provider_instance
+        # if enable_cache:
+        #     cls._search_provider_cache[provider_name] = provider_instance
 
         return provider_instance
     
