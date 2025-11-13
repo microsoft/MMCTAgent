@@ -6,28 +6,30 @@ from dotenv import load_dotenv, find_dotenv
 load_dotenv(find_dotenv())
 
 
-async def get_video_analysis(
-    query: Annotated[str, "query to search for video analysis including objects, summary, and context"],
-    index_name: Annotated[str, "name of the search index"],
+async def get_object_collection(
+    query: Annotated[str, "semantic query based on video summary to match relevant object collections"],
+    index_name: Annotated[str, "name of the search index provided in the user query"],
     video_id: Annotated[Optional[str], "unique identifier for the video"] = None,
     url: Annotated[Optional[str], "url of the video"] = None,
     top: Annotated[Optional[int], "number of top results to retrieve"] = 3,
     fields_to_retrieve: Annotated[Optional[List[str]], "list of fields to retrieve from the object collection index"] = None,
 ) -> List[Dict[str, Any]]:
     """
-    Retrieve high-level video analysis including object collection and video summary.
-
     Description:
-        Retrieves comprehensive video analysis from the object collection index, including video summary,
-        object collection with detailed attributes, and metadata.
+        Retrieve object collection data including object descriptions, counts, and first_seen timestamps.
+
+        This tool is used for object tracking and object-related queries.
+
+        IMPORTANT: This tool REQUIRES a valid video_id or URL before calling.
+        - If video_id/URL is not provided in the instruction, call get_video_summary first to obtain it.
+        - Use this tool for: object counting, object tracking, object appearance details, first_seen timestamps.
 
     Input Parameters:
-        - query (str): Search query to find relevant video analysis
+        - query (str): semantic query based on video summary (e.g., "cooking tutorial objects", "sports equipment")
         - index_name (str): Name of the search index
-        - video_id (Optional[str]): Unique identifier for the video (use if available)
-        - url (Optional[str]): URL of the video (alternative to video_id)
+        - video_id (str): REQUIRED - Unique identifier for the video (obtain from get_video_summary if not provided)
+        - url (str): REQUIRED if video_id not available - URL of the video
         - fields_to_retrieve: Available fields:
-            * video_summary: Overall narrative and scene context of the video
             * object_collection: JSON string containing list of objects with:
                 - name: Object identifier (e.g., "Person in blue shirt", "Red car")
                 - appearance: List of visual characteristics
@@ -40,10 +42,8 @@ async def get_video_analysis(
 
 
     Output:
-        List of dictionaries containing request fields
+        List of dictionaries containing requested fields
     """
-
-    print("in get_video_analysis function")
     # Construct the full index name
     full_index_name = f"object-collection-{index_name}"
 
@@ -54,6 +54,11 @@ async def get_video_analysis(
 
     # Initialize search provider
     search_provider = provider_factory.create_search_provider()
+    
+    # Initalize Embedding provider
+    embed_provider = provider_factory.create_embedding_provider()
+    # embedding the query
+    embedding = await embed_provider.embedding(query)
 
     try:
         # Build filter query
@@ -62,40 +67,42 @@ async def get_video_analysis(
             filter_query = f"url eq '{url}'"
         elif video_id:
             filter_query = f"video_id eq '{video_id}'"
-        #create embedding of query and pass
-        # Search for all video analysis matching the filter
+
+        # Search for object collection matching the filter
         results = await search_provider.search(
             query=query,
             index_name=full_index_name,
-            search_text="*",
+            search_text=None,
             filter=filter_query,
             query_type="semantic",
             top=top,
             select=fields_to_retrieve,
+            embedding=embedding
         )
         return list(results)
 
     except Exception as e:
-        print(f"Error fetching video analysis for video_id={video_id} or url={url}: {e}")
+        print(f"Error fetching object collection for video_id={video_id} or url={url}: {e}")
         return []
     finally:
         await search_provider.close()
-        
+
 
 if __name__ == "__main__":
     import asyncio
 
     async def main():
         # Example usage
-        index_name = "test"
-        video_id = "d678544d517a57050f6a6881b0eb26496536053c45711ac624104cd2fccc00dc"
+        index_name = "<index-name>"
+        video_id = "<hash-video-id>"
+        query = "<sample-query>"
 
-        print(f"Fetching video analysis for video_id: {video_id}")
-        analysis = await get_video_analysis(
-            query="sample query",
+        print(f"Fetching object collection for video_id: {video_id}")
+        collection = await get_object_collection(
+            query=query,
             index_name=index_name,
             video_id=video_id
         )
-        print(analysis)
+        print(collection)
 
     asyncio.run(main())

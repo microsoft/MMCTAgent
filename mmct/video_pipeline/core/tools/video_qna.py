@@ -19,7 +19,8 @@ from autogen_agentchat.base import TaskResult
 from mmct.video_pipeline.core.tools.get_context import get_context
 from mmct.video_pipeline.core.tools.get_relevant_frames import get_relevant_frames
 from mmct.video_pipeline.core.tools.query_frame import query_frame
-from mmct.video_pipeline.core.tools.get_video_analysis import get_video_analysis
+from mmct.video_pipeline.core.tools.get_video_summary import get_video_summary
+from mmct.video_pipeline.core.tools.get_object_collection import get_object_collection
 from mmct.video_pipeline.core.tools.critic import critic_tool
 from mmct.video_pipeline.prompts_and_description import (
     get_planner_system_prompt,
@@ -41,21 +42,19 @@ class VideoQnA:
     VideoQnA with comprehensive multi-tool support for video analysis using Swarm orchestration.
 
     MMCT consists of:
-    - **Planner Agent**: Has access to four tools for comprehensive video analysis:
-      1. get_video_analysis: Retrieves video summary and object descriptions (objects, things, etc.)
-      2. get_context: Retrieves transcript and visual summary documents
-      3. get_relevant_frames: Gets specific frame names based on visual queries
-      4. query_frame: Analyzes downloaded frames with vision models
+    - **Planner Agent**: Has access to five tools for comprehensive video analysis:
+      1. get_video_summary: Retrieves high-level video summaries (can be called without video_id for discovery)
+      2. get_object_collection: Retrieves object descriptions with counts (requires video_id/url, semantic query based on video summary)
+      3. get_context: Retrieves transcript chunks and visual summary chapter documents (requires video_id/url)
+      4. get_relevant_frames: Gets specific frame names based on visual queries
+      5. query_frame: Analyzes downloaded frames with vision models or fetch frames on filter criteria and then analyze them.
     - **Critic Agent**: Validates or refines the planner's output.
 
-    Workflow (with Swarm orchestration):
-    1. Planner starts with get_video_analysis for object overview (counting, scene-related questions)
-    2. Uses get_context for detailed transcript/summary information
-    3. If more visual content needed, uses get_relevant_frames for frame selection
-    4. Uses query_frame to analyze the downloaded frames visually
-    5. Combines textual and visual information for comprehensive answers
-    6. Can hand off to critic for validation and refinement
-    7. Critic can hand back to planner if revisions are needed
+    Workflow:
+    1. If video_id/url NOT provided → Call get_video_summary first to discover relevant videos
+    2. For object-related queries → Use get_object_collection with video_id (semantic query based on summary)
+    3. For narrative/dialogue queries → Use get_context with video_id
+    4. For visual verification → Use query_frame
 
     Args:
         query (str): The natural language question to be answered based on the video content.
@@ -105,7 +104,7 @@ class VideoQnA:
             # Wrap the base model client so AgentChat uses the cached client everywhere
             self.model_client = ChatCompletionCache(self.model_client, store)
 
-        self.tools = [get_video_analysis, get_context, get_relevant_frames, query_frame]
+        self.tools = [get_video_summary, get_object_collection, get_context, get_relevant_frames, query_frame]
         self.planner_agent = None
         self.critic_agent = None
         self.team = None
@@ -123,7 +122,7 @@ class VideoQnA:
             use_critic_agent=self.use_critic_agent,
         )
 
-        # Define Planner agent - has access to get_video_analysis, get_context, get_relevant_frames, and query_frame tools
+        # Define Planner agent - has access to get_video_summary, get_object_collection, get_context, get_relevant_frames, and query_frame tools
         self.planner = AssistantAgent(
             name="planner",
             model_client=self.model_client,
@@ -219,14 +218,17 @@ async def video_qna(
     """
     Video QnA with comprehensive multi-tool support for video analysis using Swarm orchestration.
 
-    Answers a user query based on the content of a specified video using four complementary tools:
-    1. get_video_analysis: Retrieves video summary and object descriptions for counting/scene questions
-    2. get_context: Retrieves transcript and visual summary documents
-    3. get_relevant_frames: Gets specific frame names based on visual queries
-    4. query_frame: Analyzes downloaded frames with vision models
+    Answers a user query based on the content of a specified video using five complementary tools:
+    1. get_video_summary: Retrieves high-level video summary and context (can be called without video_id for discovery)
+    2. get_object_collection: Retrieves object descriptions with counts (requires video_id, semantic query based on summary)
+    3. get_context: Retrieves transcript and visual summary documents (requires video_id)
+    4. get_relevant_frames: Gets specific frame names based on visual queries
+    5. query_frame: Analyzes downloaded frames with vision models
 
     The planner intelligently combines textual and visual information for comprehensive responses.
     With Swarm orchestration, agents can dynamically hand off tasks for better collaboration.
+
+    Workflow: If video_id not provided, get_video_summary is called first to discover relevant videos.
     """
 
 
@@ -241,18 +243,21 @@ async def video_qna(
     )
     if stream:
         response_generator = await video_qna_instance.run_stream()
-        # messages = await Console(response_generator)
+        messages = await Console(response_generator)
         # Stream messages through logger instead of Console
-        messages = []
-        async for message in response_generator:
-            # Log the message content without the "Agent Message:" prefix
-            if hasattr(message, 'content') and message.content:
-                logger.info(f"Agent Message:{message.content}")  # Using : as separator for filtering
-            messages.append(message)
+        # messages = []
+        # async for message in response_generator:
+        #     # Log the message content without the "Agent Message:" prefix
+        #     if hasattr(message, 'content') and message.content:
+        #         logger.info(f"Agent Message:{message.content}")  # Using : as separator for filtering
+        #     messages.append(message)
         
         # Return the final result
         if messages:
-            last_message = messages[-1]
+            if isinstance(messages,list):
+                last_message = messages[-1]
+            else:
+                last_message = messages
             if isinstance(last_message, TaskResult):
                 return last_message.messages[-1] if last_message.messages else last_message
             return last_message
