@@ -28,7 +28,8 @@ from autogen_agentchat.teams import RoundRobinGroupChat
 from autogen_agentchat.base import TaskResult
 
 from mmct.video_pipeline.core.tools.get_context import get_context
-from mmct.video_pipeline.core.tools.get_video_analysis import get_video_analysis
+from mmct.video_pipeline.core.tools.get_video_summary import get_video_summary
+from mmct.video_pipeline.core.tools.get_object_collection import get_object_collection
 from mmct.video_pipeline.core.tools.video_qna import video_qna
 from mmct.providers.factory import provider_factory
 
@@ -61,7 +62,8 @@ Your job is to analyze user queries and classify them into two categories:
     - Comparative analysis
 
 Available Tools:
-- **get_video_analysis**: Returns a summary of the video (high-level overview)
+- **get_video_summary**: Retrieves high-level video summaries. Can be used for video discovery (without video_id/URL) or to get summary of a specific video (with video_id/URL)
+- **get_object_collection**: Retrieves object collection data including object descriptions, counts, and first_seen timestamps. REQUIRES video_id/URL (call get_video_summary first if not available)
 - **get_context**: Retrieves sections from videos which are most relevant to the query (targeted retrieval)
 - **planner_team**: Complex multi-step reasoning and analysis
 
@@ -69,12 +71,13 @@ Respond ONLY with a JSON object:
 {
      "classification": "SIMPLE" or "COMPLEX",
      "reasoning": "Brief explanation of why this query falls into this category",
-     "recommended_tool": "get_video_analysis" or "get_context" or "planner_team"
+     "recommended_tool": "get_video_summary" or "get_object_collection" or "get_context" or "planner_team"
 }
 
 Guidelines:
 - If uncertain, classify as SIMPLE (we can always escalate if needed)
-- For general summaries or overviews, prefer "get_video_analysis"
+- For general summaries or overviews, prefer "get_video_summary"
+- For object counting, tracking, or appearance details, prefer "get_object_collection"
 - For keyword-based searches or querying specific details, prefer "get_context"
 - For complex reasoning, use "planner_team"
 """
@@ -83,14 +86,16 @@ SIMPLE_QUERY_HANDLER_SYSTEM_PROMPT = """
 You are a simple query handler for video analysis.
 
 Your job is to:
-1. Use the get_video_analysis tool for object-related queries, counting, or visual element searches
-2. Use the get_context tool for transcript-based queries or summary searches
-3. Provide direct, concise answers based on the tool results
-4. Format responses clearly using markdown
+1. Use the get_video_summary tool for retrieving high-level video summaries, video discovery, or general overview queries
+2. Use the get_object_collection tool for object counting, tracking, or appearance details (requires video_id from get_video_summary)
+3. Use the get_context tool for transcript-based queries, detailed content searches, or targeted retrieval
+4. Provide direct, concise answers based on the tool results
+5. Format responses clearly using markdown
 
-You have access to two tools:
-- get_video_analysis: Retrieves video summary and object descriptions
-- get_context: Retrieves transcript and visual summary documents
+You have access to three tools:
+- get_video_summary: Retrieves high-level video summaries (use for discovery or overview)
+- get_object_collection: Retrieves object data, counts, and timestamps (requires video_id - call get_video_summary first if needed)
+- get_context: Retrieves transcript and visual summary documents (use for detailed searches)
 
 Important:
 - You are only allowed to call ONE tool, ONCE
@@ -179,6 +184,7 @@ class QueryFederator:
             self.llm_provider = provider_factory.create_llm_provider()
 
         self.model_client = self.llm_provider.get_autogen_client()
+        self.model_client_no_parallel_tool_calls = self.llm_provider.get_autogen_client_for_no_tools_agent()
         
         self.classifier_agent = None
         self.simple_handler_agent = None
@@ -196,23 +202,15 @@ class QueryFederator:
         # Create classifier agent
         classifier = AssistantAgent(
             name="query_classifier",
-            model_client=self.model_client,
+            model_client=self.model_client_no_parallel_tool_calls,
             model_client_stream=False,
             description="Classifies queries as SIMPLE or COMPLEX for video analysis",
             system_message=QUERY_CLASSIFIER_SYSTEM_PROMPT,
         )
-
-        # Create a simple team for classification
-        termination = MaxMessageTermination(max_messages=2)
-        team = RoundRobinGroupChat(
-            participants=[classifier],
-            termination_condition=termination,
-        )
-
+        
         # Run classification
         classification_task = f"Classify this query: {self.query}\n\nRespond with ONLY the JSON classification."
-        
-        result = await Console(team.run_stream(task=classification_task))
+        result = await Console(classifier.run_stream(task=classification_task))
 
         # Extract the classification from the last message
         last_message = result.messages[-1].content if result.messages else "{}"
@@ -239,7 +237,7 @@ class QueryFederator:
             classification_result = {
                 "classification": "SIMPLE",
                 "reasoning": "JSON decode error, defaulting to SIMPLE",
-                "recommended_tool": "get_video_analysis"
+                "recommended_tool": "get_video_summary"
             }
 
         logger.info(f"Classification result: {classification_result}")
@@ -249,12 +247,14 @@ class QueryFederator:
         """
         Handle simple queries using direct tool calls.
 
-        Creates an assistant agent with access to get_video_analysis and get_context tools,
-        executes the query, and parses the response into a standardized JSON structure.
+        Creates an assistant agent with access to get_video_summary (for high-level summaries 
+        and video discovery), get_object_collection (for object tracking and counting), and 
+        get_context (for targeted content retrieval) tools, executes the query, and parses 
+        the response into a standardized JSON structure.
 
         Args:
             recommended_tool: The tool recommended by the classifier
-                            ("get_video_analysis" or "get_context")
+                            ("get_video_summary" or "get_object_collection" or "get_context")
 
         Returns:
             Dict containing:
@@ -268,7 +268,7 @@ class QueryFederator:
             name="simple_query_handler",
             model_client=self.model_client,
             system_message=SIMPLE_QUERY_HANDLER_SYSTEM_PROMPT,
-            tools=[get_video_analysis, get_context],
+            tools=[get_video_summary, get_object_collection, get_context],
             reflect_on_tool_use=True,
             max_tool_iterations=5,  # Limited iterations for simple queries
         )
@@ -421,13 +421,14 @@ async def query_federator(
 
     This function implements a smart routing system that:
     1. Classifies queries as SIMPLE (vague/keyword-based) or COMPLEX (requiring deep analysis)
-    2. Routes SIMPLE queries directly to get_video_analysis() or get_context() tools
+    2. Routes SIMPLE queries directly to get_video_summary(), get_object_collection(), or get_context() tools
     3. Routes COMPLEX queries to the planner-critic team for comprehensive analysis
 
     SIMPLE queries include:
     - Vague questions ("tell me about this video")
     - Keyword searches ("car", "person in blue")
     - Basic summaries or object counting
+    - Object tracking and appearance details
 
     COMPLEX queries include:
     - Temporal analysis ("what happened after...")

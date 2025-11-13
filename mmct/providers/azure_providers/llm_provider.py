@@ -114,6 +114,50 @@ class AzureLLMProvider(LLMProvider):
         except Exception as e:
             logger.error(f"Azure OpenAI chat completion failed: {e}")
             raise ProviderException(f"Azure OpenAI chat completion failed: {e}")
+    
+    def get_autogen_client_for_no_tools_agent(self):
+        """Get autogen-compatible client for Azure OpenAI."""
+        try:
+            endpoint = self.config.get("endpoint")
+            deployment_name = self.config.get("deployment_name")
+            api_version = self.config.get("api_version", "2024-08-01-preview")
+            use_managed_identity = self.config.get("use_managed_identity", True)
+            timeout = self.config.get("timeout", 200)
+            temperature = self.config.get("temperature", 0)
+
+            if not endpoint or not deployment_name:
+                raise ConfigurationException("Azure OpenAI endpoint and deployment name are required for autogen client")
+
+            if use_managed_identity:
+                token_provider = get_bearer_token_provider(
+                    self.credential,
+                    "https://cognitiveservices.azure.com/.default"
+                )
+                return AzureOpenAIChatCompletionClient(
+                    azure_deployment=deployment_name,
+                    model=deployment_name,
+                    api_version=api_version,
+                    azure_endpoint=endpoint,
+                    azure_ad_token_provider=token_provider,
+                    timeout=timeout,
+                    temperature=temperature,
+                )
+            else:
+                api_key = self.config.get("api_key")
+                if not api_key:
+                    raise ConfigurationException("Azure OpenAI API key is required when managed identity is disabled")
+
+                return AzureOpenAIChatCompletionClient(
+                    azure_deployment=deployment_name,
+                    model=deployment_name,
+                    api_version=api_version,
+                    azure_endpoint=endpoint,
+                    api_key=api_key,
+                    timeout=timeout,
+                    temperature=temperature
+                )
+        except Exception as e:
+            raise ProviderException(f"Failed to create Azure OpenAI autogen client: {e}")
 
     def get_autogen_client(self):
         """Get autogen-compatible client for Azure OpenAI."""
@@ -141,7 +185,7 @@ class AzureLLMProvider(LLMProvider):
                     azure_ad_token_provider=token_provider,
                     timeout=timeout,
                     temperature=temperature,
-                    parallel_tool_calls = True
+                    parallel_tool_calls=True
                 )
             else:
                 api_key = self.config.get("api_key")
