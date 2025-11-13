@@ -324,6 +324,9 @@ class AzureSearchProvider(SearchProvider):
             vector_queries = kwargs.pop("vector_queries", None)
             semantic_configuration_name = None
 
+            # Get appropriate client for the index
+            client = self._get_client_for_index(index_name)
+
             # Handle semantic search configuration
             if query_type == "semantic":
                 semantic_configuration_name = kwargs.pop("semantic_configuration_name", "my-semantic-search-config")
@@ -333,16 +336,28 @@ class AzureSearchProvider(SearchProvider):
             if query_type == "vector":
                 query_type = None
                 search_text = None
+
+            # Get index schema to find vector fields
+            try:
+                index = await self.index_client.get_index(index_name or self._default_index_name)
+                vector_fields = [
+                    f.name
+                    for f in index.fields
+                    if getattr(f, "vector_search_dimensions", None)
+                ]
+                vector_field = vector_fields[0] if vector_fields else None
+            except Exception as ex:
+                logger.warning(f"Could not retrieve index schema: {ex}")
+                vector_field = None
                 
             # Build vector queries if embedding provided
             if embedding and top and not vector_queries:
                 vector_query = VectorizedQuery(
-                    vector=embedding, k_nearest_neighbors=top, fields="embeddings"
+                    vector=embedding, k_nearest_neighbors=top, fields=vector_field
                 )
                 vector_queries = [vector_query]
 
-            # Get appropriate client for the index
-            client = self._get_client_for_index(index_name)
+            
             
             # Execute search
             results = await client.search(
