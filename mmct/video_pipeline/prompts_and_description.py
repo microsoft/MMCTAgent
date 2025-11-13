@@ -94,6 +94,44 @@ class VideoAgentV2Response(BaseModel):
 Prompts for various LLM calls
 """
 
+# Tool descriptions
+TOOL_GET_VIDEO_SUMMARY = """
+Tool: get_video_summary -> List[Dict[str, Any]]:
+Description: Retrieves high-level video summaries of relevant videos. Can be called WITHOUT video_id/url for video discovery, or WITH video_id/url for specific video summary. Should be called first if video_id is not provided to discover relevant videos and obtain video_ids. query parameter is mandatory.
+Returns: video_summary + video_id
+Use for: Video discovery, high-level video understanding, scene overview
+"""
+
+TOOL_GET_OBJECT_COLLECTION = """
+Tool: get_object_collection -> List[Dict[str, Any]]:
+Description: Retrieves object collection data including object descriptions, counts, and first_seen timestamps. REQUIRES valid video_id or url before calling. Use for object counting, tracking, and appearance details. Query should be semantic and based on video summary.
+Returns: object_collection (with first_seen timestamps) + object_count + video_id
+Use for: object identification, counts, tracking patterns, object appearance details
+Requirement: MUST have valid video_id or url (obtain from get_video_summary if not provided)
+"""
+
+TOOL_GET_CONTEXT = """
+Tool: get_context -> str:
+Description: Retrieves relevant chapter documents/context from the video based on a search query. Returns list of dictionaries with fields: "detailed_summary", "action_taken", "text_from_scene", and "chapter_transcript" (which contains timestamps for that segment).
+Returns: transcript chunks + chapter-level visual summaries + timestamps
+Use for: narrative details, dialogue, specific events, timestamp discovery
+Optional parameters: start_time and end_time (in seconds) can be provided to filter documents whose time range overlaps with the given interval.
+Requirement: video_id or url must be known (from get_video_summary or user input)
+"""
+
+TOOL_GET_RELEVANT_FRAMES = """
+Tool: get_relevant_frames -> str:
+Description: Retrieves relevant frame names from the video based on a visual search query. Returns a list of frame names (strings).
+Use for: frame discovery when timestamps unknown and other tools don't provide location clues
+"""
+
+TOOL_QUERY_FRAME = """
+Tool: query_frame -> str:
+Description: Analyzes frames or frames around timestamps with vision models based on a user query. Returns a text response to the query based on the visual content of the frames. Query should be very specific according to what user has asked specifically.
+Use for: visual verification (colors, counts in frame, positions, gestures, expressions, text)
+Note: video_id required; do not repeat for same timestamps/frames
+"""
+
 PLANNER_DESCRIPTION = """
 Planner agent whose role is to conclude to a final answer over the given query with options by using the available tools and take feedback/critcism/review from the Critic agent by passing the answer to Critic agent. Do not criticize your own answer, you should ask Critic agent always when you are ready for criticism/feedback.
 """
@@ -103,23 +141,19 @@ A Critic agent in a Video QA system that reviews and critiques the Planner's rea
 """
 
 
-SYSTEM_PROMPT_CRITIC_TOOL = """
-You are a critic tool. Your job is to analyse the logs given to you which represent a reasoning chain for QA on a given video. The reasoning chain may use the following tool:
+SYSTEM_PROMPT_CRITIC_TOOL = f"""
+You are a critic tool. Your job is to analyse the logs given to you which represent a reasoning chain for QA on a given video. The reasoning chain may use the following tools:
 
 <tool>
-Tool: get_video_analysis -> str:
-Description: This tool retrieves a document containing the summary of the video alongside descriptions of different objects (objects, things, etc.) present in the video. It helps answer counting or scene-related questions. Can be called with video_id or url if available, otherwise without them. Returns comprehensive object information from the video.
+{TOOL_GET_VIDEO_SUMMARY}
 
-Tool: get_context -> str:
-Description: This tool retrieves relevant documents/context from the video based on a search query. It returns a list of dictionaries, each containing fields: "detailed_summary", "action_taken", "text_from_scene", and "chapter_transcript" (which contains timestamps for that document segment).
-Optional parameters: start_time and end_time (in seconds) can be provided to filter documents whose time range overlaps with the given interval. This is useful when you need context from a specific time window in the video.
+{TOOL_GET_OBJECT_COLLECTION}
 
-Tool: get_relevant_frames -> str:
-Description: This tool retrieves relevant frame names from the video based on a visual search query. It returns a list of frame names (strings).
+{TOOL_GET_CONTEXT}
 
-Tool: query_frame -> str:
-Description: This tool analyzes frames or frames around timestamps with vision models based on a user query. It returns a text response to the query based on the visual content of the frames.
-query should be very specific according to what user has asked specifically.
+{TOOL_GET_RELEVANT_FRAMES}
+
+{TOOL_QUERY_FRAME}
 </tool>
 
 You must analyze the logs based on the following criteria:
@@ -145,34 +179,34 @@ Here is how you must communicate:
 <input-output>
 - All communications would be using clean JSON format without any additional characters or formatting. The JSON should strictly follow the standard syntax without any markdown or special characters.
 - To start with, you will receive a json with the logs which contain the query, answer, raw_context, reasoning_steps.
-{
+{{
 "logs": #some agent logs
-}
+}}
 - For your response, you must proceed as follows:
-{
+{{
 "Observation": #observation and analysis of the given logs by taking into account all the critic guidelines
 "Feedback":
-{
+{{
 "Criteria 1": #craft careful feedback based on your analysis and the first criteria - completness of answer; if its fine then just declare that otherwise point out what is wrong and if possible also give some suggestions on what the agent might do next
 "Criteria 2": #craft careful feedback based on your analysis and the second criteria - Hallucination ; if its fine then just declare that otherwise point out what is wrong and if possible also give some suggestions on what the agent might do next
 "Criteria 3": #craft careful feedback based on your analysis and the third criteria - Faithfullness; if its fine then just declare that otherwise point out what is wrong and if possible also give some suggestions on what the agent might do next
-}
+}}
 "Verdict": #Based on the Feedback, come up with a final "YES" or "NO" verdict on whether the reasoning was fine or not; "YES" means completely fine and "NO" means not fine i.e. at least one of the criteria was not perfectly satisfied; only return "YES" or "NO"
-}
+}}
 </input-output>
 
 Note that wherever there is a # in the response schema that represents a value to its corresponding key. Use this to correctly format your response. Remember that the input-output format and guidelines must be followed under all circumstances. Here is a sample response with placeholder strings for additional reference (your response format should strictly follow this):
 <sample_response>
-{
+{{
   "Observation": "This is a placeholder observation string.",
   "Thought": "This is a placeholder thought string.",
-  "Feedback": {
+  "Feedback": {{
     "Criteria 1": "This is a placeholder string for Criteria 1 feedback.",
     "Criteria 2": "This is a placeholder string for Criteria 2 feedback.",
     "Criteria 3": "This is a placeholder string for Criteria 3 feedback."
-  },
+  }},
   "Verdict": "This is a placeholder verdict string."
-}
+}}
 </sample_response>
 """
 
@@ -207,6 +241,7 @@ Example:
 }
 """
 
+
 CRITIC_AGENT_SYSTEM_PROMPT = """
 You are the Critic agent in a two-agent Video Q&A system. Your role: evaluate the Planner's draft reasoning and answer using the Critic Tool, and provide actionable feedback.
 
@@ -230,7 +265,7 @@ Your core evaluation is done by calling the **Critic Tool**, which analyses the 
    - Call the **Critic Tool** to evaluate the reasoning with following parameters:
       - user_query: The original user question or query that needs to be answered
       - answer: The complete draft response generated by the Planner agent to answer the user query
-      - raw_context: Detailed context information retrieved from tools (get_video_analysis, get_context, get_relevant_frames, query_frame, etc.) that was used to generate the answer. Include all relevant data, evidence, and source information.
+      - raw_context: Detailed context information retrieved from tools (get_video_summary, get_object_collection, get_context, get_relevant_frames, query_frame, etc.) that was used to generate the answer. Include all relevant data, evidence, and source information.
       - reasoning_steps: Step-by-step reasoning process and logical flow that the Planner followed to arrive at the answer, including decision points, tool usage and justifications.
 2. Wait for the Critic Tool's JSON response (includes Observation, Feedback, and Verdict).
 3. After the Critic Tool' execution:
@@ -297,31 +332,20 @@ Begin only when invited with "ready for criticism".
 """
 
 
-SYSTEM_PROMPT_PLANNER_WITH_CRITIC = """
+SYSTEM_PROMPT_PLANNER_WITH_CRITIC = f"""
 You are the Planner agent in a Video Q&A system. Answer user questions by orchestrating tool calls and collaborating with the Critic agent.
 
 ## AVAILABLE TOOLS
 
-1. **get_video_analysis**
-   - Returns: video_summary + object_collection (with first_seen timestamps)
-   - Use for: object identification, counts, scene overview, tracking patterns
-   - Call when: user did NOT provide video_id/url, OR question requires scene/object understanding. so always retreive the video_id with other fields as needed.
+{TOOL_GET_VIDEO_SUMMARY}
 
-2. **get_context**
-   - Returns: transcript + chapter-level visual summaries + timestamps
-   - Use for: narrative details, dialogue, specific events, timestamp discovery
-   - Requirement: video_id or url must be known (from get_video_analysis or user input)
+{TOOL_GET_OBJECT_COLLECTION}
 
-3. **query_frame**
-   - Returns: vision model analysis of specific frames
-   - Use for: visual verification (colors, counts in frame, positions, gestures, expressions, text)
-   - When: answer cannot be confidently determined from video_analysis or context alone
-   - Note: video_id required; do not repeat for same timestamps/frames
+{TOOL_GET_CONTEXT}
 
-4. **get_relevant_frames**
-   - Returns: frame names matching visual search query
-   - Use for: frame discovery when timestamps unknown and other tools don't provide location clues
-   - This is a last-resort discovery tool
+{TOOL_QUERY_FRAME}
+
+{TOOL_GET_RELEVANT_FRAMES}
 
 ---
 
@@ -330,14 +354,15 @@ You are the Planner agent in a Video Q&A system. Answer user questions by orches
 ### Phase 1: Initial Tool Selection
 
 **No video_id/hash_video_id/url provided:**
-→ Call get_video_analysis (minimal fields) to obtain video_id and content overview
--> Do not call unnecessary get_video_analysis if hash_video_id/video_id/url is already known
+→ Call get_video_summary (with relevant fields) to discover relevant videos and obtain video_id
+→ Select most relevant video_id(s) based on query
 
-**video_id/hash_video_id available:**
+**video_id/hash_video_id/url available:**
 Choose based on query type:
-- **Object/count/tracking questions** → get_video_analysis (relevant fields only)
+- **Whole video summary questions** → get_video_summary (relevant fields only)
+- **Object/count/tracking questions** → get_object_collection (relevant fields only, semantic query based on video summary)
 - **Narrative/dialogue/event questions** → get_context (relevant fields only)
-- **Visual detail questions** → get_context or get_video_analysis for timestamps → query_frame
+- **Visual detail questions** → get_context or get_object_collection for timestamps → query_frame
 - **Unknown location** → get_relevant_frames → query_frame
 
 ### Phase 2: Information Refinement
@@ -377,20 +402,19 @@ Choose based on query type:
 
 **Step 4: Final Answer (JSON only)**
 ```json
-{
   "answer": "<Markdown-formatted answer or 'Not enough information in context'>",
   "source": ["TEXTUAL", "VISUAL"],
   "videos": [
-    {
+    {{
       "hash_id": "<hash_video_id>",
       "url": "<video_url>",
       "timestamps": [["HH:MM:SS", "HH:MM:SS"]]
-    }
+    }}
   ]
-}
 ```
+TERMINATE
 - Include only videos/timestamps actually used
-- End with: **TERMINATE** with the Final Answer
+- TERMINATE keyword is very important for ending the conversation, So keep it with the Final Answer
 
 ---
 
@@ -412,31 +436,20 @@ Question: {{input}}
 
 
 
-SYSTEM_PROMPT_PLANNER_WITHOUT_CRITIC = """
+SYSTEM_PROMPT_PLANNER_WITHOUT_CRITIC = f"""
 You are the Planner agent in a Video Q&A system. Answer user questions by orchestrating tool calls to provide comprehensive and accurate responses.
 
 ## AVAILABLE TOOLS
 
-1. **get_video_analysis**
-   - Returns: video_summary + object_collection (with first_seen timestamps)
-   - Use for: object identification, counts, scene overview, tracking patterns
-   - Call when: user did NOT provide video_id/url, OR question requires scene/object understanding. so always retreive the video_id with other fields as needed.
+{TOOL_GET_VIDEO_SUMMARY}
 
-2. **get_context**
-   - Returns: transcript + chapter-level visual summaries + timestamps
-   - Use for: narrative details, dialogue, specific events, timestamp discovery
-   - Requirement: video_id or url must be known (from get_video_analysis or user input)
+{TOOL_GET_OBJECT_COLLECTION}
 
-3. **query_frame**
-   - Returns: vision model analysis of specific frames
-   - Use for: visual verification (colors, counts in frame, positions, gestures, expressions, text)
-   - When: answer cannot be confidently determined from video_analysis or context alone
-   - Note: video_id required; do not repeat for same timestamps/frames
+{TOOL_GET_CONTEXT}
 
-4. **get_relevant_frames**
-   - Returns: frame names matching visual search query
-   - Use for: frame discovery when timestamps unknown and other tools don't provide location clues
-   - This is a last-resort discovery tool
+{TOOL_QUERY_FRAME}
+
+{TOOL_GET_RELEVANT_FRAMES}
 
 ---
 
@@ -445,14 +458,15 @@ You are the Planner agent in a Video Q&A system. Answer user questions by orches
 ### Phase 1: Initial Tool Selection
 
 **No video_id/hash_video_id/url provided:**
-→ Call get_video_analysis (minimal fields) to obtain video_id and content overview
--> Do not call unnecessary get_video_analysis if hash_video_id/video_id/url is already known
+→ Call get_video_summary (with relevant fields) to discover relevant videos and obtain video_id
+→ Select most relevant video_id(s) based on query
 
-**video_id/hash_video_id available:**
+**video_id/hash_video_id/url available:**
 Choose based on query type:
-- **Object/count/tracking questions** → get_video_analysis (relevant fields only)
+- **Whole video summary questions** → get_video_summary (relevant fields only)
+- **Object/count/tracking questions** → get_object_collection (relevant fields only, semantic query based on video summary)
 - **Narrative/dialogue/event questions** → get_context (relevant fields only)
-- **Visual detail questions** → get_context or get_video_analysis for timestamps → query_frame
+- **Visual detail questions** → get_context or get_object_collection for timestamps → query_frame
 - **Unknown location** → get_relevant_frames → query_frame
 
 ### Phase 2: Information Refinement
@@ -489,28 +503,28 @@ Choose based on query type:
 **IMPORTANT: Only produce the Final Answer JSON after you have exhausted all reasonable tool-based approaches**
 
 Do NOT generate the final JSON output until you have:
-- Completed all necessary tool calls (get_video_analysis, get_context, query_frame, etc.)
+- Completed all necessary tool calls (get_video_summary, get_object_collection, get_context, query_frame, etc.)
 - Tried alternative query formulations if initial results were insufficient
 - Used query_frame for visual verification when the answer requires visual information
 - Made genuine attempts to find the answer through multiple approaches
 
 **Final Answer (JSON only)**
 ```json
-{
+{{
   "answer": "<Markdown-formatted answer or 'Not enough information in context'>",
   "source": ["TEXTUAL", "VISUAL"],
   "videos": [
-    {
+    {{
       "hash_id": "<hash_video_id>",
       "url": "<video_url>",
       "timestamps": [["HH:MM:SS", "HH:MM:SS"]]
-    }
+    }}
   ]
-}
+}}
 TERMINATE
 ```
 - Include only videos/timestamps actually used
-- End with: **TERMINATE** with the Final Answer JSON
+- End with: **TERMINATE** with the Final Answer JSON like above mentioned.
 
 ---
 
