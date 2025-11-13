@@ -388,6 +388,8 @@ class LocalFaissSearchProvider(SearchProvider):
             if isinstance(document, list):
                 results = []
                 for doc in document:
+                    if 'video_summary_embedding' in doc:
+                        doc['embeddings'] = doc.pop('video_summary_embedding')
                     results.append(await self.index_document(doc, index_name=index_name))
                 return all(results)
 
@@ -397,7 +399,12 @@ class LocalFaissSearchProvider(SearchProvider):
 
             embeddings = document.get("embeddings")
             if not embeddings:
-                raise ProviderException("Document missing 'embeddings' field")
+                print(document.keys())
+                if 'video_summary_embedding' in document:
+                    document['embeddings'] = document.pop('video_summary_embedding')
+                    embeddings = document.get("embeddings")
+                else:
+                    raise ProviderException("Document missing 'embeddings' field")
 
             docid = document.get("id") or document.get("hash_video_id") or str(uuid.uuid4())
 
