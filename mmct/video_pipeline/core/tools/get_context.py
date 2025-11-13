@@ -20,7 +20,7 @@ except Exception as e:
 
 
 async def get_context(
-    query: Annotated[str, "query for which chapter documents needs to fetch"],
+    query: Annotated[str, "query for which chapter documents need to be fetched."],
     index_name: Annotated[str, "vector index name"],
     video_id: Annotated[str, "video id if provided in the instruction"]=None,
     url: Annotated[str, "url if provided in the instruction to filter out the search results"] = None,
@@ -35,7 +35,7 @@ async def get_context(
         and text from scenes.
 
     Input Parameters:
-        - query (str): Search query to find relevant video segments
+        - query (str): query for which chapter documents need to be fetched.
         - index_name (str): Vector index name for search
         - video_id (Optional[str]): Video identifier (use from get_video_summary or get_object_collection if available)
         - url (Optional[str]): Video URL (alternative to video_id)
@@ -54,7 +54,7 @@ async def get_context(
         - top: Number of top results to retrieve
 
     Output:
-        List of chapter documents, each may containing based on fields_to_retrieve:
+        List of chapter documents, each containing fields based on fields_to_retrieve:
         - chapter_transcript (str): Transcript with timestamps for this segment
         - detailed_summary (str): Visual summary of what happens in the chapter
         - action_taken (str): Specific actions performed or demonstrated

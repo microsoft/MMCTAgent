@@ -140,7 +140,8 @@ class AzureLLMProvider(LLMProvider):
                     azure_endpoint=endpoint,
                     azure_ad_token_provider=token_provider,
                     timeout=timeout,
-                    temperature=temperature
+                    temperature=temperature,
+                    parallel_tool_calls = True
                 )
             else:
                 api_key = self.config.get("api_key")

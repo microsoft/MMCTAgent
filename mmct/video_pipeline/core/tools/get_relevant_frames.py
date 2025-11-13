@@ -24,10 +24,10 @@ async def get_relevant_frames(
         Returns frame IDs that can be passed to query_frame.
 
     Input Parameters:
-        - query (str): Visual description of what to search for (e.g., "frames showing person exercising")
-        - video_id (str): Video identifier to filter frames
-        - index_name (str): Search index name for keyframe search
-        - top_k (int): Number of relevant frames to retrieve (default: 10)
+        - query (str): [Mandatory] Visual description of what to search for (e.g., "frames showing person exercising")
+        - video_id (str): [Mandatory] Video identifier to filter frames
+        - index_name (str): [Mandatory] Search index name for keyframe search
+        - top_k (int): [Mandatory] Number of relevant frames to retrieve (default: 10)
         - provider_name (Optional[str]): Search provider name (e.g., "local_faiss", "azure_ai_search")
 
     Output:
