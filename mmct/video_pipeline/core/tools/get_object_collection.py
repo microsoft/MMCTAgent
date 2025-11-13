@@ -7,12 +7,9 @@ load_dotenv(find_dotenv())
 
 
 async def get_object_collection(
-    query: Annotated[str, "semantic query based on video summary to match relevant object collections"],
     index_name: Annotated[str, "name of the search index provided in the user query"],
     video_id: Annotated[Optional[str], "unique identifier for the video"] = None,
     url: Annotated[Optional[str], "url of the video"] = None,
-    top: Annotated[Optional[int], "number of top results to retrieve"] = 3,
-    fields_to_retrieve: Annotated[Optional[List[str]], "list of fields to retrieve from the object collection index"] = None,
 ) -> List[Dict[str, Any]]:
     """
     Description:
@@ -25,21 +22,9 @@ async def get_object_collection(
         - Use this tool for: object counting, object tracking, object appearance details, first_seen timestamps.
 
     Input Parameters:
-        - query (str): semantic query based on video summary (e.g., "cooking tutorial objects", "sports equipment")
         - index_name (str): Name of the search index
         - video_id (str): REQUIRED - Unique identifier for the video (obtain from get_video_summary if not provided)
         - url (str): REQUIRED if video_id not available - URL of the video
-        - fields_to_retrieve: Available fields:
-            * object_collection: JSON string containing list of objects with:
-                - name: Object identifier (e.g., "Person in blue shirt", "Red car")
-                - appearance: List of visual characteristics
-                - identity: List of type, category, role information
-                - first_seen: Timestamp in seconds when object first appears
-                - additional_details: Extra contextual information
-            * object_count: Total number of unique objects identified
-            * video_id: Video identifier
-        - top: Number of top results to retrieve
-
 
     Output:
         List of dictionaries containing requested fields
@@ -55,11 +40,6 @@ async def get_object_collection(
     # Initialize search provider
     search_provider = provider_factory.create_search_provider()
     
-    # Initalize Embedding provider
-    embed_provider = provider_factory.create_embedding_provider()
-    # embedding the query
-    embedding = await embed_provider.embedding(query)
-
     try:
         # Build filter query
         filter_query = None
@@ -70,14 +50,12 @@ async def get_object_collection(
 
         # Search for object collection matching the filter
         results = await search_provider.search(
-            query=query,
-            index_name=full_index_name,
-            search_text=None,
-            filter=filter_query,
-            query_type="semantic",
-            top=top,
-            select=fields_to_retrieve,
-            embedding=embedding
+            query = "*",
+            index_name = full_index_name,
+            search_text = "*",
+            filter = filter_query,
+            top = 1,
+            select = ['object_collection','object_count','video_id'],
         )
         return list(results)
 
