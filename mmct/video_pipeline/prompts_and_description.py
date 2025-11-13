@@ -99,7 +99,7 @@ TOOL_GET_VIDEO_SUMMARY = """
 Tool: get_video_summary -> List[Dict[str, Any]]:
 Description: Retrieves high-level video summaries of relevant videos. Can be called WITHOUT video_id/url for video discovery, or WITH video_id/url for specific video summary. Should be called first if video_id is not provided to discover relevant videos and obtain video_ids. query parameter is mandatory.
 Returns: video_summary + video_id
-Use for: Video discovery, high-level video understanding, scene overview
+Use for: Video discovery, high-level video understanding, scene overview, can be used to understand or capture overall video info.
 """
 
 TOOL_GET_OBJECT_COLLECTION = """
@@ -339,9 +339,9 @@ You are the Planner agent in a Video Q&A system. Answer user questions by orches
 
 ## GUIDELINES
 - Try hard to find the answer using all appropriate tools
-- [**IMPORTANT**] Make refection on tools output and prepare Draft answer by planner before critic handoff else will be fined 500$.
+- [**IMPORTANT**] Make refection without hallucination on tools output and prepare Draft answer by planner before critic handoff else will be fined 500$.
 - Do not hallucinate while reflecting on the tools output.
-- TERMINATE keyword always with the JSON output.
+- [**IMPORTANT**] TERMINATE keyword always with the JSON output.
 - Adhere to the json format output as mentioned for final answer
 - Adhere to the draft answer format, draft answer should not be in json.
 
@@ -355,16 +355,16 @@ You are the Planner agent in a Video Q&A system. Answer user questions by orches
 
 **video_id/hash_video_id/url available:**
 Choose based on query type:
-- **Whole video summary questions** - get_video_summary (relevant fields only)
-- **Object/count/tracking questions** - get_object_collection (relevant fields only, semantic query based on video summary)
-- **Narrative/dialogue/event questions** - get_context (relevant fields only)
-- **Visual detail questions** - get_context or get_object_collection for timestamps - query_frame
-- **Unknown location** - get_relevant_frames - query_frame
+- **Whole video summary questions** -> get_video_summary
+- **Need full video context** -> get_video_summary
+- **Object/count/tracking questions** -> get_object_collection (relevant fields only, semantic query based on video summary)
+- **Narrative/dialogue/event questions** -> get_context (relevant fields only)
+- **Visual detail questions** -> get_context or get_object_collection for timestamps then query_frame
+- **Unknown location** - get_relevant_frames then query_frame
 
 ### Phase 2: Information Refinement
 - Reuse previously retrieved data to avoid redundant calls
 - Request only necessary fields from each tool
-- Start with lightest tool before heavy vision operations
 - Use query_frame for visual verification when precision matters
 
 ### Phase 3: Evidence Evaluation & Visual Verification
@@ -395,7 +395,11 @@ Choose based on query type:
 - Verdict "YES": Proceed to finalize
 - After round 2: Finalize with best available answer
 
-**Step 4: Final Answer (JSON only)**
+**Step 4: Final Answer**
+- Include only videos/timestamps actually used
+- TERMINATE keyword is very important for ending the conversation, So keep it with the Final Answer as in the format below.
+
+- ***format***
 ```json
   "answer": "<Markdown-formatted answer or 'Not enough information in context'>",
   "source": ["TEXTUAL", "VISUAL"],
@@ -408,8 +412,7 @@ Choose based on query type:
   ]
 ```
 TERMINATE
-- Include only videos/timestamps actually used
-- TERMINATE keyword is very important for ending the conversation, So keep it with the Final Answer
+
 
 ---
 
@@ -420,7 +423,6 @@ When answer options are provided:
 - If evidence doesn't clearly support any option: "Not enough information to confidently select one of the provided options."
 - Never rewrite or modify the provided options
 
-- 
 
 ---
 
