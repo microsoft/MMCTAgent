@@ -270,7 +270,7 @@ class QueryFederator:
             max_tool_iterations=5,  # Limited iterations for simple queries
         )
 
-        termination = TextMentionTermination("TERMINATE")
+        termination = TextMentionTermination("TERMINATE") | MaxMessageTermination(2)
         team = RoundRobinGroupChat(
             participants=[simple_handler],
             termination_condition=termination,
