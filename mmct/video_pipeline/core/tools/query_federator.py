@@ -31,6 +31,7 @@ from mmct.video_pipeline.core.tools.get_context import get_context
 from mmct.video_pipeline.core.tools.get_video_summary import get_video_summary
 from mmct.video_pipeline.core.tools.get_object_collection import get_object_collection
 from mmct.video_pipeline.core.tools.video_qna import video_qna
+from mmct.video_pipeline.core.tools.cache import Cache
 from mmct.providers.factory import provider_factory
 
 from autogen_ext.models.cache import ChatCompletionCache, CHAT_CACHE_VALUE_TYPE
@@ -170,6 +171,7 @@ class QueryFederator:
         index_name: str = None,
         llm_provider: Optional[object] = None,
         cache: Optional[bool] = False,
+        semantic_cache: Optional[bool] = True
     ):
         self.query = query
         self.video_id = video_id
@@ -178,6 +180,7 @@ class QueryFederator:
         self.index_name = index_name
         self.cache = cache
         self.llm_provider = llm_provider
+        self.semantic_cache = semantic_cache
 
         # Initialize providers if not provided
         if self.llm_provider is None:
@@ -185,7 +188,10 @@ class QueryFederator:
 
         self.model_client = self.llm_provider.get_autogen_client()
         self.model_client_no_parallel_tool_calls = self.llm_provider.get_autogen_client_for_no_tools_agent()
-        
+
+        # Initialize cache instance
+        self.cache_instance = Cache()
+
         self.classifier_agent = None
         self.simple_handler_agent = None
         self.classification_result = None
@@ -388,6 +394,30 @@ class QueryFederator:
             - result: Parsed JSON dict with "answer", "source", and "videos"
             - tokens: Token usage dict with "total_input" and "total_output"
         """
+        # Step 0: Check Cache (Exact Match on question)
+        # self.query
+        if self.semantic_cache and self.cache_instance:
+            tokens = {"total_input": 0, "total_output": 0}
+            try:
+                cache_response = await self.cache_instance.get_cache_response(self.query)
+                return {
+                        "result": {
+                            "answer": cache_response['answer'],
+                            "source": cache_response['source'],
+                            "videos": cache_response['videos']
+                        },
+                        "tokens": tokens
+                }
+            except:
+                return {
+                    "result": {
+                        "answer": "Error fetching cache response",
+                        "source": [],
+                        "videos": []
+                    },
+                    "tokens": tokens
+                }
+
         # Step 1: Classify the query
         classification = await self._classify_query()
         self.classification_result = classification
@@ -399,6 +429,23 @@ class QueryFederator:
         else:
             logger.info("Query classified as COMPLEX - using planner-critic team")
             result = await self._handle_complex_query()
+
+        try:
+            result_data = result.get("result", {})
+            answer = result_data.get("answer", "")
+            source = result_data.get("source", [])
+            videos = result_data.get("videos", [])
+
+            # Only cache if we have a valid answer
+            if answer and answer != "Not enough information in context":
+                await self.cache_instance.set_cache(
+                    question=self.query,
+                    answer=answer,
+                    source=source,
+                    videos=videos
+                )
+        except Exception as e:
+            logger.warning(f"Failed to set cache: {e}")
 
         return result
 
@@ -415,6 +462,7 @@ async def query_federator(
     ] = "education-video-index-v2",
     llm_provider: Optional[object] = None,
     cache: Annotated[bool, "Set to True to enable cache for model responses."] = True,
+    semantic_cache: Annotated[bool, "Set to True to enable semantic cache powered by search index"] = True
 ) -> Dict[str, Any]:
     """
     Query Federator for intelligent video query routing.
@@ -468,6 +516,7 @@ async def query_federator(
         index_name=index_name,
         llm_provider=llm_provider,
         cache=cache,
+        semantic_cache=semantic_cache
     )
 
     return await federator.run()
@@ -477,13 +526,7 @@ if __name__ == "__main__":
     # Example usage
     test_queries = [
         # Simple queries
-        "car",
-        "tell me about this video",
-        "how many people are there",
-        
-        # Complex queries
-        "what happened after the person in blue left the room",
-        "why did the car stop and how does it relate to the traffic light",
+        "Can you explain the procedure for creating Jeevamrit (Jeevamrit)?",
     ]
 
     async def test_federator():
@@ -491,13 +534,15 @@ if __name__ == "__main__":
             print(f"\n{'='*60}")
             print(f"Testing query: {query}")
             print('='*60)
-            
+
             result = await query_federator(
                 query=query,
                 index_name="dg-jharkhand-kv",
                 use_critic_agent=False,
                 cache=False,
+                semantic_cache=False
             )
+            print(f"Result: {result}")
     
     # Uncomment to run tests
     asyncio.run(test_federator())
