@@ -36,6 +36,7 @@ async def video_agent_tool(
     video_id: Optional[str] = None,
     url: Optional[str] = None,
     use_critic_agent: Optional[bool] = True,
+    semantic_cache: Annotated[bool, "Set to True to enable semantic cache powered by search index"] = True
 ):
     # Configure logger to output to console
     # Remove default handler and add custom console handler
@@ -53,6 +54,7 @@ async def video_agent_tool(
         video_id=video_id,
         url=url,
         use_critic_agent=use_critic_agent,
+        semantic_cache=semantic_cache
     )
     
     return response
