@@ -423,22 +423,22 @@ class QueryFederator:
             logger.info("Query classified as COMPLEX - using planner-critic team")
             result = await self._handle_complex_query()
 
-        try:
-            result_data = result.get("result", {})
-            answer = result_data.get("answer", "")
-            source = result_data.get("source", [])
-            videos = result_data.get("videos", [])
+        # try:
+        #     result_data = result.get("result", {})
+        #     answer = result_data.get("answer", "")
+        #     source = result_data.get("source", [])
+        #     videos = result_data.get("videos", [])
 
-            # Only cache if we have a valid answer
-            if answer and answer != "Not enough information in context":
-                await self.cache_instance.set_cache(
-                    question=self.query,
-                    answer=answer,
-                    source=source,
-                    videos=videos
-                )
-        except Exception as e:
-            logger.warning(f"Failed to set cache: {e}")
+        #     # Only cache if we have a valid answer
+        #     if answer and answer != "Not enough information in context":
+        #         await self.cache_instance.set_cache(
+        #             question=self.query,
+        #             answer=answer,
+        #             source=source,
+        #             videos=videos
+        #         )
+        # except Exception as e:
+        #     logger.warning(f"Failed to set cache: {e}")
 
         return result
 
