@@ -391,6 +391,8 @@ class QueryFederator:
             tokens = {"total_input": 0, "total_output": 0}
             try:
                 cache_response = await self.cache_instance.get_cache_response(self.query)
+                if isinstance(cache_response['videos'], str):
+                    cache_response['videos'] = json.loads(cache_response['videos'])
                 return {
                         "result": {
                             "answer": cache_response['answer'],
