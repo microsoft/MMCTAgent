@@ -390,7 +390,10 @@ class QueryFederator:
         if self.semantic_cache and self.cache_instance:
             tokens = {"total_input": 0, "total_output": 0}
             try:
-                cache_response = await self.cache_instance.get_cache_response(self.query)
+                if self.url:
+                    cache_response = await self.cache_instance.get_cache_response(self.query, self.url)
+                else:
+                    cache_response = await self.cache_instance.get_cache_response(self.query)
                 if isinstance(cache_response['videos'], str):
                     cache_response['videos'] = json.loads(cache_response['videos'])
                 return {
@@ -423,22 +426,23 @@ class QueryFederator:
             logger.info("Query classified as COMPLEX - using planner-critic team")
             result = await self._handle_complex_query()
 
-        # try:
-        #     result_data = result.get("result", {})
-        #     answer = result_data.get("answer", "")
-        #     source = result_data.get("source", [])
-        #     videos = result_data.get("videos", [])
+        try:
+            result_data = result.get("result", {})
+            answer = result_data.get("answer", "")
+            source = result_data.get("source", [])
+            videos = result_data.get("videos", [])
 
-        #     # Only cache if we have a valid answer
-        #     if answer and answer != "Not enough information in context":
-        #         await self.cache_instance.set_cache(
-        #             question=self.query,
-        #             answer=answer,
-        #             source=source,
-        #             videos=videos
-        #         )
-        # except Exception as e:
-        #     logger.warning(f"Failed to set cache: {e}")
+            # Only cache if we have a valid answer
+            if answer and answer != "Not enough information in context":
+                await self.cache_instance.set_cache(
+                    question=self.query,
+                    answer=answer,
+                    source=source,
+                    videos=videos,
+                    url=self.url
+                )
+        except Exception as e:
+            logger.warning(f"Failed to set cache: {e}")
 
         return result
 

@@ -18,14 +18,14 @@ class Cache:
         index_name: Name of the search index to use (default: "gecko-cache-demo")
     """
 
-    def __init__(self, index_name: str = "gecko-cache-demo"):
+    def __init__(self):
         """
         Initialize the Cache with search and embedding providers.
 
         Args:
             index_name: Name of the search index to use (default: "gecko-cache-demo")
         """
-        self.index_name = index_name
+       
         try:
             logger.info("Instantiating the embedding and search providers")
             self.search_provider = provider_factory.create_search_provider()
@@ -35,7 +35,7 @@ class Cache:
             logger.exception(f"Exception occurred while instantiating providers: {e}")
             raise
 
-    async def get_cache_response(self, question: str) -> dict:
+    async def get_cache_response(self, question: str, url:str = None) -> dict:
         """
         Retrieve a cached response for a given question using semantic search.
 
@@ -46,21 +46,29 @@ class Cache:
             dict: The most similar cached response containing answer, source, and videos
         """
         query_embedding = await self.embed_provider.embedding(question)
+        
         fields_to_retrieve = ['answer', 'source', 'videos']
+        if url:
+            index_name = "gecko-video-cache-demo"
+            filter = f"url eq '{self.url}'"
+        else:
+            index_name = "gecko-cache-demo"
+            filter = None
 
         search_results = await self.search_provider.search(
             query=question,
-            index_name=self.index_name,
+            index_name=index_name,
             search_text=None,
             query_type="semantic",
             top=1,
+            filter = filter,
             select=fields_to_retrieve,
             embedding=query_embedding
         )
 
         return search_results[0]
 
-    async def set_cache(self, question: str, answer: str, source: list, videos: list) -> bool:
+    async def set_cache(self, question: str, answer: str, source: list, videos: list, url:str = None) -> bool:
         """
         Store a question-answer pair in the cache index.
 
@@ -90,9 +98,15 @@ class Cache:
                 "embeddings": question_embedding
             }
 
+            if url:
+                index_name = "gecko-video-cache-demo"
+                doc['url'] = url
+            else:
+                index_name = "gecko-cache-demo"
+
             # Upload to search index
             await self.search_provider.upload_documents(
-                index_name=self.index_name,
+                index_name=index_name,
                 documents=[doc]
             )
 
