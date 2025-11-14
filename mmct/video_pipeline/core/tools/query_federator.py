@@ -390,10 +390,7 @@ class QueryFederator:
         if self.semantic_cache and self.cache_instance:
             tokens = {"total_input": 0, "total_output": 0}
             try:
-                if self.url:
-                    cache_response = await self.cache_instance.get_cache_response(self.query, self.url)
-                else:
-                    cache_response = await self.cache_instance.get_cache_response(self.query)
+                cache_response = await self.cache_instance.get_cache_response(question = self.query, url = self.url)
                 if isinstance(cache_response['videos'], str):
                     cache_response['videos'] = json.loads(cache_response['videos'])
                 return {
