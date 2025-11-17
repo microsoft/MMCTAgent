@@ -50,7 +50,7 @@ class Cache:
         fields_to_retrieve = ['answer', 'source', 'videos']
         if url:
             index_name = "gecko-video-cache-demo"
-            filter = f"url eq '{self.url}'"
+            filter = f"url eq '{url}'"
         else:
             index_name = "gecko-cache-demo"
             filter = None

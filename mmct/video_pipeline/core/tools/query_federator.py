@@ -402,7 +402,8 @@ class QueryFederator:
                         },
                         "tokens": tokens
                 }
-            except:
+            except Exception:
+                logger.exception("Error fetching cache response")
                 return {
                     "result": {
                         "answer": "Error fetching cache response",
