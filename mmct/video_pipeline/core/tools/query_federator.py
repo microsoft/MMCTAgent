@@ -208,7 +208,13 @@ class QueryFederator:
         )
         
         # Run classification
-        classification_task = f"Classify this query: {self.query}\n\nRespond with ONLY the JSON classification."
+        url_str = "\n" 
+        if self.url:
+            url_str = f"URL: {self.url}\n"
+        elif self.video_id:
+            url_str = f"Video ID: {self.video_id}\n"
+            
+        classification_task = f"Classify this query: {self.query}\n{url_str}Respond with ONLY the JSON classification."
         result = await Console(classifier.run_stream(task=classification_task))
 
         # Extract the classification from the last message

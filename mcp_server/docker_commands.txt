@@ -1,4 +1,4 @@
-az acr login --name geckocontainerregistry
+az acr login --name geckocontainerregistry --resource-group "DefaultResourceGroup-CCAN"
 docker build -t geckocontainerregistry.azurecr.io/mmct-mcp:latest -f Dockerfile.mcp .
 docker push geckocontainerregistry.azurecr.io/mmct-mcp:latest
 docker push geckocontainerregistry.azurecr.io/mmct-base:latest

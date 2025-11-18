@@ -17,5 +17,5 @@ async def health_check(request):
     return JSONResponse({
         "status": "healthy",
         "service": "MMCT Agent MCP Server: Cache update disabled, modified query federator prompt",
-        "version": "2.0.7"
+        "version": "2.0.8"
     })
