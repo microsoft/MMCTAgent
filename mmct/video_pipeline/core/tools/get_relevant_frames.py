@@ -58,12 +58,15 @@ async def get_relevant_frames(
             provider_config=provider_config,
         )
         
-        video_filter = f"video_id eq '{video_id}'"
+        video_filter = dict()
+        if video_id:
+            video_filter["video_id"] = {"eq": video_id}
+
         # Search for relevant frames
         results = await searcher.search_keyframes(
             query=query,
             top_k=top_k,
-            video_filter=video_filter
+            video_filter=video_filter if video_filter else None
         )
         
         if not results:

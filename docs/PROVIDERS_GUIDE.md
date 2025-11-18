@@ -81,10 +81,9 @@ hits = await client.search_similar_frames(query_vector=embedding, top_k=10)
   - Expects `embedding` as a kwarg when searching (list[float] or numpy array).
   - Persists two files per index under `index_path`: `<index_name>.index` (FAISS binary) and `<index_name>.meta.json` (metadata + stored documents).
   - Returns results as a list of dicts like `{'id': docid, 'score': <distance>, 'document': { ... }}`. The `score` is an L2 distance (lower == more similar).
-  - It does NOT evaluate OData `filter` strings. If your app relies on filters (for example `video_id eq '...'`) you must post-filter FAISS results in code.
 
 - Azure AI Search (`azure_ai_search`)
-  - Accepts `vector_queries` (Azure VectorizedQuery) and OData `filter` strings.
+  - Accepts `vector_queries` (Azure VectorizedQuery) and `filter` dictionaries.
   - Returns documents as flattened dicts (not nested under `document`).
 
 Normalization recommendation

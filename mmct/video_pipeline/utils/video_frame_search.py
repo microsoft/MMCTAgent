@@ -69,7 +69,7 @@ class VideoFrameSearchClient:
         query_vector: np.ndarray,
         query_text: str = "",
         top_k: int = 10,
-        filters: Optional[str] = None,
+        filters: Optional[Dict] = None,
     ) -> List[Dict[str, Any]]:
         """
         Search for similar frames using vector search.
@@ -121,7 +121,8 @@ class VideoFrameSearchClient:
         """
         try:
             # First, get all frame IDs for this video
-            filter_expr = f"video_id eq '{video_id}'"
+            filter_expr = dict()
+            filter_expr["video_id"] = {"eq": video_id}
             frames = await self.provider.search(
                 query="*",
                 index_name=self.index_name,

@@ -32,31 +32,27 @@ async def get_object_collection(
     # Construct the full index name
     full_index_name = f"object-collection-{index_name}"
 
-    # Get search endpoint from environment
-    search_endpoint = os.getenv("SEARCH_ENDPOINT")
-    if not search_endpoint:
-        raise ValueError("SEARCH_ENDPOINT environment variable not set")
-
     # Initialize search provider
     search_provider = provider_factory.create_search_provider()
     
     try:
-        # Build filter query
-        filter_query = None
+        # Build filter conditions
+        filter_conditions = dict()
         if url:
-            filter_query = f"url eq '{url}'"
+            filter_conditions['url'] = {'eq': url}
         elif video_id:
-            filter_query = f"video_id eq '{video_id}'"
+            filter_conditions['video_id'] = {'eq': video_id}
 
         # Search for object collection matching the filter
         results = await search_provider.search(
             query = "*",
             index_name = full_index_name,
             search_text = "*",
-            filter = filter_query,
+            filter = filter_conditions,
             top = 1,
             select = ['object_collection','object_count','video_id'],
         )
+        print(results)
         return list(results)
 
     except Exception as e:

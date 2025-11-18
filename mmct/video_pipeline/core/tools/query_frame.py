@@ -44,7 +44,7 @@ async def query_frame(
     query: Annotated[str, "user query according to which video content has to be analyzed. If options are available and relevant with the query, they should also be passed. e.g. 'What materials are required to prepare the chilly nursery bed, and what are their uses?','count the person doing exercise in the video?'"],
     index_name: Annotated[str, "search index name"],
     frame_ids: Annotated[Optional[list], "List of frame filenames to analyze (e.g., ['video_123.jpg', 'video_456.jpg'])"] = None,
-    video_id: Annotated[Optional[str], "Unique video identifier hash for frame retrieval. Mandatory if frame_ids are provided"] = None,
+    video_id: Annotated[Optional[str], "Unique hash video id as an identifier for frame retrieval. Mandatory if frame_ids are provided. Do extract it from the URL"] = None,
     start_time: Annotated[Optional[float], "start time in seconds"] = None,
     end_time: Annotated[Optional[float], "end time in seconds"] = None,
 ) -> str:
@@ -99,24 +99,23 @@ async def query_frame(
     frame_filenames = []
 
     if not (None in (start_time, end_time)):
-            time_filter = f"timestamp_seconds ge {start_time} and timestamp_seconds le {end_time}"
-            video_filter = f"video_id eq '{video_id}'"
-            combined_filter = f"{time_filter} and {video_filter}"
-            print(combined_filter)
+        combined_filter = dict()
+        combined_filter['timestamp_seconds'] = {'ge': start_time, 'le': end_time}
+        combined_filter['video_id'] = {'eq': video_id}
 
-            # Search for relevant frames with similarity filtering
-            results = await searcher.search_keyframes(
-                query=query,
-                top_k=5,
-                video_filter=combined_filter
-            )
+        # Search for relevant frames with similarity filtering
+        results = await searcher.search_keyframes(
+            query=query,
+            top_k=5,
+            video_filter=combined_filter
+        )
 
-            # check for query matching and check fetched frames
+        # check for query matching and check fetched frames
 
-            for result in results:
-                keyframe_filename = result.get('keyframe_filename', '')
-                if keyframe_filename:
-                    frame_filenames.append(keyframe_filename)
+        for result in results:
+            keyframe_filename = result.get('keyframe_filename', '')
+            if keyframe_filename:
+                frame_filenames.append(keyframe_filename)
     else:
         # Use provided frame_ids
         frame_filenames = [f"{video_id}_{frame_id}" for frame_id in frame_ids if frame_id is not None]

@@ -54,19 +54,19 @@ async def get_video_summary(
     embedding = await embed_provider.embedding(query)
 
     try:
-        # Build filter query
-        filter_query = None
+        # Build filter conditions
+        filter_conditions = dict()
         if url:
-            filter_query = f"url eq '{url}'"
+            filter_conditions['url'] = {'eq': url}
         elif video_id:
-            filter_query = f"video_id eq '{video_id}'"
+            filter_conditions['video_id'] = {'eq': video_id}
 
         # Search for video summary matching the filter
         results = await search_provider.search(
             query=query,
             index_name=full_index_name,
             search_text=None,
-            filter=filter_query,
+            filter=filter_conditions,
             query_type="semantic",
             top=top,
             select=['video_summary','video_id','url'],

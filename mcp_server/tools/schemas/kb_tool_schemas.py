@@ -35,42 +35,43 @@ class SearchRequest(BaseModel):
 
 
 async def get_filter_string(filters: Dict[str, Any]) -> Optional[str]:
-    clauses: List[str] = []
+    # clauses: List[str] = []
+    filter_conditions = dict()
 
     category = filters.get('category')
     if category:
         cat_esc = category.replace("'", "''")
-        clauses.append(f"category eq '{cat_esc}'")
+        filter_conditions['category'] = {"eq": cat_esc}
 
     sub = filters.get('sub_category')
     if sub and sub.lower() != 'none':
         sub_esc = sub.replace("'", "''")
-        clauses.append(f"sub_category eq '{sub_esc}'")
+        filter_conditions["sub_category"] = {'eq': sub_esc}
 
     subject = filters.get('subject')
     if subject:
         subj_esc = subject.replace("'", "''")
-        clauses.append(f"subject eq '{subj_esc}'")
+        filter_conditions["subject"] = {'eq': subj_esc}
 
     hash_video_id = filters.get('hash_video_id')
     if hash_video_id:
         hash_video_id_esc = hash_video_id.replace("'","''")
-        clauses.append(f"hash_video_id eq '{hash_video_id_esc}'")
+        filter_conditions["hash_video_id"] = {'eq': hash_video_id_esc}
 
     variety = filters.get('variety')
     if variety and variety.lower() != 'none':
         var_esc = variety.replace("'", "''")
-        clauses.append(f"variety eq '{var_esc}'")
+        filter_conditions["variety"] = {'eq': var_esc}
 
     time_from = filters.get('time_from')
     if time_from:
-        clauses.append(f"time ge {time_from}")
+        filter_conditions["time"] = {'ge': time_from}
 
     time_to = filters.get('time_to')
     if time_to:
-        clauses.append(f"time le {time_to}")
+        filter_conditions["time"] = {'le': time_to}
 
-    if not clauses:
+    if not filter_conditions:
         return None
 
-    return " and ".join(clauses)
+    return filter_conditions

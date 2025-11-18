@@ -48,7 +48,7 @@ async def get_context(
             * start_time: Chapter start time in seconds
             * end_time: Chapter end time in seconds
             * hash_video_id: Video identifier
-            * youtube_url: Video URL
+            * url: Video URL
         - top: Number of top results to retrieve
 
     Output:
@@ -61,30 +61,29 @@ async def get_context(
         - start_time (float): Chapter start time in seconds
         - end_time (float): Chapter end time in seconds
         - hash_video_id (str): Video identifier
-        - youtube_url (str): Video URL
+        - url (str): Video URL
     """
     global search_provider, embed_provider
     # embedding the query
     embedding = await embed_provider.embedding(query)
 
     # Build filter query with multiple conditions
-    filter_conditions = []
+    filter_conditions = dict()
     
     if url:
-        filter_conditions.append(f"youtube_url eq '{url}'")
+        filter_conditions["url"] = {"eq": url}
     elif video_id:
-        filter_conditions.append(f"hash_video_id eq '{video_id}'")
+        filter_conditions["hash_video_id"] = {"eq": video_id}
     
     # Add time overlap filter if both start_time and end_time are provided
     # Overlap condition: doc.start_time < end_time AND doc.end_time > start_time
     if start_time is not None and end_time is not None:
-        filter_conditions.append(f"(start_time lt {end_time} and end_time gt {start_time})")
+        filter_conditions["start_time"] = {"lt": end_time}
+        filter_conditions["end_time"] = {"gt": start_time}
     
     # Combine all filter conditions with 'and'
-    if filter_conditions:
-        filter_query = " and ".join(filter_conditions)
-    else:
-        filter_query = None  # no filter
+    if not filter_conditions:
+        filter_conditions = None
 
     search_results = await search_provider.search(
         query=query,
@@ -92,7 +91,7 @@ async def get_context(
         search_text=None,
         query_type="vector",
         top=top,
-        filter=filter_query,
+        filter=filter_conditions,
         select=fields_to_retrieve,
         embedding=embedding
     )

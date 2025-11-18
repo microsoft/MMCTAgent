@@ -2,12 +2,12 @@ import os
 import json
 import threading
 import uuid
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 import asyncio
+import operator
 
 import numpy as np
 import faiss
-from types import SimpleNamespace
 
 from loguru import logger
 from mmct.providers.base import SearchProvider
@@ -34,10 +34,16 @@ class LocalFaissSearchProvider(SearchProvider):
         self._meta: Dict[str, Dict[str, Any]] = {}
         self._locks: Dict[str, threading.Lock] = {}
 
-    # ============================================================================
-    # Helper Methods - File paths and synchronization
-    # ============================================================================
-    
+        self.operators = {
+            "eq": operator.eq,
+            "ne": operator.ne,
+            "gt": operator.gt,
+            "ge": operator.ge,
+            "lt": operator.lt,
+            "le": operator.le,
+        }
+
+
     def _index_file(self, index_name: str) -> str:
         """Get the file path for the FAISS index."""
         return os.path.join(self.base_path, f"{index_name}.index")
@@ -51,9 +57,6 @@ class LocalFaissSearchProvider(SearchProvider):
         if index_name not in self._locks:
             self._locks[index_name] = threading.Lock()
 
-    # ============================================================================
-    # Helper Methods - Index and metadata persistence
-    # ============================================================================
     
     def _load_index_sync(self, index_name: str) -> None:
         """Blocking load of index and metadata if present."""
@@ -135,10 +138,6 @@ class LocalFaissSearchProvider(SearchProvider):
                     except Exception:
                         pass
 
-    # ============================================================================
-    # Helper Methods - Index initialization and document processing
-    # ============================================================================
-    
     def _initialize_index_if_needed(self, meta: Dict[str, Any], embeddings: List[float], index_name: str) -> faiss.Index:
         """
         Initialize FAISS index if it doesn't exist yet.
@@ -276,9 +275,9 @@ class LocalFaissSearchProvider(SearchProvider):
                 
         return results
 
-    def _perform_text_search(self, meta: Dict[str, Any], query: str, text_fields: List[str]) -> List[Dict[str, Any]]:
+    def _perform_normal_search(self, meta: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
-        Perform fallback text-based search when embeddings not available.
+        Perform fallback normal-filtration-based search when embeddings not available.
         
         Args:
             meta: Metadata dictionary
@@ -289,23 +288,11 @@ class LocalFaissSearchProvider(SearchProvider):
             List of matching documents
         """
         results = []
-        text = query.lower() if query else ""
         
         for docid, doc in meta.get("docs", {}).items():
-            combined_text = []
-            for field in text_fields:
-                if field in doc and doc[field]:
-                    combined_text.append(str(doc[field]))
-            combined = " ".join(combined_text).lower()
-            
-            if text and text in combined:
-                results.append({"id": docid, "score": 1.0, "document": doc})
+            results.append({"id": docid, "score": 1.0, "document": doc})
                 
         return results
-
-    # ============================================================================
-    # Public API Methods - Index management
-    # ============================================================================
     
     async def create_index(self, index_name: str, index_schema: Any) -> bool:
         """
@@ -358,10 +345,6 @@ class LocalFaissSearchProvider(SearchProvider):
         await asyncio.to_thread(self._load_index_sync, index_name)
         meta = self._meta.get(index_name, {})
         return bool(meta and (meta.get("dim") is not None or os.path.exists(self._index_file(index_name))))
-
-    # ============================================================================
-    # Public API Methods - Document operations
-    # ============================================================================
     
     @handle_exceptions(retries=3, exceptions=(Exception,))
     @convert_exceptions({Exception: ProviderException})
@@ -428,6 +411,45 @@ class LocalFaissSearchProvider(SearchProvider):
 
         return {"success": True, "count": success}
 
+    def matches_filter(self, doc_meta: Dict[str, Any], filter_dict: Dict[str, Dict[str, Any]]) -> bool:
+        """
+        Returns True if a document's metadata matches *all* filter conditions.
+        
+        filter_dict example:
+        {
+            "timestamp_seconds": {"ge": 10, "le": 100},
+            "video_id": {"eq": "abcd1234"}
+        }
+        """
+        for field, conditions in filter_dict.items():
+            # skip if no condition for this field
+            if not conditions:
+                continue
+
+            # value in the document metadata
+            if field not in doc_meta:
+                # if missing, can't match
+                return False
+            field_value = doc_meta[field]
+
+            # For each operator in the sub-dict, check it
+            for op_name, filter_val in conditions.items():
+                if op_name not in self.operators:
+                    raise ValueError(f"Unsupported filter operator: {op_name}")
+                op_func = self.operators[op_name]
+
+                try:
+                    # Compare. Maybe convert types if needed.
+                    if not op_func(field_value, filter_val):
+                        return False
+                except Exception as e:
+                    # Could not compare (type mismatch etc.)
+                    # You might choose to treat this as non-match
+                    return False
+
+        # If every condition passed
+        return True
+
     @handle_exceptions(retries=3, exceptions=(Exception,))
     @convert_exceptions({Exception: ProviderException})
     async def search(self, query: str, index_name: str = None, **kwargs) -> List[Dict]:
@@ -450,6 +472,8 @@ class LocalFaissSearchProvider(SearchProvider):
         try:
             embedding = kwargs.get("embedding")
             top = kwargs.get("top", 5)
+            filter_dict = kwargs.get("filter")
+            selected_fields = kwargs.get("select", [])
 
             await asyncio.to_thread(self._load_index_sync, index_name)
             meta = self._meta[index_name]
@@ -462,13 +486,34 @@ class LocalFaissSearchProvider(SearchProvider):
                 f"docs={num_docs}, has_index={idx is not None}, has_embedding={embedding is not None}"
             )
 
-            # Vector search if embedding provided
-            if embedding is not None and idx is not None:
-                return self._perform_vector_search(idx, meta, embedding, top, index_name)
+            candidate_docids = [docid for docid, doc in meta["docs"].items()]
+            candidate_ids = [meta["docid_to_id"][docid] for docid in candidate_docids if docid in meta["docid_to_id"]]
 
-            # Fallback: text-based substring search
-            text_fields = ["detailed_summary", "text_from_scene", "chapter_transcript"]
-            return self._perform_text_search(meta, query, text_fields)
+            if filter_dict:
+                # Pre-filter metadata
+                candidate_docids = [docid for docid, doc in meta["docs"].items() if self.matches_filter(doc_meta=doc,filter_dict=filter_dict)]
+                # Map to numeric IDs
+                candidate_ids = [meta["docid_to_id"][docid] for docid in candidate_docids if docid in meta["docid_to_id"]]
+            
+            if embedding is not None and idx is not None:
+                if candidate_ids:
+                    # If you have candidate_ids, do a filtered strategy
+                    # Option A: run full search + post-filter
+                    results = self._perform_vector_search(idx, meta, embedding, top, index_name)
+                    # Filter result
+                    
+                else:
+                    # No filter, just do normal vector search
+                    results = self._perform_vector_search(idx, meta, embedding, top, index_name)
+            else:
+                # Fallback to text search
+                results = self._perform_normal_search(meta)
+
+            if selected_fields: 
+                results = [{k: r['document'][k] for k in selected_fields if k in r['document']} for r in results if r["id"] in candidate_docids][:top]
+            else:
+                results = [r for r in results if r["id"] in candidate_docids][:top]
+            return results
             
         except Exception as e:
             logger.error(f"Local FAISS search failed: {e}")
@@ -524,12 +569,12 @@ class LocalFaissSearchProvider(SearchProvider):
     async def check_is_document_exist(self, hash_id: str, index_name: str = None) -> bool:
         await asyncio.to_thread(self._load_index_sync, index_name)
         meta = self._meta.get(index_name, {})
-        return hash_id in meta.get("docid_to_id", {})
+        documents = meta.get("docs", {})
+        for doc in documents:
+            if 'hash_video_id' in doc and doc['hash_video_id']==hash_id:
+                return True
+        return False
 
-    # ============================================================================
-    # Cleanup
-    # ============================================================================
-    
     async def close(self) -> None:
         """Persist all indexes to disk before closing."""
         for index_name in list(self._meta.keys()):

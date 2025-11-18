@@ -31,9 +31,9 @@ class KeyframeSearcher:
         Initialize the keyframe searcher.
 
         Args:
-            search_endpoint: Azure AI Search endpoint
-            search_key: Azure AI Search API key (optional)
-            index_name: Search index name
+            search_endpoint: VectorDB endpoint
+            search_key: VectorDB API key (optional)
+            index_name: VectorDB index name
             clip_model: CLIP model name for query embeddings
         """
         # Initialize search client; allow injecting a provider instance or provider_name.
@@ -57,7 +57,7 @@ class KeyframeSearcher:
     async def search_keyframes(self,
                         query: str,
                         top_k: int = 5,
-                        video_filter: Optional[str] = None
+                        video_filter: Optional[Dict] = None
                         ) -> List[Dict[str, Any]]:
         """
         Search for keyframes using text query.
@@ -76,15 +76,12 @@ class KeyframeSearcher:
 
             # Generate query embedding
             query_embedding = await self.embeddings_generator.generate_text_embedding(query)
-
-            # Build filter expression
-            filters = f"{video_filter}" if video_filter else None
        
             results = await self.search_client.search_similar_frames(
                 query_vector=query_embedding,
                 query_text=query,
                 top_k=top_k,
-                filters=filters
+                filters=video_filter
             )
 
             return results

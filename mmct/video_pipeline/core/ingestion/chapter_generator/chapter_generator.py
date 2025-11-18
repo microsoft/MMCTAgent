@@ -54,16 +54,16 @@ class ChapterGenerator:
         end_seconds = end_time.hour * 3600 + end_time.minute * 60 + end_time.second
         chapter_timestamps = [start_seconds, end_seconds]
 
-        time_filter = f"timestamp_seconds ge {start_seconds} and timestamp_seconds le {end_seconds}"
-        video_filter = f"video_id eq '{video_id}'"
-        combined_filter = f"{time_filter} and {video_filter}"
+        combined_filter = dict()
+        combined_filter["timestamp_seconds"] = {"ge": start_seconds, "le": end_seconds}
+        combined_filter["video_id"] = {"eq": video_id}
+
         results = await self.search_provider.search(
             query="*",
             search_text="*",
             filter=combined_filter,
             index_name=self.index_name,
             select = ['keyframe_filename','timestamp_seconds']
-
         )
         for result in results:
             file_name = result['keyframe_filename'].split('_')[-1].split('.')[0]

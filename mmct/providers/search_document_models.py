@@ -159,7 +159,7 @@ class ChapterIndexDocument(BaseModel):
     )
 
     # — Non-searchable metadata —
-    youtube_url: str = Field(
+    url: str = Field(
         ...,
         searchable=False,
         filterable=True,
@@ -465,7 +465,7 @@ class ObjectCollectionDocument(BaseModel):
         key=False
     )
 
-    video_summary_embedding: List[float] = Field(
+    embeddings: List[float] = Field(
         default_factory=list,
         description="Vector embedding of the video summary for semantic search",
         searchable=True,
