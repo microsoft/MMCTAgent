@@ -5,8 +5,6 @@ This is a retreive documents tool which provide the summary with the transcript 
 # Importing Libraries
 import os
 from typing_extensions import Annotated, Optional
-from mmct.video_pipeline.utils.helper import get_media_folder
-from azure.search.documents.models import VectorizedQuery, VectorFilterMode
 from mmct.providers.factory import provider_factory
 from loguru import logger
 

@@ -227,12 +227,12 @@ if __name__ == "__main__":
     import asyncio
 
     async def main():
-        # Use the concrete inputs provided for debugging
-        query = "count the fruits on the christmas tree"
-        index_name = "local_search_index"
-        video_id = "808ef24205b8bfe7181818699675f5a4dbfe5974baf5ded99ab5b5b3c8b6f15d"
-        # Use timestamps mode (list of [start, end]) as in your function call
-        timestamps = [["00:00:00", "00:00:46"]]
+      
+        query = "<sample-query>"
+        index_name ="<index-name>"
+        video_id = "<hash-video-id>"
+        start_time = "<start time in seconds>"
+        end_time = "<end time in seconds>"
 
         # Call the tool using timestamps mode (frame_ids=None)
         result = await query_frame(
@@ -240,7 +240,8 @@ if __name__ == "__main__":
             index_name=index_name,
             frame_ids=None,
             video_id=video_id,
-            timestamps=timestamps
+            start_time = start_time,
+            end_time=end_time
         )
 
         print("query_frame result:", result)

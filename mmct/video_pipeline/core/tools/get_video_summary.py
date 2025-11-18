@@ -9,7 +9,7 @@ load_dotenv(find_dotenv())
 async def get_video_summary(
     query: Annotated[str, "query to search for related video summaries"],
     index_name: Annotated[str, "name of the search index provided in the user query"],
-    video_id: Annotated[Optional[str], "unique identifier for the video"] = None,
+    video_id: Annotated[Optional[str], "unique identifier for the video aka hash Id"] = None,
     url: Annotated[Optional[str], "url of the video"] = None,
     top: Annotated[Optional[int], "number of top results to retrieve (max 3)"] = 3
 ) -> List[Dict[str, Any]]:
@@ -79,7 +79,8 @@ async def get_video_summary(
         print(f"Error fetching video summary for video_id={video_id} or url={url}: {e}")
         return []
     finally:
-        await search_provider.close()
+        # await search_provider.close()
+        pass
 
 
 if __name__ == "__main__":
