@@ -16,6 +16,6 @@ async def health_check(request):
     """Health probe endpoint for container orchestration and monitoring"""
     return JSONResponse({
         "status": "healthy",
-        "service": "MMCT Agent MCP Server: With sep cache, simple query handler prompt updated, disabled cache insertion",
-        "version": "2.0.6"
+        "service": "MMCT Agent MCP Server: Cache update disabled, modified query federator prompt",
+        "version": "2.0.7"
     })
