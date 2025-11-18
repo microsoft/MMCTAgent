@@ -67,7 +67,7 @@ class WhisperTranscription(Transcription):
 if __name__ == "__main__":
     # Example usage - replace with your actual values
     video_path = "path/to/your/video.mp4"
-    hash_id = "example_hash_id"
+    hash_id = "video-id"
     transcriber = WhisperTranscription(video_path=video_path, hash_id=hash_id)
-    transcipt = asyncio.run(transcriber.run())
+    transcipt = asyncio.run(transcriber())
     print(transcipt)

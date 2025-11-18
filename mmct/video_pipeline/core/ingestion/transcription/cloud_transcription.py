@@ -81,8 +81,6 @@ class CloudTranscription(Transcription):
 
             # Prepare phrase list for Hindi
             phrase_list = None
-            if self.source_language["lang-code"] == "hi-IN":
-                phrase_list = self.hindi_glossary
 
             # Use speech provider for transcription
             result = await self.speech_provider.transcribe_file(
@@ -212,12 +210,6 @@ class CloudTranscription(Transcription):
                 source_language=self.source_language["lang"].split("_")[0].capitalize()
             )
             logger.info("Inserting the source language to prompt")
-            if self.source_language["lang-code"] == "hi-IN":
-                logger.info("Adding glossary for hindi vocabulary")
-                glossary_table = self.glossary_df[
-                    self.glossary_df["hindi_terms"].apply(lambda term: term in text)
-                ].to_markdown(index=False)
-                prompt += f"\n\n# Glossary:\n{glossary_table}\n"
 
             all_translations: List[str] = []
             logger.info("Translating the texts batchwise")
@@ -268,8 +260,9 @@ class CloudTranscription(Transcription):
 if __name__ == "__main__":
     # Example usage - replace with your actual values
     video_path = "path/to/your/video.mp4"
-    hash_id = "example_hash_id"
-    transcriber = CloudTranscription(video_path=video_path, hash_id=hash_id)
-    transcript = asyncio.run(transcriber.run())
+    hash_id = "video-id"
+    language = Languages.HINDI_INDIA
+    transcriber = CloudTranscription(video_path=video_path, hash_id=hash_id, language=language)
+    transcript = asyncio.run(transcriber())
     print("Final Transcript:")
     print(transcript)
