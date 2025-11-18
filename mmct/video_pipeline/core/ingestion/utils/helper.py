@@ -186,7 +186,7 @@ def split_transcript_by_time(srt_content: str, split_time_seconds: float) -> tup
     """
     Split transcript content into two parts at a specific time point.
     Splits at the exact time where the video is split, ensuring alignment.
-    Resets timestamps for Part B to start from 0 (matching video chunks created with FFmpeg).
+    Preserves original timestamps for Part B to maintain alignment with parent video timeline.
 
     Args:
         srt_content: Original SRT content
@@ -227,18 +227,12 @@ def split_transcript_by_time(srt_content: str, split_time_seconds: float) -> tup
         end_timestamp = seconds_to_timestamp(segment['end_time'])
         part_a_srt += f"{i}\n{start_timestamp} --> {end_timestamp}\n{segment['text']}\n\n"
 
-    # Build Part B SRT (reset timestamps to start from 0)
+    # Build Part B SRT (preserve original timestamps to align with parent video timeline)
     part_b_srt = ""
     if part_b_segments:
-        # Calculate time offset to reset Part B timestamps to 0
-        time_offset = part_b_segments[0]['start_time']
-
         for i, segment in enumerate(part_b_segments, 1):
-            adjusted_start_time = segment['start_time'] - time_offset
-            adjusted_end_time = segment['end_time'] - time_offset
-
-            start_timestamp = seconds_to_timestamp(adjusted_start_time)
-            end_timestamp = seconds_to_timestamp(adjusted_end_time)
+            start_timestamp = seconds_to_timestamp(segment['start_time'])
+            end_timestamp = seconds_to_timestamp(segment['end_time'])
             part_b_srt += f"{i}\n{start_timestamp} --> {end_timestamp}\n{segment['text']}\n\n"
     else:
         logger.warning(f"No transcript segments found after split time {split_time_seconds}s")
