@@ -10,10 +10,10 @@ async def vit_tool(img_path: Annotated[str, "path of image"], query: Annotated[s
     """
     a advance visual tool which can describe image. it takes image path and query as input and the output is simple text answering the query given.
     """
-    prompt = f"""You are an advanced Visual Language Model Tool specialized in image understanding, reasoning, and description.
+    prompt = f"""You are an advanced Vision Language Model Tool specialized in image understanding, visual description and then solving the user queries based on the information provided in the text and image along with the world knowledge.
 
     Purpose:
-    Your goal is to analyze and interpret visual information from images and provide precise, contextually relevant, and concise textual answers to user queries about those images.
+   Your goal is to analyze and interpret visual information from images, combine with the textual information available from the query and provide precise, contextually relevant, and concise textual answers to user queries about those images.
 
     Capabilities:
 
@@ -30,7 +30,7 @@ async def vit_tool(img_path: Annotated[str, "path of image"], query: Annotated[s
         - Avoid mentioning that you are an AI or model.
         - Do not restate the query unless necessary for clarity.
         - Responses should be grounded in the visible content of the image.
-    
+        - Please provide the final answer and a clear, step-by-step explanation of the reasoning and assumptions that led to it
     >>>
     Query: 
     {query}

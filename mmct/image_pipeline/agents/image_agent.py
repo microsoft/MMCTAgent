@@ -210,7 +210,7 @@ class ImageAgent:
                 For your information - There are only two agents - 'planner' & 'critic'
                 Only select one agent.
 
-                - Limit the Planner–Critic feedback loop to **maximum 3 rounds**.
+                - Limit the Planner–Critic feedback loop to **maximum 2 rounds**.
                 """
                 self.team = SelectorGroupChat(
                     [self.planner_agent, self.critic_agent],

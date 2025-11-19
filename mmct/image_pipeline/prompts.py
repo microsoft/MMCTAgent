@@ -75,7 +75,7 @@ async def get_planner_system_prompt(tools_string, criticFlag, includeMetaGuideli
         Critic Agent Usage:
         - Critic Agent should not come first, it should only come in execution after you have provided the final answer and requests the Critic for feedback.
         - Request the Critic agent's feedback only when you have the preliminary answer in hand. you must explicity cite "Ready for Criticism".
-        - Always send the final answer to the Critic agent for review. Request Critic review (mandatory). You may request up to 3 rounds if necessary.
+        - Always send the final answer to the Critic agent for review. Request Critic review (mandatory). You may request up to 2 rounds if necessary.
         - If the Critic Agent confirms that your answer is correct and no review has to be done, then conclude the answer according to the Final Answer Guidelines.
         - If the Critic suggests revisions, re-execute tools or update your plan accordingly.
         - Only provide the final answer once the Critic confirms it is correct.
