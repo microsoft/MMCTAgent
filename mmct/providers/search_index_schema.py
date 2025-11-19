@@ -174,8 +174,8 @@ def create_object_collection_index_schema(index_name: str) -> SearchIndex:
     for name, model_field in ObjectCollectionDocument.model_fields.items():
         extra = model_field.json_schema_extra
 
-        # Special handling for video_summary_embedding vector field
-        if name == "video_summary_embedding":
+        # Special handling for embeddings vector field
+        if name == "embeddings":
             fields.append(
                 SearchField(
                     name=name,

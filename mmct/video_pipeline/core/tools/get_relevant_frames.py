@@ -17,17 +17,17 @@ async def get_relevant_frames(
     provider_name: Annotated[Optional[str], 'optional search provider name, e.g. "local_faiss" or "azure_ai_search"'] = None,
 ) -> List[str]:
     """
-    Discover relevant frame IDs based on visual queries when timestamps are unknown.
+    Discover relevant frame IDs based on visual queries when timestamps are unknown. get_relevant_frames tools is last resort of planner.
 
     Description:
         Searches keyframe index to find relevant frames based on visual embeddings.
         Returns frame IDs that can be passed to query_frame.
 
     Input Parameters:
-        - query (str): Visual description of what to search for (e.g., "frames showing person exercising")
-        - video_id (str): Video identifier to filter frames
-        - index_name (str): Search index name for keyframe search
-        - top_k (int): Number of relevant frames to retrieve (default: 10)
+        - query (str): [Mandatory] Visual description of what to search for (e.g., "frames showing person exercising")
+        - video_id (str): [Mandatory] Video identifier to filter frames
+        - index_name (str): [Mandatory] Search index name for keyframe search
+        - top_k (int): [Mandatory] Number of relevant frames to retrieve (default: 10)
         - provider_name (Optional[str]): Search provider name (e.g., "local_faiss", "azure_ai_search")
 
     Output:
@@ -58,12 +58,15 @@ async def get_relevant_frames(
             provider_config=provider_config,
         )
         
-        video_filter = f"video_id eq '{video_id}'"
+        video_filter = dict()
+        if video_id:
+            video_filter["video_id"] = {"eq": video_id}
+
         # Search for relevant frames
         results = await searcher.search_keyframes(
             query=query,
             top_k=top_k,
-            video_filter=video_filter
+            video_filter=video_filter if video_filter else None
         )
         
         if not results:

@@ -6,6 +6,7 @@ into a single, clean interface.
 """
 
 import os
+from typing import Optional
 from loguru import logger
 
 from mmct.video_pipeline.core.ingestion.key_frames_extractor.keyframe_extractor import (
@@ -68,6 +69,7 @@ class KeyframeProcessor:
         parent_id: str,
         parent_duration: float,
         video_duration: float,
+        offset_time: Optional[float] = None,
     ) -> None:
         """
         Process keyframes for a video part: extract, generate embeddings, and store.
@@ -78,6 +80,7 @@ class KeyframeProcessor:
             parent_id: Hash ID of the parent/original video
             parent_duration: Duration of the parent video in seconds
             video_duration: Duration of this video part in seconds
+            offset_time: Time offset in seconds for Part B videos (None for Part A)
         """
         try:
             # Initialize search index if not already done
@@ -87,7 +90,7 @@ class KeyframeProcessor:
             logger.info(f"Extracting keyframes for video {video_hash_id}...")
             keyframe_extractor = KeyframeExtractor(self.keyframe_config)
             keyframe_metadata = await keyframe_extractor.extract_keyframes(
-                video_path=video_path, video_id=video_hash_id
+                video_path=video_path, video_id=video_hash_id, offset_time=offset_time
             )
             logger.info(f"Successfully extracted {len(keyframe_metadata)} keyframes")
 

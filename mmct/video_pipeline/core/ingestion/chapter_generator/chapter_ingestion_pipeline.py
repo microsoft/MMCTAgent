@@ -166,7 +166,7 @@ class ChapterIngestionPipeline:
                 sub_category="None",
                 text_from_scene=chapter_response.text_from_scene or "None",
                 object_collection=object_collection_json,
-                youtube_url=url or "None",
+                url=url or "None",
                 time=current_time,
                 chapter_transcript=chapter_transcript,
                 parent_id=self.parent_id or "None",

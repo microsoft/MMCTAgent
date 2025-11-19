@@ -322,7 +322,12 @@ class AzureSearchProvider(SearchProvider):
             embedding = kwargs.pop("embedding", [])
             query_type = kwargs.pop("query_type", None)
             vector_queries = kwargs.pop("vector_queries", None)
+            embedding_field_name = kwargs.pop("embedding_field_name", "embeddings")
+            filters = kwargs.pop("filter", None)
             semantic_configuration_name = None
+
+            if filters:
+                kwargs["filter"] = await self._build_filter_query(filters=filters)
 
             # Handle semantic search configuration
             if query_type == "semantic":
@@ -333,11 +338,11 @@ class AzureSearchProvider(SearchProvider):
             if query_type == "vector":
                 query_type = None
                 search_text = None
-                
+           
             # Build vector queries if embedding provided
             if embedding and top and not vector_queries:
                 vector_query = VectorizedQuery(
-                    vector=embedding, k_nearest_neighbors=top, fields="embeddings"
+                    vector=embedding, k_nearest_neighbors=top, fields=embedding_field_name
                 )
                 vector_queries = [vector_query]
 
@@ -525,6 +530,30 @@ class AzureSearchProvider(SearchProvider):
         except Exception as e:
             logger.error(f"Azure AI Search bulk upload failed: {e}")
             raise ProviderException(f"Azure AI Search bulk upload failed: {e}")
+    
+    async def _build_filter_query(self, filters: Dict[str, Any]) -> str:
+        """
+        Build filter query string from a dictionary of filters.
+
+        Args:
+            filters: Dictionary of filter conditions
+        Returns:
+            str: Filter query string
+        """
+        expressions = []
+
+        for field, ops in filters.items():
+            for op, value in ops.items():
+                # Quote strings
+                if isinstance(value, str):
+                    value_str = f"'{value}'"
+                else:
+                    value_str = str(value)
+
+                expressions.append(f"{field} {op} {value_str}")
+
+        # Join all expressions with AND
+        return " and ".join(expressions)
 
     @handle_exceptions(retries=3, exceptions=(Exception,))
     @convert_exceptions({Exception: ProviderException})

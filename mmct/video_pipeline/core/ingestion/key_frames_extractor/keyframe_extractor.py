@@ -116,6 +116,7 @@ def _process_segment(
     config: KeyframeExtractionConfig,
     video_hash_id: str,
     keyframes_dir: str,
+    time_offset_seconds: float = 0.0,
 ) -> List[FrameMetadata]:
     """
     Worker that processes a range of frames [start_frame, end_frame).
@@ -180,7 +181,8 @@ def _process_segment(
         if (frame_idx - start) % interval != 0:
             continue
 
-        ts_sec = frame_idx / fps
+        # Calculate timestamp and apply offset for Part B videos
+        ts_sec = (frame_idx / fps) + time_offset_seconds
 
         # spatial downsampling to reduce optical flow cost
         if scale_factor < 1.0:
@@ -244,9 +246,16 @@ class KeyframeExtractor:
         self,
         video_path: str,
         video_id: Optional[str] = None,
+        offset_time: Optional[float] = None,
     ) -> List[FrameMetadata]:
         """
         Extract keyframes from a (preferably pre-compressed / proxy) video.
+
+        Args:
+            video_path: Path to the video file
+            video_id: Optional video identifier (hash will be computed if not provided)
+            offset_time: Time offset in seconds to add to timestamps (for Part B videos,
+                        this is the split point to align with parent video timeline)
 
         Steps:
         - Hash video to build deterministic output dir
@@ -298,6 +307,9 @@ class KeyframeExtractor:
         loop = asyncio.get_running_loop()
         all_results: List[FrameMetadata] = []
 
+        # Calculate time offset: for Part B videos, offset by split time
+        time_offset = offset_time if offset_time is not None else 0.0
+
         with ThreadPoolExecutor(max_workers=workers) as executor:
             futures = [
                 loop.run_in_executor(
@@ -309,6 +321,7 @@ class KeyframeExtractor:
                     self.config,
                     video_hash_id,
                     keyframes_dir,
+                    time_offset,
                 )
                 for (seg_start, seg_end) in segments
             ]

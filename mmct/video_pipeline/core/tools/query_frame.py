@@ -44,7 +44,7 @@ async def query_frame(
     query: Annotated[str, "user query according to which video content has to be analyzed. If options are available and relevant with the query, they should also be passed. e.g. 'What materials are required to prepare the chilly nursery bed, and what are their uses?','count the person doing exercise in the video?'"],
     index_name: Annotated[str, "search index name"],
     frame_ids: Annotated[Optional[list], "List of frame filenames to analyze (e.g., ['video_123.jpg', 'video_456.jpg'])"] = None,
-    video_id: Annotated[Optional[str], "Unique video identifier hash for frame retrieval. Mandatory if frame_ids are provided"] = None,
+    video_id: Annotated[Optional[str], "Unique hash video id as an identifier for frame retrieval. Mandatory if frame_ids are provided. Do extract it from the URL"] = None,
     start_time: Annotated[Optional[float], "start time in seconds"] = None,
     end_time: Annotated[Optional[float], "end time in seconds"] = None,
 ) -> str:
@@ -61,8 +61,8 @@ async def query_frame(
         - index_name (str): Search index name for keyframe retrieval
         - frame_ids (Optional[list]): List of specific frame filenames to analyze (from get_relevant_frames)
         - video_id (Optional[str]): Video identifier (required if using start_time/end_time)
-        - start_time (Optional[float]): Start time in seconds (use from get_context or object's first_seen)
-        - end_time (Optional[float]): End time in seconds (typically start_time + 5 seconds)
+        - start_time (Optional[float]): Start time in seconds (use from get_context or object's first_seen in get_object_collection output.)
+        - end_time (Optional[float]): End time in seconds (start_time + 5 seconds, if start_time is from the get_objection_collection tool else use what is)
 
     Output:
         String containing visual analysis results including:
@@ -73,6 +73,12 @@ async def query_frame(
         - Text visible in frames
         - Any other visual details relevant to query
     """
+    if len(video_id)==64:
+        parent_id = video_id
+    else:
+        parent_id = video_id[:64]
+
+
     provider_name = None
     save_frames_locally  = False
     # Get search endpoint from environment
@@ -99,24 +105,23 @@ async def query_frame(
     frame_filenames = []
 
     if not (None in (start_time, end_time)):
-            time_filter = f"timestamp_seconds ge {start_time} and timestamp_seconds le {end_time}"
-            video_filter = f"video_id eq '{video_id}'"
-            combined_filter = f"{time_filter} and {video_filter}"
-            print(combined_filter)
+        combined_filter = dict()
+        combined_filter['timestamp_seconds'] = {'ge': start_time, 'le': end_time}
+        combined_filter['parent_id'] = {'eq': parent_id}
 
-            # Search for relevant frames with similarity filtering
-            results = await searcher.search_keyframes(
-                query=query,
-                top_k=5,
-                video_filter=combined_filter
-            )
+        # Search for relevant frames with similarity filtering
+        results = await searcher.search_keyframes(
+            query=query,
+            top_k=5,
+            video_filter=combined_filter
+        )
 
-            # check for query matching and check fetched frames
+        # check for query matching and check fetched frames
 
-            for result in results:
-                keyframe_filename = result.get('keyframe_filename', '')
-                if keyframe_filename:
-                    frame_filenames.append(keyframe_filename)
+        for result in results:
+            keyframe_filename = result.get('keyframe_filename', '')
+            if keyframe_filename:
+                frame_filenames.append(keyframe_filename)
     else:
         # Use provided frame_ids
         frame_filenames = [f"{video_id}_{frame_id}" for frame_id in frame_ids if frame_id is not None]
@@ -130,7 +135,7 @@ async def query_frame(
 
     # Prepare blob paths
     folder_name = "keyframes"
-    file_paths = [f"{video_id}/{j}" for j in frame_filenames if j is not None]
+    file_paths = [f"{j.split('_')[0]}/{j}" for j in frame_filenames if j is not None]
 
     # Download and encode images directly from storage provider (no disk I/O)
     logger.info(f"Downloading and encoding {len(file_paths)} images from storage provider...")
@@ -227,12 +232,19 @@ if __name__ == "__main__":
     import asyncio
 
     async def main():
-        # Use the concrete inputs provided for debugging
-        query = "count the fruits on the christmas tree"
-        index_name = "local_search_index"
-        video_id = "808ef24205b8bfe7181818699675f5a4dbfe5974baf5ded99ab5b5b3c8b6f15d"
-        # Use timestamps mode (list of [start, end]) as in your function call
-        timestamps = [["00:00:00", "00:00:46"]]
+      
+        # query = "<sample-query>"
+        # index_name ="<index-name>"
+        # video_id = "<hash-video-id>"
+        # start_time = "<start time in seconds>"
+        # end_time = "<end time in seconds>"
+
+
+        query = "Which animal appears at 00:07? Options: (A) Manatee, (B) Sea turtle, (C) Lobster, (D) Clownfish."
+        index_name ="test_offset_index"
+        video_id = "fc31fd6e96bd6ea524c0753244303e3fa32738756ad88236612bf0df6d7f986cB"
+        start_time = 0
+        end_time = 12
 
         # Call the tool using timestamps mode (frame_ids=None)
         result = await query_frame(
@@ -240,7 +252,8 @@ if __name__ == "__main__":
             index_name=index_name,
             frame_ids=None,
             video_id=video_id,
-            timestamps=timestamps
+            start_time = start_time,
+            end_time=end_time
         )
 
         print("query_frame result:", result)

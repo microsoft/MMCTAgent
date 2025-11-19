@@ -406,12 +406,16 @@ class IngestionPipeline:
             keyframe_processor = KeyframeProcessor(
                 keyframe_config=keyframe_config,
             )
+            # For Part B (part_index=1), pass video_split_time as offset_time
+            offset_time = video_split_time if part_index == 1 else None
+
             await keyframe_processor.process_keyframes(
                 video_path=video_path,
                 video_hash_id=part_hash_id,
                 parent_id=parent_id,
                 parent_duration=parent_duration,
                 video_duration=part_duration,
+                offset_time=offset_time,
             )
             self.logger.info(f"Keyframe processing completed for part {part_hash_id}")
 

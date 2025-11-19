@@ -1,9 +1,11 @@
 # Importing modules
 import asyncio
+import json
 import os
+import re
 import logging
 from dotenv import load_dotenv
-from typing import Optional
+from typing import Optional, Dict, Any
 from loguru import logger
 
 # Suppress autogen internal logging
@@ -19,7 +21,8 @@ from autogen_agentchat.base import TaskResult
 from mmct.video_pipeline.core.tools.get_context import get_context
 from mmct.video_pipeline.core.tools.get_relevant_frames import get_relevant_frames
 from mmct.video_pipeline.core.tools.query_frame import query_frame
-from mmct.video_pipeline.core.tools.get_video_analysis import get_video_analysis
+from mmct.video_pipeline.core.tools.get_video_summary import get_video_summary
+from mmct.video_pipeline.core.tools.get_object_collection import get_object_collection
 from mmct.video_pipeline.core.tools.critic import critic_tool
 from mmct.video_pipeline.prompts_and_description import (
     get_planner_system_prompt,
@@ -36,26 +39,82 @@ from mmct.providers.factory import provider_factory
 load_dotenv(override=True)
 
 
+def parse_response_to_dict(content: str) -> Dict[str, Any]:
+    """
+    Parse the agent response into a standardized dictionary format.
+    
+    Attempts to extract JSON from the response. If JSON extraction fails,
+    creates a structured response from the text content.
+    
+    Args:
+        content: The response content from the agent
+        
+    Returns:
+        Dict containing:
+        - answer: The response text (markdown formatted)
+        - source: List of sources used (TEXTUAL, VISUAL, or both)
+        - videos: List of video metadata with timestamps
+    """
+    try:
+        # Remove TERMINATE keyword
+        clean_content = content.replace('TERMINATE', '').strip()
+        
+        # Extract JSON from markdown code blocks if present
+        json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', clean_content, re.DOTALL)
+        if json_match:
+            json_str = json_match.group(1)
+            parsed_result = json.loads(json_str)
+            
+            # Validate required keys
+            if all(key in parsed_result for key in ['answer', 'source', 'videos']):
+                return parsed_result
+        
+        # Try to find raw JSON object
+        json_match = re.search(r'(\{.*\})', clean_content, re.DOTALL)
+        if json_match:
+            json_str = json_match.group(1)
+            try:
+                parsed_result = json.loads(json_str)
+                if all(key in parsed_result for key in ['answer', 'source', 'videos']):
+                    return parsed_result
+            except json.JSONDecodeError:
+                pass
+        
+        # If no valid JSON found, create structured response from text
+        logger.warning("No valid JSON structure found, creating from text content")
+        return {
+            "answer": clean_content,
+            "source": ["TEXTUAL", "VISUAL"],  # Assume both since we can't determine
+            "videos": []  # Can't extract video info from unstructured text
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to parse response: {e}")
+        return {
+            "answer": "Error parsing response",
+            "source": [],
+            "videos": []
+        }
+
+
 class VideoQnA:
     """
     VideoQnA with comprehensive multi-tool support for video analysis using Swarm orchestration.
 
     MMCT consists of:
-    - **Planner Agent**: Has access to four tools for comprehensive video analysis:
-      1. get_video_analysis: Retrieves video summary and object descriptions (objects, things, etc.)
-      2. get_context: Retrieves transcript and visual summary documents
-      3. get_relevant_frames: Gets specific frame names based on visual queries
-      4. query_frame: Analyzes downloaded frames with vision models
+    - **Planner Agent**: Has access to five tools for comprehensive video analysis:
+      1. get_video_summary: Retrieves high-level video summaries (can be called without video_id for discovery)
+      2. get_object_collection: Retrieves object descriptions with counts (requires video_id/url, semantic query based on video summary)
+      3. get_context: Retrieves transcript chunks and visual summary chapter documents (requires video_id/url)
+      4. get_relevant_frames: Gets specific frame names based on visual queries
+      5. query_frame: Analyzes downloaded frames with vision models or fetch frames on filter criteria and then analyze them.
     - **Critic Agent**: Validates or refines the planner's output.
 
-    Workflow (with Swarm orchestration):
-    1. Planner starts with get_video_analysis for object overview (counting, scene-related questions)
-    2. Uses get_context for detailed transcript/summary information
-    3. If more visual content needed, uses get_relevant_frames for frame selection
-    4. Uses query_frame to analyze the downloaded frames visually
-    5. Combines textual and visual information for comprehensive answers
-    6. Can hand off to critic for validation and refinement
-    7. Critic can hand back to planner if revisions are needed
+    Workflow:
+    1. If video_id/url NOT provided → Call get_video_summary first to discover relevant videos
+    2. For object-related queries → Use get_object_collection with video_id (semantic query based on summary)
+    3. For narrative/dialogue queries → Use get_context with video_id
+    4. For visual verification → Use query_frame
 
     Args:
         query (str): The natural language question to be answered based on the video content.
@@ -105,7 +164,7 @@ class VideoQnA:
             # Wrap the base model client so AgentChat uses the cached client everywhere
             self.model_client = ChatCompletionCache(self.model_client, store)
 
-        self.tools = [get_video_analysis, get_context, get_relevant_frames, query_frame]
+        self.tools = [get_video_summary, get_object_collection, get_context, get_relevant_frames, query_frame]
         self.planner_agent = None
         self.critic_agent = None
         self.team = None
@@ -123,7 +182,7 @@ class VideoQnA:
             use_critic_agent=self.use_critic_agent,
         )
 
-        # Define Planner agent - has access to get_video_analysis, get_context, get_relevant_frames, and query_frame tools
+        # Define Planner agent - has access to get_video_summary, get_object_collection, get_context, get_relevant_frames, and query_frame tools
         self.planner = AssistantAgent(
             name="planner",
             model_client=self.model_client,
@@ -132,7 +191,7 @@ class VideoQnA:
             system_message=(f"""{planner_system_prompt}"""),
             tools=self.tools,
             reflect_on_tool_use=True,
-            max_tool_iterations = 100,
+            max_tool_iterations=15,  # Reduced from 100 to 15 for faster response
             handoffs=["critic"] if self.use_critic_agent else []
         )
 
@@ -189,13 +248,26 @@ class VideoQnA:
 
     async def run(self):
         """
-        return TaskResult.messages
+        Run the video QnA workflow and return structured response.
+        
+        Returns:
+            Dict containing:
+            - result: Parsed response dict with answer, source, and videos
+            - tokens: Token usage information
         """
         await self.setup()
 
         result = await self.team.run(task=self.task)
         tokens = await self.calculate_total_tokens(result.messages)
-        return {"result": result.messages[-1].content, "tokens": tokens}
+        
+        # Extract and parse the last message content
+        last_message = result.messages[-1].content if result.messages else ""
+        parsed_result = parse_response_to_dict(last_message)
+        
+        return {
+            "result": parsed_result,
+            "tokens": tokens
+        }
 
     async def run_stream(self):
         await self.setup()
@@ -219,14 +291,17 @@ async def video_qna(
     """
     Video QnA with comprehensive multi-tool support for video analysis using Swarm orchestration.
 
-    Answers a user query based on the content of a specified video using four complementary tools:
-    1. get_video_analysis: Retrieves video summary and object descriptions for counting/scene questions
-    2. get_context: Retrieves transcript and visual summary documents
-    3. get_relevant_frames: Gets specific frame names based on visual queries
-    4. query_frame: Analyzes downloaded frames with vision models
+    Answers a user query based on the content of a specified video using five complementary tools:
+    1. get_video_summary: Retrieves high-level video summary and context (can be called without video_id for discovery)
+    2. get_object_collection: Retrieves object descriptions with counts (requires video_id, semantic query based on summary)
+    3. get_context: Retrieves transcript and visual summary documents (requires video_id)
+    4. get_relevant_frames: Gets specific frame names based on visual queries
+    5. query_frame: Analyzes downloaded frames with vision models
 
     The planner intelligently combines textual and visual information for comprehensive responses.
     With Swarm orchestration, agents can dynamically hand off tasks for better collaboration.
+
+    Workflow: If video_id not provided, get_video_summary is called first to discover relevant videos.
     """
 
 
@@ -241,22 +316,46 @@ async def video_qna(
     )
     if stream:
         response_generator = await video_qna_instance.run_stream()
-        # messages = await Console(response_generator)
+        messages = await Console(response_generator)
         # Stream messages through logger instead of Console
-        messages = []
-        async for message in response_generator:
-            # Log the message content without the "Agent Message:" prefix
-            if hasattr(message, 'content') and message.content:
-                logger.info(f"Agent Message:{message.content}")  # Using : as separator for filtering
-            messages.append(message)
+        # messages = []
+        # async for message in response_generator:
+        #     # Log the message content without the "Agent Message:" prefix
+        #     if hasattr(message, 'content') and message.content:
+        #         logger.info(f"Agent Message:{message.content}")  # Using : as separator for filtering
+        #     messages.append(message)
         
-        # Return the final result
+        # Return the final result in consistent format
         if messages:
-            last_message = messages[-1]
+            if isinstance(messages,list):
+                last_message = messages[-1]
+            else:
+                last_message = messages
             if isinstance(last_message, TaskResult):
-                return last_message.messages[-1] if last_message.messages else last_message
-            return last_message
-        return None
+                final_content = last_message.messages[-1].content if last_message.messages else ""
+            else:
+                final_content = getattr(last_message, 'content', str(last_message))
+            
+            # Parse the response into structured format
+            parsed_result = parse_response_to_dict(final_content)
+            
+            # Calculate tokens from all messages
+            tokens = await video_qna_instance.calculate_total_tokens(messages if isinstance(messages[0], TaskResult) else 
+                                                                      (last_message.messages if isinstance(last_message, TaskResult) else []))
+            
+            return {
+                "result": parsed_result,
+                "tokens": tokens
+            }
+        
+        return {
+            "result": {
+                "answer": "No response generated",
+                "source": [],
+                "videos": []
+            },
+            "tokens": {"total_input": 0, "total_output": 0}
+        }
     else:
         return await video_qna_instance.run()
 

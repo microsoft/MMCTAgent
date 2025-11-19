@@ -372,7 +372,7 @@ Carefully identify duplicate objects that refer to the same entity and merge the
                 "object_collection": object_collection_json,
                 "object_count": object_count,
                 "video_summary": video_summary,
-                "video_summary_embedding": video_summary_embedding,
+                "embeddings": video_summary_embedding,
                 "video_duration": video_duration if video_duration is not None else 0.0
             }
 
