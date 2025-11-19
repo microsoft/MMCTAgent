@@ -64,6 +64,9 @@ async def get_context(
         - url (str): Video URL
     """
     global search_provider, embed_provider
+
+    
+
     # embedding the query
     embedding = await embed_provider.embedding(query)
 
@@ -72,8 +75,12 @@ async def get_context(
     
     if url:
         filter_conditions["url"] = {"eq": url}
-    elif video_id:
-        filter_conditions["hash_video_id"] = {"eq": video_id}
+    if video_id:
+        if len(video_id)==64:
+            parent_id = video_id
+        else:
+            parent_id = video_id[:64]
+        filter_conditions["parent_id"] = {"eq": parent_id}
     
     # Add time overlap filter if both start_time and end_time are provided
     # Overlap condition: doc.start_time < end_time AND doc.end_time > start_time
@@ -89,7 +96,7 @@ async def get_context(
         query=query,
         index_name=index_name,
         search_text=None,
-        query_type="vector",
+        query_type="semantic",
         top=top,
         filter=filter_conditions,
         select=fields_to_retrieve,
@@ -104,12 +111,20 @@ if __name__ == "__main__":
     video_id = "hash-video-id"
     query = "user-query"
     index_name = "index-name"
-    # Example: fetch documents with time overlap between 10.0 and 30.0 seconds
+    url = "video-url"
+
+    start_time = "start time in seconds"
+    end_time = "end time in seconds"
+
+    fields_to_retrieve = ["chapter_transcript","detailed_summary","action_taken"]
+
+    
     results = asyncio.run(get_context(
         video_id=video_id, 
         query=query,
         index_name=index_name,
-        start_time=10.0,
-        end_time=30.0
+        start_time=start_time,
+        end_time=end_time,
+        url=url
     ))
     print(results)

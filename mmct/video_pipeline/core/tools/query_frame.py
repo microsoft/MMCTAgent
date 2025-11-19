@@ -61,8 +61,8 @@ async def query_frame(
         - index_name (str): Search index name for keyframe retrieval
         - frame_ids (Optional[list]): List of specific frame filenames to analyze (from get_relevant_frames)
         - video_id (Optional[str]): Video identifier (required if using start_time/end_time)
-        - start_time (Optional[float]): Start time in seconds (use from get_context or object's first_seen)
-        - end_time (Optional[float]): End time in seconds (typically start_time + 5 seconds)
+        - start_time (Optional[float]): Start time in seconds (use from get_context or object's first_seen in get_object_collection output.)
+        - end_time (Optional[float]): End time in seconds (start_time + 5 seconds, if start_time is from the get_objection_collection tool else use what is)
 
     Output:
         String containing visual analysis results including:
@@ -73,6 +73,12 @@ async def query_frame(
         - Text visible in frames
         - Any other visual details relevant to query
     """
+    if len(video_id)==64:
+        parent_id = video_id
+    else:
+        parent_id = video_id[:64]
+
+
     provider_name = None
     save_frames_locally  = False
     # Get search endpoint from environment
@@ -101,7 +107,7 @@ async def query_frame(
     if not (None in (start_time, end_time)):
         combined_filter = dict()
         combined_filter['timestamp_seconds'] = {'ge': start_time, 'le': end_time}
-        combined_filter['video_id'] = {'eq': video_id}
+        combined_filter['parent_id'] = {'eq': parent_id}
 
         # Search for relevant frames with similarity filtering
         results = await searcher.search_keyframes(
@@ -129,7 +135,7 @@ async def query_frame(
 
     # Prepare blob paths
     folder_name = "keyframes"
-    file_paths = [f"{video_id}/{j}" for j in frame_filenames if j is not None]
+    file_paths = [f"{j.split('_')[0]}/{j}" for j in frame_filenames if j is not None]
 
     # Download and encode images directly from storage provider (no disk I/O)
     logger.info(f"Downloading and encoding {len(file_paths)} images from storage provider...")
@@ -227,11 +233,18 @@ if __name__ == "__main__":
 
     async def main():
       
-        query = "<sample-query>"
-        index_name ="<index-name>"
-        video_id = "<hash-video-id>"
-        start_time = "<start time in seconds>"
-        end_time = "<end time in seconds>"
+        # query = "<sample-query>"
+        # index_name ="<index-name>"
+        # video_id = "<hash-video-id>"
+        # start_time = "<start time in seconds>"
+        # end_time = "<end time in seconds>"
+
+
+        query = "Which animal appears at 00:07? Options: (A) Manatee, (B) Sea turtle, (C) Lobster, (D) Clownfish."
+        index_name ="test_offset_index"
+        video_id = "fc31fd6e96bd6ea524c0753244303e3fa32738756ad88236612bf0df6d7f986cB"
+        start_time = 0
+        end_time = 12
 
         # Call the tool using timestamps mode (frame_ids=None)
         result = await query_frame(

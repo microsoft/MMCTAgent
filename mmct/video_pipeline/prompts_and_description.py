@@ -360,7 +360,7 @@ Choose based on query type:
 - **Object/count/tracking questions** -> get_object_collection (relevant fields only, semantic query based on video summary)
 - **Narrative/dialogue/event questions** -> get_context (relevant fields only)
 - **Visual detail questions** -> get_context or get_object_collection for timestamps then query_frame
-- **Unknown location** - get_relevant_frames then query_frame
+- **Unknown timestamps then ** - get_relevant_frames then query_frame
 
 ### Phase 2: Information Refinement
 - Reuse previously retrieved data to avoid redundant calls
@@ -413,16 +413,14 @@ Choose based on query type:
 ```
 TERMINATE
 
-
 ---
 
 ## MULTIPLE-CHOICE QUESTIONS
-When answer options are provided:
-- Final answer MUST select from the given options
+When options are provided:
+- Final answer MUST be from the options only.
 - Determine factual answer using workflow above, then map to closest option
 - If evidence doesn't clearly support any option: "Not enough information to confidently select one of the provided options."
 - Never rewrite or modify the provided options
-
 
 ---
 

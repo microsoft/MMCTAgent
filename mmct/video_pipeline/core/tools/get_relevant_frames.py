@@ -17,7 +17,7 @@ async def get_relevant_frames(
     provider_name: Annotated[Optional[str], 'optional search provider name, e.g. "local_faiss" or "azure_ai_search"'] = None,
 ) -> List[str]:
     """
-    Discover relevant frame IDs based on visual queries when timestamps are unknown.
+    Discover relevant frame IDs based on visual queries when timestamps are unknown. get_relevant_frames tools is last resort of planner.
 
     Description:
         Searches keyframe index to find relevant frames based on visual embeddings.
