@@ -159,9 +159,25 @@ Published on **arXiv** – [arxiv.org/abs/2405.18358](https://arxiv.org/abs/2405
    ```
 
 4. **Install Dependencies**
+
+   Choose the installation option based on your needs:
+
+   **Option A: Image Pipeline**
    ```bash
    pip install --upgrade pip
-   pip install -r requirements.txt
+   pip install ".[image-agent]"
+   ```
+
+   **Option B: Video Pipeline**
+   ```bash
+   pip install --upgrade pip
+   pip install ".[video-agent]"
+   ```
+
+   **Option C: All Features (Image + Video + MCP Server)**
+   ```bash
+   pip install --upgrade pip
+   pip install ".[all]"
    ```
 
 5. **Quick Start Examples**
@@ -326,9 +342,9 @@ MMCTAgent
 │       ├── core
 │       │     └── ingestion
 │       │           └── ingestion_pipeline.py   # Entry point for the Video Ingestion Workflow
-│       └── README.md                # Guide for Video Pipeline  
-├── requirements.txt
-└── README.md  
+│       └── README.md                # Guide for Video Pipeline
+├── pyproject.toml                   # Project configuration and dependencies
+└── README.md
 ```
 
 ## **Contributing**
