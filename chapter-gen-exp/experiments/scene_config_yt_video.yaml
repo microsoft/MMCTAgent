@@ -1,0 +1,29 @@
+video_uri: samples/videos/-c8eATXUui8.mp4
+transcript_path: samples/transcripts/-c8eATXUui8.en.srt
+output_dir: outputs/yt-c8eATXUui8
+metadata:
+  experiment: scene-sampler
+  notes: "Scene-detection-driven frame extraction"
+pipeline:
+  name: scene-pipeline
+  mode: sequential
+  steps:
+    - id: scene_chunks
+      type: video.chunk.scene
+      params:
+        detector: adaptive
+        threshold: 3
+        min_scene_length: 10
+        max_scenes: 1000
+    - id: scene_chunk_alignment
+      type: video.chunk.align-transcript
+      params:
+        chunks_step: scene_chunks
+    - id: scene_frames
+      type: frames.fps
+      params:
+        fps: 1.0
+        max_frames: 200
+        max_frames_per_chunk: 8
+        output_subdir: frames
+        chunks_step: scene_chunk_alignment

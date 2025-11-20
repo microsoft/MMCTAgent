@@ -1,0 +1,47 @@
+video_uri: samples/videos/demo.mp4
+transcript_path: samples/transcripts/demo_transcript.srt
+output_dir: outputs/scene-llm-demo
+metadata:
+  experiment: scene-llm-demo
+  notes: "Scene-aware LLM chapters powered by the configured GPT-4o provider"
+pipeline:
+  name: scene-llm-pipeline
+  mode: sequential
+  steps:
+    - id: scene_chunks
+      type: video.chunk.scene
+      params:
+        detector: content
+        threshold: 27
+        min_scene_length: 2
+        max_scenes: 5
+    - id: scene_chunk_alignment
+      type: video.chunk.align-transcript
+      params:
+        chunks_step: scene_chunks
+    - id: scene_frames
+      type: frames.fps
+      params:
+        fps: 1.0
+        max_frames: 20
+        max_frames_per_chunk: 6
+        output_subdir: frames
+        chunks_step: scene_chunk_alignment
+    - id: llm_chapters
+      type: chapters.scene-llm
+      params:
+        chunks_step: scene_chunk_alignment
+        frames_step: scene_frames
+        batch_size: 5
+        max_parallel_requests: 5
+        max_frames_per_chapter: 6
+        llm_provider: azure
+        llm_request_options:
+          temperature: 0.0
+          max_tokens: 3500
+    - id: export_bundle
+      type: export.knowledge-pack
+      params:
+        chapters_step: llm_chapters
+        frames_step: scene_frames
+        file_name: scene_llm_stub_knowledge_pack.json

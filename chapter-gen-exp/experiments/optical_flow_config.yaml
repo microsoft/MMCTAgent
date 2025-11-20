@@ -1,0 +1,42 @@
+video_uri: samples/videos/demo.mp4
+transcript_path: samples/transcripts/demo_transcript.srt
+output_dir: outputs/optical_flow_demo
+metadata:
+  experiment: optical-flow-sampler
+  notes: "Motion-triggered keyframe extraction"
+pipeline:
+  name: optical-flow-pipeline
+  mode: sequential
+  steps:
+    - id: video_chunks
+      type: video.chunk.basic
+    - id: chunk_sentence_guard
+      type: video.chunk.align-transcript
+      params:
+        chunks_step: video_chunks
+    - id: of_frames
+      type: frames.optical-flow
+      params:
+        motion_threshold: 0.6
+        sample_fps: 1.0
+        max_frame_width: 640
+        max_frames: 10
+        max_frames_per_chunk: 2
+        output_subdir: frames
+        chunks_step: chunk_sentence_guard
+    - id: clean_transcript
+      type: transcript.clean
+      params:
+        min_chars: 10
+    - id: sequential_chapters
+      type: chapters.sequential
+      params:
+        source_step: clean_transcript
+        max_duration: 40
+        max_segments: 2
+    - id: export_bundle
+      type: export.knowledge-pack
+      params:
+        chapters_step: sequential_chapters
+        frames_step: of_frames
+        file_name: optical_flow_knowledge_pack.json

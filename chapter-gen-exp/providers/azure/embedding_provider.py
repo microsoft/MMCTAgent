@@ -1,12 +1,10 @@
 
-from mmct.providers.base import EmbeddingProvider
+from providers.base.embedding_provider import EmbeddingProvider
 from typing import Dict, Any, List
 from azure.identity import get_bearer_token_provider
 from loguru import logger
-from mmct.utils.error_handler import ProviderException, ConfigurationException
 from openai import AsyncAzureOpenAI
-from mmct.utils.error_handler import handle_exceptions, convert_exceptions
-from mmct.providers.credentials import AzureCredentials
+from providers.credentials import AzureCredentials
 
 
 class AzureEmbeddingProvider(EmbeddingProvider):
@@ -27,7 +25,7 @@ class AzureEmbeddingProvider(EmbeddingProvider):
             max_retries = self.config.get("max_retries", 2)
             
             if not endpoint:
-                raise ConfigurationException("Azure OpenAI endpoint is required")
+                raise RuntimeError("Azure OpenAI endpoint is required")
             
             if use_managed_identity:
                 scope = self.config.get("token_scope", "https://cognitiveservices.azure.com/.default")
@@ -42,7 +40,7 @@ class AzureEmbeddingProvider(EmbeddingProvider):
             else:
                 api_key = self.config.get("api_key")
                 if not api_key:
-                    raise ConfigurationException("Azure OpenAI API key is required when managed identity is disabled")
+                    raise RuntimeError("Azure OpenAI API key is required when managed identity is disabled")
                 
                 return AsyncAzureOpenAI(
                     api_version=api_version,
@@ -52,16 +50,14 @@ class AzureEmbeddingProvider(EmbeddingProvider):
                     timeout=timeout
                 )
         except Exception as e:
-            raise ProviderException(f"Failed to initialize Azure OpenAI client: {e}")
+            raise RuntimeError(f"Failed to initialize Azure OpenAI client: {e}")
     
-    @handle_exceptions(retries=3, exceptions=(Exception,))
-    @convert_exceptions({Exception: ProviderException})
     async def embedding(self, text: str, **kwargs) -> List[float]:
         """Generate embedding using Azure OpenAI."""
         try:
             deployment_name = self.config.get("deployment_name") or self.config.get("embedding_deployment_name")
             if not deployment_name:
-                raise ConfigurationException(
+                raise RuntimeError(
                     "Azure OpenAI embedding deployment name is required. "
                     "Set EMBEDDING_SERVICE_DEPLOYMENT_NAME environment variable."
                 )
@@ -75,16 +71,14 @@ class AzureEmbeddingProvider(EmbeddingProvider):
             return response.data[0].embedding
         except Exception as e:
             logger.error(f"Azure OpenAI embedding failed: {e}")
-            raise ProviderException(f"Azure OpenAI embedding failed: {e}")
+            raise RuntimeError(f"Azure OpenAI embedding failed: {e}")
     
-    @handle_exceptions(retries=3, exceptions=(Exception,))
-    @convert_exceptions({Exception: ProviderException})
     async def batch_embedding(self, texts: List[str], **kwargs) -> List[List[float]]:
         """Generate embeddings for multiple texts using Azure OpenAI."""
         try:
             deployment_name = self.config.get("deployment_name") or self.config.get("embedding_deployment_name")
             if not deployment_name:
-                raise ConfigurationException(
+                raise RuntimeError(
                     "Azure OpenAI embedding deployment name is required. "
                     "Set EMBEDDING_SERVICE_DEPLOYMENT_NAME environment variable."
                 )
@@ -98,7 +92,7 @@ class AzureEmbeddingProvider(EmbeddingProvider):
             return [item.embedding for item in response.data]
         except Exception as e:
             logger.error(f"Azure OpenAI batch embedding failed: {e}")
-            raise ProviderException(f"Azure OpenAI batch embedding failed: {e}")
+            raise RuntimeError(f"Azure OpenAI batch embedding failed: {e}")
 
     def get_async_client(self):
         """Get async OpenAI client for direct embeddings API access."""

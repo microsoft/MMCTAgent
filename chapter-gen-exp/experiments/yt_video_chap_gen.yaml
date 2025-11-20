@@ -1,0 +1,51 @@
+video_uri: samples/videos/-c8eATXUui8.mp4
+transcript_path: samples/transcripts/-c8eATXUui8.en.srt
+output_dir: outputs/yt-c8eATXUui8-chapters-2
+metadata:
+  experiment: scene-optical-flow-sampler
+  notes: "Scene chunking feeding optical-flow keyframes"
+pipeline:
+  name: scene-optical-flow-pipeline
+  mode: sequential
+  steps:
+    - id: scene_chunks
+      type: video.chunk.scene
+      params:
+        detector: adaptive
+        threshold: 3
+        min_scene_length: 10
+        max_scenes: 1000
+    - id: scene_chunk_alignment
+      type: video.chunk.align-transcript
+      params:
+        chunks_step: scene_chunks
+    - id: of_scene_frames
+      type: frames.optical-flow
+      params:
+        motion_threshold: 0.8
+        sample_fps: 1.0
+        max_frame_width: 720
+        max_frames: 150
+        max_frames_per_chunk: 10
+        output_subdir: frames-optical
+        chunks_step: scene_chunk_alignment
+    - id: llm_chapters
+      type: chapters.scene-llm
+      params:
+        chunks_step: scene_chunk_alignment
+        frames_step: of_scene_frames
+        batch_size: 5
+        max_parallel_requests: 5
+        max_frames_per_chapter: 10
+    - id: enriched_chapters
+      type: chapters.context-enrich
+      params:
+        chapters_step: llm_chapters
+        context_window: 4
+        llm_request_options:
+          temperature: 0.2
+    - id: object_roster
+      type: chapters.object-enrich
+      params:
+        chapters_step: enriched_chapters
+        max_active_context: 10

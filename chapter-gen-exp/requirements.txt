@@ -1,0 +1,8 @@
+pyyaml>=6.0.0
+opencv-python-headless>=4.8.0
+scenedetect[opencv]>=0.6.3
+pydantic>=2.8.0,<3.0.0
+pydantic-settings>=2.5.0,<3.0.0
+loguru>=0.7.0,<1.0.0
+azure-identity>=1.19.0,<2.0.0
+openai>=1.72.0,<2.0.0
