@@ -701,17 +701,6 @@ async def remove_file(video_id):
     try:
         base_dir = await get_media_folder()
 
-        async def remove_entity(filename):
-            local_path = os.path.join(base_dir, filename)
-            try:
-                print(f"Trying to remove file: {local_path}")
-                if os.path.exists(local_path):
-                    os.remove(local_path)
-                    print(f"Trying to remove file: {local_path}")
-                    
-            except Exception as e:
-                print(f"Error deleting file {local_path}: {e}")
-
         async def remove_dir(dir_name):
             local_path = os.path.join(base_dir, dir_name)
             try:

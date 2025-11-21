@@ -1,5 +1,7 @@
 from typing import List, Optional, Dict
 from pydantic import BaseModel, Field, ConfigDict
+from datetime import datetime
+import uuid
 
 class TranslationResponse(BaseModel):
     """
@@ -135,5 +137,202 @@ class ChapterCreationResponse(BaseModel):
         # Add transcript if provided
         if transcript:
             text += f"The complete transcript of the video is as follows: {transcript}"
-        
+
         return text
+
+
+# ============================================================
+# Metadata Models for Local JSON Storage
+# ============================================================
+
+class KeyframeMetadata(BaseModel):
+    """Metadata for a single keyframe."""
+
+    keyframe_filename: str = Field(
+        ...,
+        description="Filename of the extracted keyframe (e.g., 'abc123_0000.jpg')"
+    )
+    timestamp_seconds: float = Field(
+        ...,
+        description="Time position in video (seconds)"
+    )
+    file_path: str = Field(
+        ...,
+        description="Absolute path to the keyframe image file on local filesystem"
+    )
+    motion_score: float = Field(
+        ...,
+        description="Optical flow motion score"
+    )
+    embeddings: Optional[List[float]] = Field(
+        default=None,
+        description="512-dimensional CLIP embeddings (populated in Phase 2)"
+    )
+    blob_url: Optional[str] = Field(
+        default="",
+        description="Blob storage URL for the frame image (populated in Phase 3)"
+    )
+
+
+class KeyframeMetadataCollection(BaseModel):
+    """Collection of all keyframe metadata for a video."""
+
+    id: str = Field(
+        default_factory=lambda: str(uuid.uuid4()),
+        description="Unique collection document ID"
+    )
+    video_id: str = Field(
+        ...,
+        description="Unique hash ID for the video part"
+    )
+    parent_id: str = Field(
+        ...,
+        description="Hash ID of the original video before splitting"
+    )
+    video_duration: float = Field(
+        ...,
+        description="Duration of the video part in seconds"
+    )
+    parent_duration: float = Field(
+        ...,
+        description="Duration of the original video in seconds"
+    )
+    created_at: str = Field(
+        default_factory=lambda: datetime.utcnow().isoformat() + "Z",
+        description="ISO 8601 timestamp when metadata was created"
+    )
+    keyframes: List[KeyframeMetadata] = Field(
+        ...,
+        description="List of all keyframe metadata objects"
+    )
+
+
+class ChapterMetadata(BaseModel):
+    """Metadata for a single chapter."""
+
+    topic_of_video: str = Field(
+        ...,
+        description="What the video is about"
+    )
+    detailed_summary: str = Field(
+        ...,
+        description="Long-form summary of the video"
+    )
+    action_taken: str = Field(
+        ...,
+        description="Actions described in the video"
+    )
+    text_from_scene: str = Field(
+        ...,
+        description="On-screen text detected"
+    )
+    chapter_transcript: str = Field(
+        ...,
+        description="Full transcript of the chapter"
+    )
+    category: str = Field(
+        ...,
+        description="Primary category"
+    )
+    sub_category: str = Field(
+        ...,
+        description="Sub-category"
+    )
+    object_collection: str = Field(
+        default="[]",
+        description="JSON string array of object collection"
+    )
+    blob_frames_folder_path: str = Field(
+        ...,
+        description="Blob storage path for keyframes folder"
+    )
+    start_time: float = Field(
+        default=0.0,
+        description="Chapter start time in seconds"
+    )
+    end_time: float = Field(
+        default=0.0,
+        description="Chapter end time in seconds"
+    )
+    embeddings: Optional[List[float]] = Field(
+        default=None,
+        description="1536-dimensional text embeddings (populated in Phase 2)"
+    )
+
+
+class ChapterMetadataCollection(BaseModel):
+    """Collection of all chapter metadata for a video."""
+
+    id: str = Field(
+        default_factory=lambda: str(uuid.uuid4()),
+        description="Unique collection document ID"
+    )
+    hash_video_id: str = Field(
+        ...,
+        description="Hash-based video identifier"
+    )
+    parent_id: str = Field(
+        default="None",
+        description="Original video ID (before splitting)"
+    )
+    parent_duration: str = Field(
+        default="None",
+        description="Original video duration in seconds"
+    )
+    video_duration: str = Field(
+        default="None",
+        description="Duration of this specific video part in seconds"
+    )
+    url: str = Field(
+        ...,
+        description="URL to the video content"
+    )
+    created_at: str = Field(
+        default_factory=lambda: datetime.utcnow().isoformat() + "Z",
+        description="ISO 8601 timestamp when metadata was created"
+    )
+    chapters: List[ChapterMetadata] = Field(
+        ...,
+        description="List of all chapter metadata objects"
+    )
+
+
+class ObjectCollectionMetadata(BaseModel):
+    """Metadata for the merged object collection and video summary."""
+
+    id: str = Field(
+        default_factory=lambda: str(uuid.uuid4()),
+        description="Unique object collection document ID"
+    )
+    video_id: str = Field(
+        ...,
+        description="Video hash ID this object collection belongs to"
+    )
+    url: str = Field(
+        default="",
+        description="URL of the video"
+    )
+    object_collection: str = Field(
+        default="[]",
+        description="JSON string array of merged object collection"
+    )
+    object_count: int = Field(
+        default=0,
+        description="Total number of unique objects in the collection"
+    )
+    video_summary: str = Field(
+        default="",
+        description="Overall summary of the entire video"
+    )
+    embeddings: Optional[List[float]] = Field(
+        default=None,
+        description="1536-dimensional embeddings for video summary (populated in Phase 2)"
+    )
+    video_duration: float = Field(
+        default=0.0,
+        description="Duration of the video in seconds"
+    )
+    created_at: str = Field(
+        default_factory=lambda: datetime.utcnow().isoformat() + "Z",
+        description="ISO 8601 timestamp when metadata was created"
+    )

@@ -1,10 +1,11 @@
 """
 Chapter Ingestion Pipeline Module
 
-This module orchestrates the complete chapter generation and ingestion workflow.
-It coordinates semantic chunking, chapter generation, and search index ingestion.
+This module orchestrates the complete chapter generation and local storage workflow.
+It coordinates semantic chunking, chapter generation, and saving to JSON files.
 """
 
+import os
 import uuid
 import asyncio
 import json
@@ -16,7 +17,8 @@ from mmct.providers.search_document_models import ChapterIndexDocument
 from mmct.video_pipeline.core.ingestion.semantic_chunking.semantic_chunker import SemanticChunker
 from mmct.video_pipeline.core.ingestion.chapter_generator.chapter_generator import ChapterGenerator
 from mmct.video_pipeline.core.ingestion.chapter_generator.object_collection_processor import ObjectCollectionProcessor
-from mmct.video_pipeline.core.ingestion.chapter_generator.utils import create_embedding
+from mmct.video_pipeline.core.ingestion.models import ChapterMetadata, ChapterMetadataCollection
+from mmct.video_pipeline.utils.helper import get_media_folder
 from mmct.providers.factory import provider_factory
 
 from dotenv import load_dotenv, find_dotenv
@@ -124,23 +126,23 @@ class ChapterIngestionPipeline:
 
         logger.info(f"Chapter creation completed: {len(self.chapter_responses)} chapters created with timestamps")
 
-    async def _ingest(self, url: Optional[str] = None):
+    async def _save_chapters_to_json(self, url: Optional[str] = None) -> str:
         """
-        Create search documents from chapters and ingest to search index.
+        Create chapter metadata and save to local JSON file (without embeddings).
 
         Args:
             url: Optional YouTube URL for the video
-        """
-        doc_objects: List[ChapterIndexDocument] = []
-        current_time = datetime.now()
 
-        logger.info(f"Creating documents from {len(self.chapter_responses)} chapters")
+        Returns:
+            str: Path to the saved JSON file
+        """
+        chapter_metadata_list: List[ChapterMetadata] = []
+
+        logger.info(f"Creating chapter metadata from {len(self.chapter_responses)} chapters")
 
         for chapter_response, chapter_transcript, timestamps in zip(
             self.chapter_responses, self.chapter_transcripts, self.chapter_timestamps
         ):
-            chapter_content_str = chapter_response.__str__(transcript=chapter_transcript)
-
             # Serialize object_collection to JSON string
             object_collection_json = "[]"
             if chapter_response.object_collection:
@@ -156,9 +158,7 @@ class ChapterIngestionPipeline:
             start_time = timestamps[0] if timestamps and len(timestamps) > 0 else 0.0
             end_time = timestamps[1] if timestamps and len(timestamps) > 1 else 0.0
 
-            obj = ChapterIndexDocument(
-                id=str(uuid.uuid4()),
-                hash_video_id=self.hash_id,
+            chapter_meta = ChapterMetadata(
                 topic_of_video="None",
                 action_taken=chapter_response.action_taken or "None",
                 detailed_summary=chapter_response.detailed_summary or "None",
@@ -166,90 +166,77 @@ class ChapterIngestionPipeline:
                 sub_category="None",
                 text_from_scene=chapter_response.text_from_scene or "None",
                 object_collection=object_collection_json,
-                url=url or "None",
-                time=current_time,
                 chapter_transcript=chapter_transcript,
-                parent_id=self.parent_id or "None",
-                parent_duration=str(self.parent_duration) if self.parent_duration is not None else "None",
-                video_duration=str(self.video_duration) if self.video_duration is not None else "None",
+                blob_frames_folder_path=self.keyframe_blob_url or "None",
                 start_time=start_time,
                 end_time=end_time,
-                blob_audio_url="None",
-                blob_video_url="None",
-                blob_transcript_file_url="None",
-                blob_frames_folder_path=self.keyframe_blob_url or "None",
-                embeddings=await create_embedding(chapter_content_str),
+                embeddings=None,  # Will be populated in Phase 2
             )
-            doc_objects.append(obj)
+            chapter_metadata_list.append(chapter_meta)
 
-        logger.info(f"Generated {len(doc_objects)} documents to upload")
-
-        if not doc_objects:
-            logger.error("No documents created - cannot upload to search index!")
-            return
-
-        await self.search_provider.upload_documents(
-            documents=[doc.model_dump() for doc in doc_objects],
-            index_name=self.index_name
+        # Create the collection
+        collection = ChapterMetadataCollection(
+            hash_video_id=self.hash_id,
+            parent_id=self.parent_id or "None",
+            parent_duration=str(self.parent_duration) if self.parent_duration is not None else "None",
+            video_duration=str(self.video_duration) if self.video_duration is not None else "None",
+            url=url or "None",
+            chapters=chapter_metadata_list,
         )
-        logger.info(f"Successfully uploaded {len(doc_objects)} documents to index")
 
-    async def run(self, url: Optional[str] = None) -> Tuple[Optional[List], Optional[List], bool]:
+        # Save to JSON file
+        media_folder = await get_media_folder()
+        chapters_dir = os.path.join(media_folder, "chapters")
+        os.makedirs(chapters_dir, exist_ok=True)
+
+        json_file_path = os.path.join(chapters_dir, f"chapters_{self.hash_id}.json")
+        with open(json_file_path, "w", encoding="utf-8") as f:
+            json.dump(collection.model_dump(), f, indent=2, ensure_ascii=False)
+
+        logger.info(f"Saved {len(chapter_metadata_list)} chapters to {json_file_path}")
+        return json_file_path
+
+    async def run(self, url: Optional[str] = None) -> Tuple[Optional[List], Optional[List], str]:
         """
-        Execute the complete chapter ingestion pipeline.
+        Execute the complete chapter generation and local storage pipeline.
 
         Args:
             url: Optional YouTube URL for the video
 
         Returns:
-            Tuple of (chapter_responses, chapter_transcripts, is_already_ingested)
+            Tuple of (chapter_responses, chapter_transcripts, chapters_json_path)
         """
-        # Ensure search index exists before checking for duplicates
-        await self._create_search_index()
-
-        # Check for duplicate (only after ensuring index exists)
-        is_exist = await self.search_provider.check_is_document_exist(
-            hash_id=self.hash_id,
-            index_name=self.index_name
-        )
-        if is_exist:
-            logger.info("Document already exists in the index.")
-            return None, None, is_exist
-
         # Step 1: Semantic Chunking
         logger.info("Step 1: Performing semantic chunking...")
         self.chunked_segments = await self.semantic_chunker.run()
 
         if not self.chunked_segments:
             logger.error("Semantic chunking failed - no segments created")
-            return None, None, is_exist
+            return None, None, ""
 
         # Step 2: Generate chapters
         logger.info("Step 2: Generating chapters from semantic chunks...")
         await self._create_chapters()
 
-        # Step 3: Process object collection and video summary
-        logger.info("Step 3: Processing and indexing object collection and video summary...")
-        merged_registry = await self.object_collection_processor.run(
+        # Step 3: Process object collection (save to JSON)
+        logger.info("Step 3: Processing object collection...")
+        merged_registry, object_json_path = await self.object_collection_processor.run(
             chapter_responses=self.chapter_responses,
             video_id=self.hash_id,
             url=url,
             video_duration=self.video_duration
         )
         if merged_registry:
-            logger.info(f"Object collection processed: {len(merged_registry)} unique objects")
+            logger.info(f"Object collection processed: {len(merged_registry)} unique objects, saved to {object_json_path}")
         else:
-            logger.info("No objects found in chapters")
+            logger.info(f"No objects found in chapters, saved empty collection to {object_json_path}")
 
-        # Step 4: Ingest to search index
-        logger.info("Step 4: Ingesting chapters to search index...")
-        await self._ingest(url=url)
+        # Step 4: Save chapters to JSON (without embeddings)
+        logger.info("Step 4: Saving chapters to JSON...")
+        chapters_json_path = await self._save_chapters_to_json(url=url)
 
-        # Cleanup
-        await self.search_provider.close()
-
-        logger.info("Chapter ingestion pipeline completed successfully!")
-        return self.chapter_responses, self.chapter_transcripts, is_exist
+        logger.info("Chapter pipeline completed successfully!")
+        return self.chapter_responses, self.chapter_transcripts, chapters_json_path
 
 
 if __name__ == "__main__":

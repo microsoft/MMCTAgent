@@ -105,14 +105,3 @@ class CLIPEmbeddingsGenerator:
         except Exception as e:
             logger.error(f"Failed to process frames for embeddings: {e}")
             raise
-
-    async def cleanup(self):
-        """Clean up model resources."""
-        try:
-            if self.provider is not None:
-                self.provider.close()
-
-            logger.info("Embeddings generator cleaned up successfully")
-
-        except Exception as e:
-            logger.warning(f"Error during cleanup: {e}")

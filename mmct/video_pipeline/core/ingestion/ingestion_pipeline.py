@@ -14,7 +14,6 @@ from mmct.video_pipeline.core.ingestion.transcription.whisper_transcription impo
 )
 from mmct.video_pipeline.utils.helper import (
     get_file_hash,
-    chunked,
     remove_file,
     get_media_folder,
 )
@@ -37,14 +36,14 @@ from mmct.video_pipeline.core.ingestion.key_frames_extractor.keyframe_extractor 
 from mmct.video_pipeline.core.ingestion.key_frames_extractor.keyframe_processor import (
     KeyframeProcessor,
 )
-from mmct.video_pipeline.core.ingestion.key_frames_extractor.keyframe_search_index import (
-    KeyframeSearchIndex,
-)
 
 from mmct.video_pipeline.core.ingestion.chapter_generator.chapter_ingestion_pipeline import (
     ChapterIngestionPipeline,
 )
 from mmct.video_pipeline.core.ingestion.video_compression.video_compression import VideoCompressor
+from mmct.video_pipeline.core.ingestion.embedding_orchestrator import EmbeddingOrchestrator
+from mmct.video_pipeline.core.ingestion.upload_orchestrator import UploadOrchestrator
+from mmct.video_pipeline.core.ingestion.cleanup_manager import CleanupManager
 from dotenv import load_dotenv, find_dotenv
 from mmct.utils.logging_config import log_manager
 from dataclasses import dataclass
@@ -66,7 +65,6 @@ class ProcessingContext:
     timestamps: Optional[List] = None
     base64_frames: Optional[List] = None
     blob_urls: Optional[Dict[str, str]] = None
-    pending_upload_tasks: Optional[List] = None
     local_resources: Optional[List[str]] = None
     video_url: Optional[str] = None
     chapter_responses: Optional[Any] = None
@@ -79,8 +77,6 @@ class ProcessingContext:
     def __post_init__(self):
         if self.blob_urls is None:
             self.blob_urls = {}
-        if self.pending_upload_tasks is None:
-            self.pending_upload_tasks = []
         if self.local_resources is None:
             self.local_resources = []
 
@@ -297,54 +293,6 @@ class IngestionPipeline:
             self.logger.exception(f"Exception occurred during early ingestion check: {e}")
             raise
 
-    async def _queue_keyframe_uploads(self, context: ProcessingContext, blob_manager):
-        """
-        Queue keyframe files for upload to blob storage.
-        Adds upload tasks to the context's pending upload queue.
-        """
-        try:
-            # Get media folder and keyframes directory
-            media_folder = await get_media_folder()
-            keyframes_dir = os.path.join(media_folder, "keyframes", context.hash_id)
-
-            if not os.path.exists(keyframes_dir):
-                self.logger.warning(f"Keyframes directory not found: {keyframes_dir}")
-                return
-
-            # Get all keyframe files from the directory
-            keyframe_files = []
-            for filename in os.listdir(keyframes_dir):
-                if filename.endswith(".jpg"):
-                    keyframe_path = os.path.join(keyframes_dir, filename)
-                    keyframe_files.append((filename, keyframe_path))
-
-            if not keyframe_files:
-                self.logger.warning(f"No keyframes found in directory: {keyframes_dir}")
-                return
-
-            self.logger.info(f"Found {len(keyframe_files)} keyframes to upload")
-
-            # Add upload tasks for each keyframe
-            for filename, keyframe_path in keyframe_files:
-                context.pending_upload_tasks.append(
-                    blob_manager.save_file(
-                        folder_name=self.keyframe_container,
-                        file_name=f"{context.hash_id}/{filename}",
-                        src_file_path=keyframe_path,
-                    )
-                )
-
-            # Add keyframes directory to local resources for cleanup
-            context.local_resources.append(keyframes_dir)
-
-            # Update blob URLs to point to keyframes instead of frames
-            context.keyframes_blob_folder_url = await blob_manager.get_file_url(
-                folder_name=self.keyframe_container, file_name=f"{context.hash_id}"
-            )
-
-        except Exception as e:
-            self.logger.exception(f"Exception occurred during keyframe upload: {e}")
-            raise
 
     async def _process_single_video_part(
         self,
@@ -396,12 +344,15 @@ class IngestionPipeline:
                 folder_name=self.keyframe_container, file_name=f"{context.hash_id}"
             )
 
-            # Step 2: Process keyframes (extract, generate embeddings, store to search index)
+            # ============================================================
+            # PHASE 1: LOCAL PROCESSING (No external I/O)
+            # ============================================================
+
+            # Step 2: Extract keyframes and save metadata to JSON (no embeddings, no upload)
+            self.logger.info(f"[PHASE 1] Starting local processing for {part_hash_id}")
             keyframe_config = KeyframeExtractionConfig(
                 motion_threshold=self.keyframe_config["motion_threshold"],
                 sample_fps=self.keyframe_config["sample_fps"],
-                index_name=self.index_name,
-                search_endpoint=self.search_endpoint,
             )
             keyframe_processor = KeyframeProcessor(
                 keyframe_config=keyframe_config,
@@ -409,7 +360,7 @@ class IngestionPipeline:
             # For Part B (part_index=1), pass video_split_time as offset_time
             offset_time = video_split_time if part_index == 1 else None
 
-            await keyframe_processor.process_keyframes(
+            keyframe_json_path = await keyframe_processor.process_keyframes(
                 video_path=video_path,
                 video_hash_id=part_hash_id,
                 parent_id=parent_id,
@@ -417,14 +368,7 @@ class IngestionPipeline:
                 video_duration=part_duration,
                 offset_time=offset_time,
             )
-            self.logger.info(f"Keyframe processing completed for part {part_hash_id}")
-
-            # Close keyframe processor resources
-            await keyframe_processor.close()
-
-            # Queue keyframes for upload to blob storage
-            await self._queue_keyframe_uploads(context, blob_manager)
-            self.logger.info(f"Queued keyframes for upload for part {part_hash_id}")
+            self.logger.info(f"[PHASE 1] Keyframe metadata saved to {keyframe_json_path}")
 
             # Step 3: Prepare transcript for this part
             transcript_path = None
@@ -451,57 +395,50 @@ class IngestionPipeline:
                     transcript_path = self.transcript_path
                     self.logger.info(f"Using provided transcript: {transcript_path}")
 
-            # Update context with transcript path
-            context.transcript_path = transcript_path
+                # Update context with prepared transcript path
+                context.transcript_path = transcript_path
+            else:
+                # Generate transcription
+                context = await self._get_transcription(context)
+                self.logger.info(f"[PHASE 1] Transcript generated for part {part_hash_id}")
 
-            # Run functional pipeline methods
-            context = await self._get_transcription(context)
-            self.logger.info(f"Transcript generated for part {part_hash_id}")
-
-            # Generate semantic chapters from transcript
+            # Step 4: Generate semantic chapters and save to JSON (no embeddings, no upload)
             context = await self._generate_semantic_chapters(context, self.url)
+            self.logger.info(f"[PHASE 1] Chapters and objects saved to JSON for part {part_hash_id}")
+            self.logger.info(f"[PHASE 1] Local processing completed successfully")
 
-            if not context.is_already_ingested:
-                self.logger.info(f"Chapter generated for part {part_hash_id}")
+            # ============================================================
+            # PHASE 2: PARALLEL EMBEDDING GENERATION
+            # ============================================================
+            self.logger.info(f"[PHASE 2] Starting parallel embedding generation for {part_hash_id}")
+            embedding_orchestrator = EmbeddingOrchestrator()
+            await embedding_orchestrator.generate_all_embeddings(part_hash_id)
+            self.logger.info(f"[PHASE 2] All embeddings generated successfully")
 
-            # Upload files in batches
-            for batch in chunked(context.pending_upload_tasks, 20):
-                upload_results = await asyncio.gather(*batch)
-                del upload_results
-                gc.collect()
+            # ============================================================
+            # PHASE 3: BULK UPLOAD AND INDEXING
+            # ============================================================
+            self.logger.info(f"[PHASE 3] Starting parallel uploads and indexing for {part_hash_id}")
+            upload_orchestrator = UploadOrchestrator(
+                index_name=self.index_name,
+                blob_manager=blob_manager
+            )
+            await upload_orchestrator.upload_all(
+                video_id=part_hash_id,
+                url=self.url,
+                keyframe_blob_url=context.keyframes_blob_folder_url
+            )
+            self.logger.info(f"[PHASE 3] All uploads and indexing completed successfully")
 
-            self.logger.info(f"Files uploaded for part {part_hash_id}")
+            # ============================================================
+            # PHASE 4: CLEANUP
+            # ============================================================
+            self.logger.info(f"[PHASE 4] Starting cleanup for {part_hash_id}")
+            cleanup_manager = CleanupManager(keep_keyframes=False)
+            await cleanup_manager.cleanup(part_hash_id)
+            self.logger.info(f"[PHASE 4] Cleanup completed successfully")
 
             await blob_manager.close()
-
-            # Clean up local files for this part
-            await remove_file(context.hash_id)
-
-            # Clean up transcript chunk file if it was created (split transcript case)
-            if transcript_path and transcript_path != self.transcript_path:
-                try:
-                    if os.path.exists(transcript_path):
-                        os.remove(transcript_path)
-                        self.logger.info(f"Removed transcript chunk: {transcript_path}")
-                except Exception as e:
-                    self.logger.warning(f"Failed to remove transcript chunk {transcript_path}: {e}")
-
-            # Clean up local resources for this part
-            for resource_path in context.local_resources:
-                try:
-                    if os.path.exists(resource_path):
-                        if os.path.isfile(resource_path):
-                            os.remove(resource_path)
-                            self.logger.info(f"Removed local file: {resource_path}")
-                        elif os.path.isdir(resource_path):
-                            shutil.rmtree(resource_path)
-                            self.logger.info(f"Removed local directory: {resource_path}")
-                except Exception as e:
-                    self.logger.warning(f"Failed to remove local resource {resource_path}: {e}")
-
-            # Clean up context variables
-            del context.video_url
-            gc.collect()
 
             self.logger.info(f"Successfully processed video part: {part_hash_id}")
 
@@ -654,42 +591,10 @@ class IngestionPipeline:
             self.logger.warning(f"Could not check for audio stream: {e}")
             return False
 
-    async def _initialize_keyframe_search_index(self):
-        """
-        Initialize the keyframe search index instance and create the index if it doesn't exist.
-        """
-        try:
-            # Get Azure Search endpoint
-            self.search_endpoint = os.getenv("SEARCH_ENDPOINT")
-            if not self.search_endpoint:
-                self.logger.error("SEARCH_ENDPOINT environment variable not set")
-                raise ValueError("SEARCH_ENDPOINT environment variable not set")
-
-            # Create keyframe search index instance
-            keyframe_index_name = f"keyframes-{self.index_name}"
-            keyframe_search_index = KeyframeSearchIndex(
-                search_endpoint=self.search_endpoint, index_name=keyframe_index_name
-            )
-
-            # Create the index if it doesn't exist
-            await keyframe_search_index.create_keyframe_index_if_not_exists()
-            self.logger.info(f"Keyframe search index initialized: {keyframe_index_name}")
-
-            # Close this temporary client - each KeyframeProcessor will create its own
-            await keyframe_search_index.close()
-
-        except Exception as e:
-            self.logger.exception(
-                f"Exception occurred during keyframe search index initialization: {e}"
-            )
-            raise
 
     async def run(self):
         """Main ingestion pipeline method - now supports video splitting and parallel processing."""
         try:
-            # Initialize keyframe search index
-            await self._initialize_keyframe_search_index()
-
             # Early ingestion check - exit immediately if already processed
             should_continue = await self._perform_early_ingestion_check()
             if not should_continue:
@@ -786,7 +691,7 @@ class IngestionPipeline:
 if __name__ == "__main__":
     # Example usage - replace with your actual values
     video_path = "/home/v-amanpatkar/work/demo/What Makes People Engage With Math  Grant Sanderson  TEDxBerkeley.mp4"  # "video-path"
-    index = "aaaa-index-name"
+    index = "test"
     url = "video-url-2"
     source_language = Languages.ENGLISH_UNITED_STATES
     transcript_path = "transcript.srt"  # Optional: path to existing transcript file

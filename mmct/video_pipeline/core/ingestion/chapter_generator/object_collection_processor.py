@@ -1,14 +1,14 @@
+import os
 import json
 import uuid
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from loguru import logger
 from pydantic import BaseModel, Field
 from mmct.config.settings import MMCTConfig
 from mmct.providers.factory import provider_factory
-from mmct.providers.search_index_schema import create_object_collection_index_schema
-from mmct.video_pipeline.core.ingestion.models import ChapterCreationResponse, ObjectResponse
+from mmct.video_pipeline.core.ingestion.models import ChapterCreationResponse, ObjectResponse, ObjectCollectionMetadata
 from mmct.video_pipeline.core.ingestion.chapter_generator.video_summary import VideoSummary
-from mmct.video_pipeline.core.ingestion.chapter_generator.utils import create_embedding
+from mmct.video_pipeline.utils.helper import get_media_folder
 
 
 class MergedObjectCollectionResponse(BaseModel):
@@ -28,7 +28,7 @@ class ObjectCollectionProcessor:
     Processes and merges object collections from multiple video chapters.
 
     This class combines object collections from different chapters of the same video,
-    merges duplicate objects, and indexes them for search.
+    merges duplicate objects, and saves them to local JSON.
     """
 
     def __init__(self, index_name: str):
@@ -36,11 +36,10 @@ class ObjectCollectionProcessor:
         Initialize the ObjectCollectionProcessor.
 
         Args:
-            index_name: Name of the search index to use for object collection storage
+            index_name: Name of the index (used for consistency, actual indexing happens in Phase 3)
         """
         self.config = MMCTConfig()
         self.llm_provider = provider_factory.create_llm_provider()
-        self.search_provider = provider_factory.create_search_provider()
         self.index_name = index_name
         self.video_summary_processor = VideoSummary()
 
@@ -50,7 +49,7 @@ class ObjectCollectionProcessor:
         video_id: str,
         url: Optional[str] = None,
         video_duration: Optional[float] = None
-    ) -> Optional[List[ObjectResponse]]:
+    ) -> Tuple[Optional[List[ObjectResponse]], str]:
         """
         Main method to process chapter responses and create merged object collection and video summary.
 
@@ -61,7 +60,7 @@ class ObjectCollectionProcessor:
             video_duration: Duration of the video in seconds
 
         Returns:
-            Merged object collection as a list of ObjectResponse objects, or None if no objects found
+            Tuple of (merged object collection, path to saved JSON file)
         """
         # Extract all object collections from chapters
         registries = self._extract_registries(chapter_responses)
@@ -86,10 +85,12 @@ class ObjectCollectionProcessor:
             logger.warning("Failed to create video summary")
             video_summary = ""
 
-        # Index the merged registry, video summary, and video duration
-        await self._index_registry(merged_registry, video_id, url, video_summary, video_duration)
+        # Save the merged registry, video summary, and video duration to JSON
+        json_path = await self._save_object_collection_to_json(
+            merged_registry, video_id, url, video_summary, video_duration
+        )
 
-        return merged_registry
+        return merged_registry, json_path
 
     def _extract_registries(
         self,
@@ -310,16 +311,16 @@ Carefully identify duplicate objects that refer to the same entity and merge the
             logger.error(f"Error during object merge: {e}. Returning None")
             return None
 
-    async def _index_registry(
+    async def _save_object_collection_to_json(
         self,
         registry: Optional[List[ObjectResponse]],
         video_id: str,
         url: Optional[str] = None,
         video_summary: str = "",
         video_duration: Optional[float] = None
-    ) -> bool:
+    ) -> str:
         """
-        Index the merged object collection, video summary, and video duration into search index as a single combined document.
+        Save the merged object collection and video summary to local JSON file (without embeddings).
 
         Args:
             registry: Merged object collection as a list of ObjectResponse objects (can be None)
@@ -329,17 +330,9 @@ Carefully identify duplicate objects that refer to the same entity and merge the
             video_duration: Duration of the video in seconds
 
         Returns:
-            True if indexing succeeded, False otherwise
+            Path to the saved JSON file
         """
         try:
-            # Check if index exists
-            index_exists = await self.search_provider.index_exists(self.index_name)
-
-            if not index_exists:
-                logger.info(f"Creating object collection index '{self.index_name}'...")
-                # Create index schema for object collection
-                await self._create_object_collection_index()
-
             # Serialize the entire merged object_collection to JSON string
             object_collection_json = "[]"
             object_count = 0
@@ -353,51 +346,29 @@ Carefully identify duplicate objects that refer to the same entity and merge the
                     logger.warning(f"Failed to serialize merged object_collection: {e}")
                     object_collection_json = "[]"
 
-            # Create embedding for video summary if it exists
-            video_summary_embedding = []
-            if video_summary:
-                try:
-                    logger.info("Creating embedding for video summary...")
-                    video_summary_embedding = await create_embedding(video_summary)
-                    logger.info(f"Successfully created video summary embedding with dimension {len(video_summary_embedding)}")
-                except Exception as e:
-                    logger.error(f"Failed to create video summary embedding: {e}")
-                    video_summary_embedding = []
-
-            # Create a single document with the combined object collection, video summary, embedding, and duration
-            doc = {
-                "id": str(uuid.uuid4()),
-                "video_id": video_id,
-                "url": url,
-                "object_collection": object_collection_json,
-                "object_count": object_count,
-                "video_summary": video_summary,
-                "embeddings": video_summary_embedding,
-                "video_duration": video_duration if video_duration is not None else 0.0
-            }
-
-            # Index the single combined document
-            await self.search_provider.upload_documents(
-                documents=[doc],
-                index_name=self.index_name
+            # Create metadata object
+            metadata = ObjectCollectionMetadata(
+                video_id=video_id,
+                url=url or "",
+                object_collection=object_collection_json,
+                object_count=object_count,
+                video_summary=video_summary,
+                embeddings=None,  # Will be populated in Phase 2
+                video_duration=video_duration if video_duration is not None else 0.0,
             )
-            logger.info(f"Successfully indexed combined object collection with {object_count} objects, video summary, embedding, and duration ({video_duration}s) for video {video_id}")
-            return True
+
+            # Save to JSON file
+            media_folder = await get_media_folder()
+            object_collections_dir = os.path.join(media_folder, "object_collections")
+            os.makedirs(object_collections_dir, exist_ok=True)
+
+            json_file_path = os.path.join(object_collections_dir, f"object_collection_{video_id}.json")
+            with open(json_file_path, "w", encoding="utf-8") as f:
+                json.dump(metadata.model_dump(), f, indent=2, ensure_ascii=False)
+
+            logger.info(f"Saved object collection with {object_count} objects and video summary to {json_file_path}")
+            return json_file_path
 
         except Exception as e:
-            logger.error(f"Failed to index object collection: {e}")
-            return False
-
-    async def _create_object_collection_index(self):
-        """Create the search index for object collection if it doesn't exist."""
-        try:
-            # Use the schema utility function from search_index_schema.py
-            index_schema = create_object_collection_index_schema(self.index_name)
-
-            created = await self.search_provider.create_index(self.index_name, index_schema)
-            if created:
-                logger.info(f"Object collection index '{self.index_name}' created successfully")
-
-        except Exception as e:
-            logger.error(f"Failed to create object collection index: {e}")
+            logger.error(f"Failed to save object collection to JSON: {e}")
             raise
