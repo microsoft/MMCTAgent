@@ -319,7 +319,8 @@ async def add_empty_intervals(segments: List[TranscriptSegment], max_empty_secon
         return segments
 
     result = []
-    prev_end_time = 0.0
+    # Initialize prev_end_time to first segment's start_time to avoid incorrect gaps for Part B
+    prev_end_time = segments[0].start_time
 
     for segment in segments:
         # Check if there's a gap between previous segment and current

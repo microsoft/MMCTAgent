@@ -85,8 +85,8 @@ async def get_context(
     # Add time overlap filter if both start_time and end_time are provided
     # Overlap condition: doc.start_time < end_time AND doc.end_time > start_time
     if start_time is not None and end_time is not None:
-        filter_conditions["start_time"] = {"lt": end_time}
-        filter_conditions["end_time"] = {"gt": start_time}
+        filter_conditions["start_time"] = {"le": end_time}
+        filter_conditions["end_time"] = {"ge": start_time}
     
     # Combine all filter conditions with 'and'
     if not filter_conditions:
