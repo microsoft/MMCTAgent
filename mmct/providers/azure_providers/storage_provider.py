@@ -87,7 +87,9 @@ class AzureStorageProvider(StorageProvider):
             folder_name = kwargs.pop("folder_name")
             # Use service client URL if available, otherwise fall back to config
             if self.service_client:
-                url = f"{self.service_client.url}/{folder_name}/{file_name}"
+                # Remove trailing slash to avoid double slashes in URL
+                base_url = self.service_client.url.rstrip('/')
+                url = f"{base_url}/{folder_name}/{file_name}"
             else:
                 account_url = self.config.get("account_url") or os.getenv("STORAGE_ACCOUNT_URL")
                 if not account_url:

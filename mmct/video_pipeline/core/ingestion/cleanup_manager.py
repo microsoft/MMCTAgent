@@ -46,8 +46,12 @@ class CleanupManager:
         await self._delete_file(os.path.join(media_folder, "object_collections", f"object_collection_{video_id}.json"))
         await self._delete_file(os.path.join(media_folder, f"transcript_{video_id}.srt"))
 
-        # Delete audio file (created during transcription)
-        await self._delete_file(os.path.join(media_folder, f"{video_id}.wav"))
+        # Delete audio files (created during transcription - both .wav and .mp3)
+        await self._delete_file(os.path.join(media_folder, f"{video_id}.wav"))  # CloudTranscription/Azure STT
+        await self._delete_file(os.path.join(media_folder, f"{video_id}.mp3"))  # WhisperTranscription
+
+        # Delete copied video file (video renamed to hash_id during processing)
+        await self._delete_file(os.path.join(media_folder, f"{video_id}.mp4"))
 
         # Delete keyframe images and directories using helper function
         if not self.keep_keyframes:
