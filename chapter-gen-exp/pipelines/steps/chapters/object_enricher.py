@@ -1,4 +1,4 @@
-"""Object-level enrichment that consolidates deduplicated entities across chapters."""
+"""Object-level enrichment utilities shared across chapter processing steps."""
 from __future__ import annotations
 
 import asyncio
@@ -37,6 +37,16 @@ class ChapterObjectBundle:
         return max(0.0, self.end - self.start)
 
 
+@dataclass
+class ObjectRosterResults:
+    """Aggregated roster output produced after processing all chapters."""
+
+    object_collection: List[ObjectResponse]
+    operations: List[Dict[str, Any]]
+    stats: Dict[str, Dict[str, float]]
+    filtered_out: int
+
+
 class ObjectDelta(BaseModel):
     """Structured change command emitted by the LLM."""
 
@@ -61,151 +71,95 @@ class ObjectEnrichmentResponse(BaseModel):
     )
 
 
-@register_step("chapters.object-enrich")
-class ObjectCollectionEnrichmentStep(PipelineStep):
-    """Builds a global object roster by consolidating per-chapter collections sequentially."""
+class ObjectRosterManager:
+    """Reusable orchestrator that maintains a deduplicated object roster."""
 
-    description = "Sequentially deduplicates and updates object collections using LLM-guided add/update/remove instructions."
+    def __init__(
+        self,
+        *,
+        step_id: str,
+        llm_request_options: Optional[Dict[str, Any]] = None,
+        max_active_context: int = 12,
+        min_screen_time_seconds: float = 8.0,
+        min_chunk_occurrences: int = 2,
+        llm_client: Optional[LLMProvider] = None,
+    ) -> None:
+        self._step_id = step_id
+        self._llm = llm_client or llm_provider
+        self._options = dict(llm_request_options or {})
+        self._max_active_context = max_active_context
+        self._min_screen_time = min_screen_time_seconds
+        self._min_chunk_occurrences = min_chunk_occurrences
+        self._active_objects: MutableMapping[str, ObjectResponse] = {}
+        self._global_objects: MutableMapping[str, ObjectResponse] = {}
+        self._operations_log: List[Dict[str, Any]] = []
+        self._presence_stats: Dict[str, Dict[str, float]] = {}
 
-    def run(self, context: StepContext) -> StepResult:
-        chapters_step = self.params.get("chapters_step")
-        if not chapters_step:
-            raise ValueError("'chapters_step' parameter is required")
+    async def process_chapters(self, bundles: List[ChapterObjectBundle]) -> None:
+        for bundle in bundles:
+            await self.process_chapter(bundle)
 
-        llm_request_options: Dict[str, Any] = dict(self.params.get("llm_request_options", {}) or {})
-        max_active_context = int(self.params.get("max_active_context", 12))
-        min_screen_time = float(self.params.get("min_screen_time_seconds", 8.0))
-        min_chunk_occurrences = int(self.params.get("min_chunk_occurrences", 2))
-
-        bundles = self._load_chapter_objects(context, chapters_step)
-        if not bundles:
-            raise ValueError(
-                f"Step '{self.step_id}' did not find chapter objects in step '{chapters_step}'."
-            )
+    async def process_chapter(self, bundle: ChapterObjectBundle) -> None:
+        active_snapshot = self._serialize_objects(self._active_objects, limit=self._max_active_context)
+        chapter_objects = [obj.model_dump() for obj in bundle.objects]
+        messages = self._build_messages(bundle, active_snapshot, chapter_objects)
 
         logger.info(
-            "[{}] Consolidating objects across {} chapters (active context cap: {})",
-            self.step_id,
-            len(bundles),
-            max_active_context,
+            "[{}] Reconciling objects for chunk {} ({} local objects, {} active)",
+            self._step_id,
+            bundle.chunk_index,
+            len(chapter_objects),
+            len(self._active_objects),
         )
 
-        enrichment = asyncio.run(
-            self._consolidate_objects(
-                bundles,
-                llm_request_options=llm_request_options,
-                max_active_context=max_active_context,
-            )
+        raw_response = await self._llm.chat_completion(
+            messages,
+            response_format=ObjectEnrichmentResponse,
+            **self._options,
+        )
+        response = self._coerce_response(raw_response)
+
+        summary = self._apply_operations(
+            response.operations,
+            self._active_objects,
+            self._global_objects,
+            default_first_seen=bundle.start,
         )
 
-        presence_stats = enrichment["stats"]
+        self._update_presence_stats(
+            self._presence_stats,
+            list(self._active_objects.keys()),
+            bundle.duration,
+        )
+        self._operations_log.append(
+            {
+                "chunk_index": bundle.chunk_index,
+                "operations": [op.model_dump() for op in response.operations],
+                "stats": summary,
+            }
+        )
+
+    def finalize(self) -> ObjectRosterResults:
         combined_objects = []
         filtered_stats: Dict[str, Dict[str, float]] = {}
         filtered_out = 0
-        for key, obj in enrichment["global"].items():
-            stats = presence_stats.get(key, {"chunks": 0.0, "duration": 0.0})
-            if stats["chunks"] >= min_chunk_occurrences and stats["duration"] >= min_screen_time:
+
+        for key, obj in self._global_objects.items():
+            stats = self._presence_stats.get(key, {"chunks": 0.0, "duration": 0.0})
+            if stats["chunks"] >= self._min_chunk_occurrences and stats["duration"] >= self._min_screen_time:
                 combined_objects.append(obj)
                 filtered_stats[key] = stats
             else:
                 filtered_out += 1
 
-        combined_objects.sort(key=lambda obj: obj.first_seen)
+        combined_objects.sort(key=lambda item: item.first_seen)
 
-        produced = {
-            "object_collection": [obj.model_dump() for obj in combined_objects],
-            "object_operations": enrichment["operations"],
-            "object_stats": filtered_stats,
-        }
-        metrics = {
-            "unique_objects": float(len(combined_objects)),
-            "chapters_processed": float(len(bundles)),
-            "objects_filtered_out": float(filtered_out),
-        }
-
-        return StepResult(step_id=self.step_id, produced=produced, metrics=metrics)
-
-    def _load_chapter_objects(
-        self,
-        context: StepContext,
-        chapters_step: str,
-    ) -> List[ChapterObjectBundle]:
-        payload = context.data_store.get(chapters_step, {})
-        raw_chapters: List[Dict[str, Any]] = payload.get("chapters", [])
-        bundles: List[ChapterObjectBundle] = []
-        for entry in raw_chapters:
-            chapter_data = entry.get("chapter")
-            if not chapter_data:
-                continue
-            chapter = ChapterCreationResponse.model_validate(chapter_data)
-            bundles.append(
-                ChapterObjectBundle(
-                    chunk_index=int(entry.get("chunk_index", len(bundles))),
-                    start=float(entry.get("start", 0.0)),
-                    end=float(entry.get("end", 0.0)),
-                    transcript=entry.get("transcript", ""),
-                    chapter_summary=chapter.detailed_summary,
-                    actions=chapter.action_taken,
-                    objects=list(chapter.object_collection or []),
-                )
-            )
-        bundles.sort(key=lambda item: item.chunk_index)
-        return bundles
-
-    async def _consolidate_objects(
-        self,
-        bundles: List[ChapterObjectBundle],
-        *,
-        llm_request_options: Dict[str, Any],
-        max_active_context: int,
-    ) -> Dict[str, Any]:
-        active_objects: MutableMapping[str, ObjectResponse] = {}
-        global_objects: MutableMapping[str, ObjectResponse] = {}
-        operations_log: List[Dict[str, Any]] = []
-        object_stats: Dict[str, Dict[str, float]] = {}
-        options = dict(llm_request_options)
-
-        for bundle in bundles:
-            active_snapshot = self._serialize_objects(active_objects, limit=max_active_context)
-            chapter_objects = [obj.model_dump() for obj in bundle.objects]
-            messages = self._build_messages(bundle, active_snapshot, chapter_objects)
-
-            logger.info(
-                "[{}] Reconciling objects for chunk {} ({} local objects, {} active)",
-                self.step_id,
-                bundle.chunk_index,
-                len(chapter_objects),
-                len(active_objects),
-            )
-
-            raw_response = await llm_provider.chat_completion(
-                messages,
-                response_format=ObjectEnrichmentResponse,
-                **options,
-            )
-            response = self._coerce_response(raw_response)
-
-            summary = self._apply_operations(
-                response.operations,
-                active_objects,
-                global_objects,
-                default_first_seen=bundle.start,
-            )
-
-            self._update_presence_stats(
-                object_stats,
-                list(active_objects.keys()),
-                bundle.duration,
-            )
-            operations_log.append(
-                {
-                    "chunk_index": bundle.chunk_index,
-                    "operations": [op.model_dump() for op in response.operations],
-                    "stats": summary,
-                }
-            )
-
-        return {"global": global_objects, "operations": operations_log, "stats": object_stats}
+        return ObjectRosterResults(
+            object_collection=combined_objects,
+            operations=self._operations_log,
+            stats=filtered_stats,
+            filtered_out=filtered_out,
+        )
 
     def _apply_operations(
         self,
@@ -366,3 +320,85 @@ class ObjectCollectionEnrichmentStep(PipelineStep):
         secs = int(seconds % 60)
         millis = int((seconds - int(seconds)) * 1000)
         return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
+
+
+@register_step("chapters.object-enrich")
+class ObjectCollectionEnrichmentStep(PipelineStep):
+    """Builds a global object roster by consolidating per-chapter collections sequentially."""
+
+    description = "Sequentially deduplicates and updates object collections using LLM-guided add/update/remove instructions."
+
+    def run(self, context: StepContext) -> StepResult:
+        chapters_step = self.params.get("chapters_step")
+        if not chapters_step:
+            raise ValueError("'chapters_step' parameter is required")
+
+        llm_request_options: Dict[str, Any] = dict(self.params.get("llm_request_options", {}) or {})
+        max_active_context = int(self.params.get("max_active_context", 12))
+        min_screen_time = float(self.params.get("min_screen_time_seconds", 8.0))
+        min_chunk_occurrences = int(self.params.get("min_chunk_occurrences", 2))
+
+        bundles = self._load_chapter_objects(context, chapters_step)
+        if not bundles:
+            raise ValueError(
+                f"Step '{self.step_id}' did not find chapter objects in step '{chapters_step}'."
+            )
+
+        logger.info(
+            "[{}] Consolidating objects across {} chapters (active context cap: {})",
+            self.step_id,
+            len(bundles),
+            max_active_context,
+        )
+
+        manager = ObjectRosterManager(
+            step_id=self.step_id,
+            llm_request_options=llm_request_options,
+            max_active_context=max_active_context,
+            min_screen_time_seconds=min_screen_time,
+            min_chunk_occurrences=min_chunk_occurrences,
+            llm_client=llm_provider,
+        )
+
+        asyncio.run(manager.process_chapters(bundles))
+        results = manager.finalize()
+
+        produced = {
+            "object_collection": [obj.model_dump() for obj in results.object_collection],
+            "object_operations": results.operations,
+            "object_stats": results.stats,
+        }
+        metrics = {
+            "unique_objects": float(len(results.object_collection)),
+            "chapters_processed": float(len(bundles)),
+            "objects_filtered_out": float(results.filtered_out),
+        }
+
+        return StepResult(step_id=self.step_id, produced=produced, metrics=metrics)
+
+    def _load_chapter_objects(
+        self,
+        context: StepContext,
+        chapters_step: str,
+    ) -> List[ChapterObjectBundle]:
+        payload = context.data_store.get(chapters_step, {})
+        raw_chapters: List[Dict[str, Any]] = payload.get("chapters", [])
+        bundles: List[ChapterObjectBundle] = []
+        for entry in raw_chapters:
+            chapter_data = entry.get("chapter")
+            if not chapter_data:
+                continue
+            chapter = ChapterCreationResponse.model_validate(chapter_data)
+            bundles.append(
+                ChapterObjectBundle(
+                    chunk_index=int(entry.get("chunk_index", len(bundles))),
+                    start=float(entry.get("start", 0.0)),
+                    end=float(entry.get("end", 0.0)),
+                    transcript=entry.get("transcript", ""),
+                    chapter_summary=chapter.detailed_summary,
+                    actions=chapter.action_taken,
+                    objects=list(chapter.object_collection or []),
+                )
+            )
+        bundles.sort(key=lambda item: item.chunk_index)
+        return bundles

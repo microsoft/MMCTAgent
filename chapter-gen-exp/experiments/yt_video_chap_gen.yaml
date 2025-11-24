@@ -1,6 +1,6 @@
 video_uri: samples/videos/-c8eATXUui8.mp4
 transcript_path: samples/transcripts/-c8eATXUui8.en.srt
-output_dir: outputs/yt-c8eATXUui8-chapters-2
+output_dir: outputs/yt-c8eATXUui8-chapters-4
 metadata:
   experiment: scene-optical-flow-sampler
   notes: "Scene chunking feeding optical-flow keyframes"
@@ -42,10 +42,8 @@ pipeline:
       params:
         chapters_step: llm_chapters
         context_window: 4
-        llm_request_options:
-          temperature: 0.2
-    - id: object_roster
-      type: chapters.object-enrich
-      params:
-        chapters_step: enriched_chapters
-        max_active_context: 10
+        object_enrichment:
+          enabled: true
+          max_active_context: 10
+          min_screen_time_seconds: 8.0
+          min_chunk_occurrences: 2

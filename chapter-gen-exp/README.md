@@ -47,8 +47,8 @@ Additional chunking / frame options available out of the box:
 - `video.chunk.scene` (PySceneDetect-based scene boundaries) feeding any chunk-aware frame sampler – see `experiments/scene_config.yaml` for usage with `frames.fps`.
 - `frames.optical-flow` (motion-triggered keyframes) – see `experiments/optical_flow_config.yaml` (chunk-aware motion thresholds).
 - `chapters.scene-llm` (frame + transcript aware LLM chapters) – see `experiments/scene_llm_stub_config.yaml` for a provider-backed GPT-4o example.
-- `chapters.context-enrich` (sequential enrichment) – consumes the output of an earlier chaptering step and refines each summary/action using a sliding window of prior chapters for narrative continuity.
-- `chapters.object-enrich` (global object roster) – walks chapters sequentially, calling the LLM to emit add/update/remove operations that maintain a single deduplicated object collection for the full video.
+- `chapters.context-enrich` (sequential enrichment + optional object roster) – consumes the output of an earlier chaptering step, refines each summary/action using a sliding window of prior chapters, and can simultaneously maintain a deduplicated object roster without a second pipeline pass.
+- `chapters.object-enrich` (standalone object roster) – optional legacy step that still performs only the global object consolidation if you need to run it separately.
 
 ### LLM-backed chapters
 
@@ -69,13 +69,17 @@ Ensure your global MMCT configuration points the provider factory at a GPT-4o de
 
 ### Context-aware enrichment
 
-`chapters.context-enrich` runs after any chapter-producing step (typically `chapters.scene-llm`). It walks the chapters in order and re-prompts the LLM with a limited history window so each enriched summary can reference key moments that happened slightly earlier in the video without exceeding context limits.
+`chapters.context-enrich` runs after any chapter-producing step (typically `chapters.scene-llm`). It walks the chapters in order and re-prompts the LLM with a limited history window so each enriched summary can reference key moments that happened slightly earlier in the video without exceeding context limits. When desired, the same pass can also reconcile a global object roster by enabling the `object_enrichment` block (see below), removing the need for a follow-up `chapters.object-enrich` step.
 
 Parameters:
 
 - `chapters_step`: upstream step id that produced the base chapters.
 - `context_window`: number of previous chapters (default 3) to include in the contextual prompt.
 - `llm_request_options`: forwarded to the underlying provider just like in `chapters.scene-llm` for temperature/token overrides.
+- `object_enrichment`: optional nested configuration that enables inline object tracking. Accepts:
+  - `enabled` (default `true` when block present).
+  - `max_active_context`, `min_screen_time_seconds`, `min_chunk_occurrences`: identical semantics to the standalone object step.
+  - `llm_request_options`: overrides for the object-tracker prompt (can differ from the chapter enrichment call).
 
 Add it to a pipeline immediately after the base chapter generator:
 
@@ -92,13 +96,20 @@ Add it to a pipeline immediately after the base chapter generator:
     context_window: 4
     llm_request_options:
       temperature: 0.2
+    object_enrichment:
+      enabled: true
+      max_active_context: 10
+      min_screen_time_seconds: 8.0
+      min_chunk_occurrences: 2
+      llm_request_options:
+        temperature: 0.1
 ```
 
 Downstream exporters can then point at `enriched_chapters` to retrieve continuity-aware chapter text while still retaining the original summaries for reference.
 
-### Global object enrichment
+### Standalone global object enrichment (optional)
 
-`chapters.object-enrich` should run after you have finalized the chapter text (typically after `chapters.context-enrich`). It feeds the LLM with the current chapter’s objects plus the list of “active” objects from earlier chapters and asks for structured add/update/remove operations. The step then applies those deltas to maintain a single coherent `object_collection` spanning the entire video.
+`chapters.object-enrich` remains available if you want to run object consolidation in a dedicated step (for example, to reuse previously enriched chapters without re-running the chapter LLM). It feeds the LLM with the current chapter’s objects plus the list of “active” objects from earlier chapters and asks for structured add/update/remove operations, then applies those deltas to maintain a single coherent `object_collection` spanning the entire video.
 
 Parameters:
 
@@ -108,7 +119,7 @@ Parameters:
 - `min_chunk_occurrences`: minimum number of chunks an object must appear in to stay in the final roster (defaults to 2).
 - `llm_request_options`: forwarded to the provider for temperature/token tweaks.
 
-Example wiring:
+Example wiring (only needed when you skip the inline `object_enrichment` block):
 
 ```yaml
 - id: enriched_chapters
@@ -124,4 +135,4 @@ Example wiring:
       temperature: 0.1
 ```
 
-Exporters (or downstream embedding steps) can now reference `object_roster`’s `object_collection` to get a single deduplicated view of the people/items present across the entire video with consolidated appearance and identity notes.
+Exporters (or downstream embedding steps) can now reference either `enriched_chapters` (inline mode) or `object_roster` (standalone mode) to get a single deduplicated view of the people/items present across the entire video with consolidated appearance and identity notes.

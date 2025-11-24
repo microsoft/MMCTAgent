@@ -3,21 +3,27 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from loguru import logger
 from pydantic import BaseModel, Field
 
-from providers.base.llm_provider import LLMProvider
 from providers.factory import provider_factory
 
 from .models import ChapterCreationResponse
+from .object_enricher import (
+    ChapterObjectBundle,
+    ObjectRosterManager,
+    ObjectRosterResults,
+)
 
 from ..base import PipelineStep, StepContext, StepResult
 from ..registry import register_step
 
 llm_provider = provider_factory.create_llm_provider()
+PARALLEL_ENRICHMENT_ENABLED = True
 
 
 @dataclass
@@ -50,6 +56,16 @@ class ContextEnrichmentResponse(BaseModel):
     )
 
 
+@dataclass
+class ObjectEnrichmentConfig:
+    """Configuration payload for optional object roster tracking."""
+
+    llm_request_options: Dict[str, Any]
+    max_active_context: int
+    min_screen_time_seconds: float
+    min_chunk_occurrences: int
+
+
 @register_step("chapters.context-enrich")
 class ChapterContextEnrichmentStep(PipelineStep):
     """Enriches per-chunk chapters using limited prior context."""
@@ -77,11 +93,26 @@ class ChapterContextEnrichmentStep(PipelineStep):
             context_window,
         )
 
-        chapters, global_summary, summary_sections = asyncio.run(
-            self._enrich_sequentially(
+        object_config = self._build_object_config()
+
+        logger.info(
+            "[{}] Parallel enrichment {}",
+            self.step_id,
+            "enabled" if PARALLEL_ENRICHMENT_ENABLED else "disabled",
+        )
+
+        (
+            chapters,
+            global_summary,
+            summary_sections,
+            object_results,
+        ) = asyncio.run(
+            self._enrich_with_parallel_tasks(
                 records,
                 context_window=context_window,
                 llm_request_options=llm_request_options,
+                object_config=object_config,
+                parallel=PARALLEL_ENRICHMENT_ENABLED,
             )
         )
 
@@ -105,17 +136,41 @@ class ChapterContextEnrichmentStep(PipelineStep):
             "chapters_enriched": float(len(produced_chapters)),
             "context_window": float(context_window),
         }
+        object_payload: Optional[Dict[str, Any]] = None
+        if object_results:
+            object_payload = self._serialize_object_results(object_results)
+            metrics.update(
+                {
+                    "unique_objects": float(len(object_results.object_collection)),
+                    "objects_filtered_out": float(object_results.filtered_out),
+                }
+            )
 
         produced_payload = {
             "chapters": produced_chapters,
             "global_summary": global_summary,
             "global_summary_sections": summary_sections,
         }
+        if object_payload:
+            produced_payload.update(object_payload)
 
         return StepResult(
             step_id=self.step_id,
             produced=produced_payload,
             metrics=metrics,
+        )
+
+    def _build_object_config(self) -> Optional[ObjectEnrichmentConfig]:
+        params = self.params.get("object_enrichment")
+        if not params:
+            return None
+        if not bool(params.get("enabled", True)):
+            return None
+        return ObjectEnrichmentConfig(
+            llm_request_options=dict(params.get("llm_request_options", {}) or {}),
+            max_active_context=int(params.get("max_active_context", 12)),
+            min_screen_time_seconds=float(params.get("min_screen_time_seconds", 8.0)),
+            min_chunk_occurrences=int(params.get("min_chunk_occurrences", 2)),
         )
 
     def _load_chapters(self, context: StepContext, chapters_step: str) -> List[ChapterRecord]:
@@ -141,43 +196,110 @@ class ChapterContextEnrichmentStep(PipelineStep):
         records.sort(key=lambda rec: rec.chunk_index)
         return records
 
-    async def _enrich_sequentially(
+    async def _enrich_with_parallel_tasks(
         self,
         records: List[ChapterRecord],
         *,
         context_window: int,
         llm_request_options: Dict[str, Any],
-    ) -> tuple[List[ChapterCreationResponse], str, List[str]]:
-        history: List[ChapterCreationResponse] = []
-        enriched: List[ChapterCreationResponse] = []
-        options = dict(llm_request_options)
-        summary_sections: List[str] = []
+        object_config: Optional[ObjectEnrichmentConfig],
+        parallel: bool,
+    ) -> Tuple[List[ChapterCreationResponse], str, List[str], Optional[ObjectRosterResults]]:
+        async def chapter_task() -> Tuple[List[ChapterCreationResponse], str, List[str]]:
+            history: List[ChapterCreationResponse] = []
+            enriched: List[ChapterCreationResponse] = []
+            summary_sections: List[str] = []
+            options = dict(llm_request_options)
 
-        for record in records:
-            messages = self._build_messages(
-                record,
-                previous_context=history[-context_window:] if context_window > 0 else [],
-                global_summary_so_far="\n\n".join(summary_sections) or "No summary captured yet.",
+            for record in records:
+                messages = self._build_messages(
+                    record,
+                    previous_context=history[-context_window:] if context_window > 0 else [],
+                    global_summary_so_far="\n\n".join(summary_sections) or "No summary captured yet.",
+                )
+                logger.info(
+                    "[{}] Enriching chunk {} with {} prior chapters",
+                    self.step_id,
+                    record.chunk_index,
+                    len(history[-context_window:]) if context_window > 0 else 0,
+                )
+                raw = await llm_provider.chat_completion(
+                    messages,
+                    response_format=ContextEnrichmentResponse,
+                    **options,
+                )
+                response = self._coerce_response(raw)
+                enriched.append(response.chapter)
+                history.append(response.chapter)
+                if response.global_summary_update:
+                    summary_sections.append(response.global_summary_update.strip())
+
+            return enriched, "\n\n".join(summary_sections).strip(), summary_sections
+
+        async def object_task() -> Optional[ObjectRosterResults]:
+            if not object_config:
+                return None
+
+            manager = ObjectRosterManager(
+                step_id=f"{self.step_id}.objects",
+                llm_request_options=object_config.llm_request_options,
+                max_active_context=object_config.max_active_context,
+                min_screen_time_seconds=object_config.min_screen_time_seconds,
+                min_chunk_occurrences=object_config.min_chunk_occurrences,
+                llm_client=llm_provider,
             )
+
+            for record in records:
+                logger.info(
+                    "[{}] Object roster ingest for chunk {} (duration {:.2f}s)",
+                    f"{self.step_id}.objects",
+                    record.chunk_index,
+                    record.duration,
+                )
+                bundle = ChapterObjectBundle(
+                    chunk_index=record.chunk_index,
+                    start=record.start,
+                    end=record.end,
+                    transcript=record.transcript,
+                    chapter_summary=record.raw_chapter.detailed_summary,
+                    actions=record.raw_chapter.action_taken,
+                    objects=list(record.raw_chapter.object_collection or []),
+                )
+                await manager.process_chapter(bundle)
+
             logger.info(
-                "[{}] Enriching chunk {} with {} prior chapters",
-                self.step_id,
-                record.chunk_index,
-                len(history[-context_window:]) if context_window > 0 else 0,
+                "[{}] Object roster enrichment complete after {} chunks",
+                f"{self.step_id}.objects",
+                len(records),
             )
-            raw = await llm_provider.chat_completion(
-                messages,
-                response_format=ContextEnrichmentResponse,
-                **options,
-            )
-            response = self._coerce_response(raw)
-            enriched.append(response.chapter)
-            history.append(response.chapter)
-            if response.global_summary_update:
-                summary_sections.append(response.global_summary_update.strip())
 
-        global_summary = "\n\n".join(summary_sections).strip()
-        return enriched, global_summary, summary_sections
+            return manager.finalize()
+
+        if object_config and parallel:
+            (chapters_data, object_results) = await asyncio.gather(
+                chapter_task(),
+                object_task(),
+            )
+        else:
+            chapters_data = await chapter_task()
+            if object_config:
+                logger.info(
+                    "[{}] Object roster running sequentially after chapter enrichment",
+                    f"{self.step_id}.objects",
+                )
+                object_results = await object_task()
+            else:
+                object_results = None
+
+        chapters, global_summary, summary_sections = chapters_data
+        return chapters, global_summary, summary_sections, object_results
+
+    def _serialize_object_results(self, results: ObjectRosterResults) -> Dict[str, Any]:
+        return {
+            "object_collection": [obj.model_dump() for obj in results.object_collection],
+            "object_operations": results.operations,
+            "object_stats": results.stats,
+        }
 
     def _build_messages(
         self,
