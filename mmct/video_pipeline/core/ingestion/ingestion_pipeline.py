@@ -22,6 +22,7 @@ from mmct.video_pipeline.core.ingestion.utils.helper import (
     split_video_if_needed,
     load_srt,
     split_transcript_by_time,
+    adjust_transcript_timestamps,
     get_video_duration,
 )
 
@@ -399,7 +400,9 @@ class IngestionPipeline:
                 context.transcript_path = transcript_path
             else:
                 # Generate transcription
-                context = await self._get_transcription(context)
+                # For Part B (part_index=1), pass offset to adjust timestamps
+                time_offset = video_split_time if part_index == 1 else 0.0
+                context = await self._get_transcription(context, time_offset=time_offset)
                 self.logger.info(f"[PHASE 1] Transcript generated for part {part_hash_id}")
 
             # Step 4: Generate semantic chapters and save to JSON (no embeddings, no upload)
@@ -449,9 +452,15 @@ class IngestionPipeline:
             raise
 
     async def _get_transcription(
-        self, context: ProcessingContext
+        self, context: ProcessingContext, time_offset: float = 0.0
     ) -> ProcessingContext:
-        """Generate transcription for video - functional version."""
+        """
+        Generate transcription for video - functional version.
+
+        Args:
+            context: Processing context for the video
+            time_offset: Time offset in seconds to add to all timestamps (for Part B videos)
+        """
         try:
             self.logger.info(
                 f"Using hash ID for video path: {context.video_path}\nHash Id: {context.hash_id}"
@@ -516,6 +525,20 @@ class IngestionPipeline:
                 self.logger.info("Initialized the transcriber instance")
                 context.transcript, local_paths = await transcriber()
                 self.logger.info("Successfully generated the transcript for the video.")
+
+                # Adjust transcript timestamps if offset is provided (for Part B videos)
+                if time_offset > 0:
+                    self.logger.info(f"Adjusting transcript timestamps by offset: {time_offset}s")
+                    context.transcript = adjust_transcript_timestamps(
+                        context.transcript, time_offset
+                    )
+                    # Save adjusted transcript
+                    adjusted_transcript_path = os.path.join(
+                        await get_media_folder(), f"transcript_{context.hash_id}.srt"
+                    )
+                    async with aiofiles.open(adjusted_transcript_path, "w", encoding="utf-8") as f:
+                        await f.write(context.transcript)
+                    self.logger.info(f"Saved adjusted transcript to {adjusted_transcript_path}")
 
             context.local_resources.extend(local_paths)
             del local_paths

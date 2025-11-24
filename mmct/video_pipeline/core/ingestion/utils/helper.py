@@ -182,6 +182,60 @@ def parse_srt_timestamps(srt_content: str) -> list:
     return segments
 
 
+def adjust_transcript_timestamps(srt_content: str, time_offset: float) -> str:
+    """
+    Adjust all timestamps in an SRT transcript by adding a time offset.
+    Used for Part B videos to align timestamps with parent video timeline.
+
+    Args:
+        srt_content: Original SRT content
+        time_offset: Time offset in seconds to add to all timestamps
+
+    Returns:
+        str: Adjusted SRT content with updated timestamps
+    """
+    import re
+
+    def adjust_timestamp(timestamp_str: str, offset_seconds: float) -> str:
+        """Adjust a single SRT timestamp by adding offset."""
+        # Parse HH:MM:SS,mmm format
+        match = re.match(r'(\d{2}):(\d{2}):(\d{2}),(\d{3})', timestamp_str)
+        if not match:
+            return timestamp_str
+
+        h, m, s, ms = map(int, match.groups())
+        total_seconds = h * 3600 + m * 60 + s + ms / 1000.0
+
+        # Add offset
+        adjusted_seconds = total_seconds + offset_seconds
+
+        # Convert back to HH:MM:SS,mmm format
+        hours = int(adjusted_seconds // 3600)
+        minutes = int((adjusted_seconds % 3600) // 60)
+        seconds = int(adjusted_seconds % 60)
+        milliseconds = int((adjusted_seconds % 1) * 1000)
+
+        return f"{hours:02d}:{minutes:02d}:{seconds:02d},{milliseconds:03d}"
+
+    # Regex to match timestamp lines in SRT format
+    def replace_timestamp_line(match):
+        start_time = match.group(1)
+        end_time = match.group(2)
+        adjusted_start = adjust_timestamp(start_time, time_offset)
+        adjusted_end = adjust_timestamp(end_time, time_offset)
+        return f"{adjusted_start} --> {adjusted_end}"
+
+    # Replace all timestamp lines
+    adjusted_srt = re.sub(
+        r'(\d{2}:\d{2}:\d{2},\d{3}) --> (\d{2}:\d{2}:\d{2},\d{3})',
+        replace_timestamp_line,
+        srt_content
+    )
+
+    logger.info(f"Adjusted transcript timestamps by {time_offset}s")
+    return adjusted_srt
+
+
 def split_transcript_by_time(srt_content: str, split_time_seconds: float) -> tuple[str, str]:
     """
     Split transcript content into two parts at a specific time point.
