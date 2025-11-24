@@ -1,11 +1,12 @@
 """
 KeyframeProcessor: High-level orchestrator for keyframe processing pipeline.
 
-Combines keyframe extraction, embedding generation, and search index storage
-into a single, clean interface.
+Phase 1: Extracts keyframes and saves metadata to local JSON file.
+Embeddings and search indexing happen in later phases.
 """
 
 import os
+import json
 from typing import Optional
 from loguru import logger
 
@@ -13,21 +14,18 @@ from mmct.video_pipeline.core.ingestion.key_frames_extractor.keyframe_extractor 
     KeyframeExtractor,
     KeyframeExtractionConfig,
 )
-from mmct.video_pipeline.core.ingestion.key_frames_extractor.clip_embeddings import (
-    CLIPEmbeddingsGenerator,
+from mmct.video_pipeline.core.ingestion.models import (
+    KeyframeMetadata,
+    KeyframeMetadataCollection,
 )
-from mmct.video_pipeline.core.ingestion.key_frames_extractor.keyframe_search_index import (
-    KeyframeSearchIndex,
-)
-from mmct.config.settings import ImageEmbeddingConfig
+from mmct.video_pipeline.utils.helper import get_media_folder
 
 
 class KeyframeProcessor:
     """
-    Orchestrates the complete keyframe processing pipeline:
+    Orchestrates keyframe extraction and local metadata storage:
     1. Extract keyframes from video
-    2. Generate CLIP embeddings for keyframes
-    3. Store embeddings to search index
+    2. Save metadata to local JSON file (without embeddings)
     """
 
     def __init__(
@@ -38,29 +36,9 @@ class KeyframeProcessor:
         Initialize the keyframe processor.
 
         Args:
-            keyframe_config: Configuration for keyframe extraction (including index_name and search_endpoint)
+            keyframe_config: Configuration for keyframe extraction
         """
         self.keyframe_config = keyframe_config
-        self.keyframe_search_index = None
-
-    async def _initialize_search_index(self):
-        """
-        Initialize the keyframe search index client if not already initialized.
-        Creates a client connection to the existing index (index creation happens in ingestion_pipeline).
-        """
-        if self.keyframe_search_index is None:
-            if not self.keyframe_config.index_name or not self.keyframe_config.search_endpoint:
-                raise ValueError(
-                    "index_name and search_endpoint must be provided in keyframe_config"
-                )
-
-            # Create keyframe search index client instance
-            keyframe_index_name = f"keyframes-{self.keyframe_config.index_name}"
-            self.keyframe_search_index = KeyframeSearchIndex(
-                search_endpoint=self.keyframe_config.search_endpoint,
-                index_name=keyframe_index_name,
-            )
-            logger.info(f"Keyframe search index client initialized: {keyframe_index_name}")
 
     async def process_keyframes(
         self,
@@ -70,9 +48,9 @@ class KeyframeProcessor:
         parent_duration: float,
         video_duration: float,
         offset_time: Optional[float] = None,
-    ) -> None:
+    ) -> str:
         """
-        Process keyframes for a video part: extract, generate embeddings, and store.
+        Process keyframes for a video part: extract and save metadata to JSON.
 
         Args:
             video_path: Path to the video file
@@ -81,55 +59,92 @@ class KeyframeProcessor:
             parent_duration: Duration of the parent video in seconds
             video_duration: Duration of this video part in seconds
             offset_time: Time offset in seconds for Part B videos (None for Part A)
+
+        Returns:
+            str: Path to the saved keyframe metadata JSON file
         """
         try:
-            # Initialize search index if not already done
-            await self._initialize_search_index()
-
             # Step 1: Extract keyframes
             logger.info(f"Extracting keyframes for video {video_hash_id}...")
             keyframe_extractor = KeyframeExtractor(self.keyframe_config)
-            keyframe_metadata = await keyframe_extractor.extract_keyframes(
+            keyframe_metadata_list = await keyframe_extractor.extract_keyframes(
                 video_path=video_path, video_id=video_hash_id, offset_time=offset_time
             )
-            logger.info(f"Successfully extracted {len(keyframe_metadata)} keyframes")
+            logger.info(f"Successfully extracted {len(keyframe_metadata_list)} keyframes")
 
-            # Step 2: Generate embeddings
-            logger.info(f"Generating embeddings for {len(keyframe_metadata)} keyframes...")
-            embedding_config = ImageEmbeddingConfig()
-            embeddings_generator = CLIPEmbeddingsGenerator(embedding_config)
-
-            try:
-                frame_embeddings = await embeddings_generator.process_frames(
-                    keyframe_metadata, video_hash_id
-                )
-                logger.info(f"Successfully generated {len(frame_embeddings)} frame embeddings")
-            finally:
-                # Clean up embeddings generator resources
-                await embeddings_generator.cleanup()
-
-            # Step 3: Store embeddings to search index
-            logger.info(f"Storing {len(frame_embeddings)} frame embeddings to search index...")
-            success = await self.keyframe_search_index.upload_frame_embeddings(
-                frame_embeddings=frame_embeddings,
-                video_id=video_hash_id,
-                video_path=video_path,
+            # Step 2: Save keyframes metadata to JSON
+            json_file_path = await self._save_keyframe_metadata_to_json(
+                keyframe_metadata_list=keyframe_metadata_list,
+                video_hash_id=video_hash_id,
                 parent_id=parent_id,
                 parent_duration=parent_duration,
                 video_duration=video_duration,
             )
 
-            if success:
-                logger.info("Successfully stored frame embeddings to search index")
-            else:
-                logger.error("Failed to store frame embeddings to search index")
+            logger.info(f"Successfully saved keyframe metadata to {json_file_path}")
+            return json_file_path
 
         except Exception as e:
             logger.exception(f"Exception occurred during keyframe processing: {e}")
             raise
 
-    async def close(self):
-        """Close the keyframe search index connection."""
-        if self.keyframe_search_index:
-            await self.keyframe_search_index.close()
-            logger.info("Keyframe search index closed successfully")
+    async def _save_keyframe_metadata_to_json(
+        self,
+        keyframe_metadata_list: list,
+        video_hash_id: str,
+        parent_id: str,
+        parent_duration: float,
+        video_duration: float,
+    ) -> str:
+        """
+        Save keyframe metadata to a local JSON file.
+
+        Args:
+            keyframe_metadata_list: List of FrameMetadata objects from keyframe extraction
+            video_hash_id: Hash ID for this video part
+            parent_id: Hash ID of the parent/original video
+            parent_duration: Duration of the parent video in seconds
+            video_duration: Duration of this video part in seconds
+
+        Returns:
+            str: Path to the saved JSON file
+        """
+        # Get media folder
+        media_folder = await get_media_folder()
+        keyframes_dir = os.path.join(media_folder, "keyframes", video_hash_id)
+
+        # Ensure directory exists
+        os.makedirs(keyframes_dir, exist_ok=True)
+
+        # Convert FrameMetadata objects to KeyframeMetadata model objects
+        keyframe_metadata_objects = []
+        for frame_meta in keyframe_metadata_list:
+            keyframe_filename = f"{video_hash_id}_{frame_meta.frame_number}.jpg"
+            file_path = os.path.join(keyframes_dir, keyframe_filename)
+
+            keyframe_meta = KeyframeMetadata(
+                keyframe_filename=keyframe_filename,
+                timestamp_seconds=frame_meta.timestamp_seconds,
+                file_path=file_path,
+                motion_score=frame_meta.motion_score,
+                embeddings=None,  # Will be populated in Phase 2
+                blob_url="",  # Will be populated in Phase 3
+            )
+            keyframe_metadata_objects.append(keyframe_meta)
+
+        # Create the collection
+        collection = KeyframeMetadataCollection(
+            video_id=video_hash_id,
+            parent_id=parent_id,
+            video_duration=video_duration,
+            parent_duration=parent_duration,
+            keyframes=keyframe_metadata_objects,
+        )
+
+        # Save to JSON file
+        json_file_path = os.path.join(keyframes_dir, f"keyframe_metadata_{video_hash_id}.json")
+        with open(json_file_path, "w", encoding="utf-8") as f:
+            json.dump(collection.model_dump(), f, indent=2, ensure_ascii=False)
+
+        logger.info(f"Saved keyframe metadata for {len(keyframe_metadata_objects)} frames to {json_file_path}")
+        return json_file_path

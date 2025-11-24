@@ -38,18 +38,12 @@ class KeyframeExtractionConfig:
     num_workers:
         How many parallel segments of the video to process.
         1 = sequential. >1 will split the video by frame ranges.
-    index_name:
-        Name of the base index (keyframes index will be created as keyframes-{index_name}).
-    search_endpoint:
-        Azure Search endpoint URL for creating the keyframe search index client.
     """
     motion_threshold: float = 0.8
     sample_fps: int = 1
     max_frame_width: int = 800
     debug_mode: bool = False
     num_workers: int = 4
-    index_name: Optional[str] = None
-    search_endpoint: Optional[str] = None
 
 
 # ============================================================
@@ -339,29 +333,6 @@ class KeyframeExtractor:
         )
 
         return all_results
-
-    def cleanup_frames(
-        self,
-        keyframes_dir: str,
-        frame_metadata_list: List[FrameMetadata],
-        video_hash_id: str,
-    ) -> None:
-        """
-        Delete all saved JPGs associated with the given frame_metadata_list,
-        unless debug_mode is enabled.
-        """
-        if self.config.debug_mode:
-            return
-
-        for meta in frame_metadata_list:
-            filename = f"{video_hash_id}_{meta.frame_number}.jpg"
-            abs_path = os.path.join(keyframes_dir, filename)
-            try:
-                if os.path.exists(abs_path):
-                    os.remove(abs_path)
-            except Exception as e:
-                logger.warning(f"Could not remove {filename}: {e}")
-
 
 
 # Convenience top-level async helper

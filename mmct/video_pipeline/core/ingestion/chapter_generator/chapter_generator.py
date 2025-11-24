@@ -1,5 +1,6 @@
 import os
 import re
+import json
 import base64
 import asyncio
 from datetime import time
@@ -31,7 +32,7 @@ class ChapterGenerator:
 
     async def _get_frames(self, transcript_seg:str, video_id: str) -> List[str]:
         """
-        Fetch and load video frames for a transcript segment.
+        Fetch and load video frames for a transcript segment from local JSON metadata.
 
         Args:
             transcript_seg (str): Transcript segment with timestamps (HH:MM:SS,mmm --> HH:MM:SS,mmm text).
@@ -54,28 +55,35 @@ class ChapterGenerator:
         end_seconds = end_time.hour * 3600 + end_time.minute * 60 + end_time.second
         chapter_timestamps = [start_seconds, end_seconds]
 
-        combined_filter = dict()
-        combined_filter["timestamp_seconds"] = {"ge": start_seconds, "le": end_seconds}
-        combined_filter["video_id"] = {"eq": video_id}
+        # Read keyframe metadata from local JSON file instead of querying search
+        base_dir = await get_media_folder()
+        keyframes_dir = os.path.join(base_dir, "keyframes", video_id)
+        json_file_path = os.path.join(keyframes_dir, f"keyframe_metadata_{video_id}.json")
 
-        results = await self.search_provider.search(
-            query="*",
-            search_text="*",
-            filter=combined_filter,
-            index_name=self.index_name,
-            select = ['keyframe_filename','timestamp_seconds']
-        )
-        for result in results:
-            file_name = result['keyframe_filename'].split('_')[-1].split('.')[0]
-            timestamp_seconds = result['timestamp_seconds']
-            frames_metadata.append({'file_name':file_name,'timestamp_seconds':timestamp_seconds})
+        if not os.path.exists(json_file_path):
+            logger.warning(f"Keyframe metadata JSON not found: {json_file_path}")
+            return [], [], chapter_timestamps
+
+        # Load JSON metadata
+        with open(json_file_path, "r", encoding="utf-8") as f:
+            metadata_collection = json.load(f)
+
+        # Filter keyframes by timestamp range
+        keyframes = metadata_collection.get("keyframes", [])
+        for keyframe in keyframes:
+            timestamp_seconds = keyframe["timestamp_seconds"]
+            if start_seconds <= timestamp_seconds <= end_seconds:
+                file_name = keyframe["keyframe_filename"].split('_')[-1].split('.')[0]
+                frames_metadata.append({
+                    'file_name': file_name,
+                    'timestamp_seconds': timestamp_seconds
+                })
 
         # Sort frames_metadata by timestamp_seconds in ascending order
         frames_metadata.sort(key=lambda x: x['timestamp_seconds'])
 
         # Load the keyframes from local
-        base_dir = await get_media_folder()
-        frames_file_paths = [os.path.join(base_dir, "keyframes", video_id, f"{video_id}_{fdata['file_name']}.jpg") for fdata in frames_metadata]
+        frames_file_paths = [os.path.join(keyframes_dir, f"{video_id}_{fdata['file_name']}.jpg") for fdata in frames_metadata]
 
         # Load and convert to base64 directly
         base64_frames = []
