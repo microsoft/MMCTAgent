@@ -2,7 +2,7 @@
 This is a vit tool. it uses the GPT4V.
 """
 
-from mmct.image_pipeline.core.models.vit.gpt4v import GPT4V
+from mmct.image_pipeline.core.models.vit.visual_llm import VisualLLM
 from PIL import Image
 from typing_extensions import Annotated
 
@@ -56,6 +56,6 @@ async def critic_tool(img_path: Annotated[str, "path of image"], query: Annotate
                 those feedbacks and if they are rectified by the LLM.  
                 """
     img = Image.open(img_path).convert("RGB")
-    a = GPT4V()
-    resp = await a.run(images=img,prompt=prompt)
+    model = VisualLLM()
+    resp = await model.run(images=img,prompt=prompt)
     return resp
