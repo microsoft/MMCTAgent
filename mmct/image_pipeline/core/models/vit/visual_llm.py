@@ -10,7 +10,7 @@ from dotenv import load_dotenv, find_dotenv
 load_dotenv(find_dotenv(), override=True)
 
 
-class GPT4V:
+class VisualLLM:
     def __init__(self):
         # Initialize configuration
         self.config = MMCTConfig()

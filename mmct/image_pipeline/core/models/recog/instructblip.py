@@ -8,8 +8,8 @@ class BlipT5XXL:
     def __init__(self, device = None):
         self.device = device or "cuda" if torch.cuda.is_available() else "cpu"
         self.device_map = device or "auto"
-        self.model = InstructBlipForConditionalGeneration.from_pretrained("Salesforce/instructblip-flan-t5-xxl", device_map = self.device_map)
-        self.processor = InstructBlipProcessor.from_pretrained("Salesforce/instructblip-flan-t5-xxl")
+        self.model = InstructBlipForConditionalGeneration.from_pretrained("Salesforce/instructblip-flan-t5-xxl", device_map = self.device_map, dtype=torch.float16)
+        self.processor = InstructBlipProcessor.from_pretrained("Salesforce/instructblip-flan-t5-xxl", use_fast=True)
 
     def get_concat_h_resize(self, im1, im2):
         if im2.height > im1.height:
@@ -50,7 +50,6 @@ class BlipT5XXL:
                 num_beams=5,
                 max_length=256,
                 min_length=1,
-                top_p=0.9,
                 repetition_penalty=1.5,
                 length_penalty=1.0,
                 temperature=1,

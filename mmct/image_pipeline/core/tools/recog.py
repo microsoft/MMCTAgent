@@ -23,6 +23,6 @@ async def recog_tool(img: Annotated[str, "path of image"],priority: Annotated[st
         The output is a string containing the description.
     """
     img = Image.open(img).convert("RGB")
-    a = MPLUGBase() if priority == 1 else MPLUGLarge() if priority == 2 else BlipCap()
-    resp = a(img)
+    model = MPLUGBase() if priority == "1" else MPLUGLarge() if priority == "2" else BlipCap()
+    resp = model(img)
     return resp
