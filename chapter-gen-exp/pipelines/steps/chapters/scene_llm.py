@@ -267,6 +267,7 @@ class SceneLLMChapterGenerationStep(PipelineStep):
             "Output requirements:\n"
             "- Return valid JSON matching ChapterCreationResponse fields.\n"
             "- Translate any non-English content to English.\n"
+            "- Write detailed_summary directly about the scene (no phrases like 'In this video' or 'In this segment').\n"
             "- Populate object_collection with every identifiable entity, including people, objects, text, and background items."
         )
 

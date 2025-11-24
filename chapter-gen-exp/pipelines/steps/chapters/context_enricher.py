@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import os
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
@@ -79,12 +80,16 @@ class ChapterContextEnrichmentStep(PipelineStep):
 
         context_window = int(self.params.get("context_window", 3))
         llm_request_options: Dict[str, Any] = dict(self.params.get("llm_request_options", {}) or {})
+        self._video_duration_seconds = float(context.video_duration_seconds or 0.0)
 
         records = self._load_chapters(context, chapters_step)
         if not records:
             raise ValueError(
                 f"Step '{self.step_id}' did not find chapters in step '{chapters_step}'."
             )
+
+        if self._video_duration_seconds <= 0.0:
+            self._video_duration_seconds = max((rec.end for rec in records), default=0.0)
 
         logger.info(
             "[{}] Enriching {} chapters with context window {}",
@@ -146,9 +151,14 @@ class ChapterContextEnrichmentStep(PipelineStep):
                 }
             )
 
+        timeline_summary = self._inject_timeline_summary(
+            global_summary or "No summary captured yet.",
+            self._video_duration_seconds,
+        )
+
         produced_payload = {
             "chapters": produced_chapters,
-            "global_summary": global_summary,
+            "global_summary": timeline_summary,
             "global_summary_sections": summary_sections,
         }
         if object_payload:
@@ -216,6 +226,7 @@ class ChapterContextEnrichmentStep(PipelineStep):
                     record,
                     previous_context=history[-context_window:] if context_window > 0 else [],
                     global_summary_so_far="\n\n".join(summary_sections) or "No summary captured yet.",
+                    video_duration=self._video_duration_seconds,
                 )
                 logger.info(
                     "[{}] Enriching chunk {} with {} prior chapters",
@@ -307,6 +318,7 @@ class ChapterContextEnrichmentStep(PipelineStep):
         *,
         previous_context: List[ChapterCreationResponse],
         global_summary_so_far: str,
+        video_duration: float,
     ) -> List[Dict[str, Any]]:
         context_lines: List[str] = []
         for idx, chapter in enumerate(previous_context, start=1):
@@ -314,6 +326,8 @@ class ChapterContextEnrichmentStep(PipelineStep):
                 f"Context {idx}: summary='{chapter.detailed_summary}' | actions='{chapter.action_taken or 'None'}'"
             )
         context_block = "\n".join(context_lines) or "No prior chapters available."
+
+        timeline_summary = self._inject_timeline_summary(global_summary_so_far, video_duration)
 
         user_prompt = (
             f"Chunk Index: {record.chunk_index}\n"
@@ -328,8 +342,8 @@ class ChapterContextEnrichmentStep(PipelineStep):
             f"{record.transcript or 'No transcript text.'}\n\n"
             "Relevant Prior Chapters (oldest first within the window):\n"
             f"{context_block}\n\n"
-            "Video Summary So Far:\n"
-            f"{global_summary_so_far}\n\n"
+            "Video Summary So Far (timeline annotated):\n"
+            f"{timeline_summary}\n\n"
             "Instructions:\n"
             "- Produce a ContextEnrichmentResponse containing (a) a fully updated ChapterCreationResponse and (b) a succinct global_summary_update paragraph that captures any new storyline, procedural steps, materials, or outcomes introduced in this chunk.\n"
             "- Maintain factual grounding; do not invent events that contradict the current transcript.\n"
@@ -380,3 +394,38 @@ class ChapterContextEnrichmentStep(PipelineStep):
         secs = int(seconds % 60)
         millis = int((seconds - int(seconds)) * 1000)
         return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
+
+    def _inject_timeline_summary(self, summary: str, video_duration: float) -> str:
+        text = summary.strip()
+        if not text or text.lower() == "no summary captured yet.":
+            return summary
+
+        duration = max(0.0, video_duration)
+        base_segments = 5
+        if duration > 0:
+            base_segments = int(duration // 600) + 5
+        num_segments = max(5, min(8, base_segments))
+
+        words = text.split()
+        if not words:
+            return summary
+
+        chunk_size = max(1, math.ceil(len(words) / num_segments))
+        segments: List[str] = []
+        for idx in range(num_segments):
+            start_word = idx * chunk_size
+            if start_word >= len(words):
+                break
+            end_word = min(len(words), start_word + chunk_size)
+            sub_text = " ".join(words[start_word:end_word]).strip()
+            if duration > 0:
+                start_time = (duration / num_segments) * idx
+                end_time = (duration / num_segments) * (idx + 1)
+            else:
+                start_time = float(idx * 60)
+                end_time = float((idx + 1) * 60)
+            segments.append(
+                f"{self._format_seconds(start_time)} - {self._format_seconds(end_time)}: {sub_text}"
+            )
+
+        return "\n".join(segments)

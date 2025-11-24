@@ -4,12 +4,16 @@ from loguru import logger
 from providers.base import (
     LLMProvider,
     EmbeddingProvider,
+    SearchProvider,
+    ImageEmbeddingProvider,
 )
 from providers.azure import (
     AzureLLMProvider,
     AzureEmbeddingProvider,
+    AzureSearchProvider,
 )
-from settings import MMCTConfig
+from providers.image_embedding_provider import CustomImageEmbeddingProvider
+from settings import MMCTConfig, ImageEmbeddingConfig
 
 class ProviderFactory:
     """Factory class for creating provider instances."""
@@ -17,9 +21,19 @@ class ProviderFactory:
     _llm_providers: Dict[str, Type[LLMProvider]] = {
         'azure': AzureLLMProvider,
     }
-    
+
     _embedding_providers: Dict[str, Type[EmbeddingProvider]] = {
         'azure': AzureEmbeddingProvider,
+    }
+
+    _search_providers: Dict[str, Type[SearchProvider]] = {
+        'azure': AzureSearchProvider,
+        'azure_ai_search': AzureSearchProvider,
+    }
+
+    _image_embedding_providers: Dict[str, Type[ImageEmbeddingProvider]] = {
+        'clip': CustomImageEmbeddingProvider,
+        'custom_clip': CustomImageEmbeddingProvider,
     }
     
     @classmethod
@@ -101,5 +115,44 @@ class ProviderFactory:
         #     cls._embedding_provider_cache[provider_name] = provider_instance
 
         return provider_instance
+
+    @classmethod
+    def create_search_provider(cls, provider_name: str = None) -> SearchProvider:
+        """Instantiate configured search provider."""
+
+        config = MMCTConfig()
+        if provider_name is None:
+            provider_name = config.search.provider
+
+        if provider_name not in cls._search_providers:
+            raise RuntimeError(
+                f"Unknown search provider: {provider_name}. "
+                f"Supported providers: {list(cls._search_providers.keys())}"
+            )
+
+        provider_class = cls._search_providers[provider_name]
+        logger.info(f"Creating search provider: {provider_name}")
+        return provider_class(config.search.model_dump())
+
+    @classmethod
+    def create_image_embedding_provider(
+        cls,
+        provider_name: str = None,
+    ) -> ImageEmbeddingProvider:
+        """Instantiate an image embedding provider (default: CLIP)."""
+
+        if provider_name is None:
+            provider_name = 'clip'
+
+        if provider_name not in cls._image_embedding_providers:
+            raise RuntimeError(
+                f"Unknown image embedding provider: {provider_name}. "
+                f"Supported providers: {list(cls._image_embedding_providers.keys())}"
+            )
+
+        provider_class = cls._image_embedding_providers[provider_name]
+        logger.info(f"Creating image embedding provider: {provider_name}")
+        config = ImageEmbeddingConfig().to_provider_config()
+        return provider_class(config)
 # Global provider factory instance
 provider_factory = ProviderFactory()

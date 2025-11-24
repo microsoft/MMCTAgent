@@ -1,1 +1,4 @@
 outputs/
+samples/transcripts/nptel/
+samples/videos/nptel/
+experiments/generated/

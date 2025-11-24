@@ -1,11 +1,12 @@
 video_uri: samples/videos/-c8eATXUui8.mp4
 transcript_path: samples/transcripts/-c8eATXUui8.en.srt
-output_dir: outputs/yt-c8eATXUui8-chapters-4
+output_dir: outputs/yt-c8eATXUui8-chapters-9
 metadata:
-  experiment: scene-optical-flow-sampler
-  notes: "Scene chunking feeding optical-flow keyframes"
+  experiment: with export steps
+  notes: "chapter and frames export"
+  youtube_url: https://www.youtube.com/watch?v=-c8eATXUui8
 pipeline:
-  name: scene-optical-flow-pipeline
+  name: YT video ingestion about food blogger
   mode: sequential
   steps:
     - id: scene_chunks
@@ -47,3 +48,19 @@ pipeline:
           max_active_context: 10
           min_screen_time_seconds: 8.0
           min_chunk_occurrences: 2
+    - id: frame_blob_export
+      type: export.frame-blob-upload
+      params:
+        frames_step: of_scene_frames
+        container_name: kv-new-chapter-gen-frames
+        index_name: keyframes-new-chapter-gen
+    - id: chapter_index_export
+      type: export.chapter-search-index
+      params:
+        chapters_step: enriched_chapters
+        index_name: chapters-new-chapter-gen
+    - id: object_index_export
+      type: export.object-collection-index
+      params:
+        source_step: enriched_chapters
+        index_name: objects-new-chapter-gen

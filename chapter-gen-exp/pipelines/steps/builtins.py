@@ -11,3 +11,6 @@ from .chapters import scene_llm  # noqa: F401
 from .chapters import context_enricher  # noqa: F401
 from .chapters import object_enricher  # noqa: F401
 from .export import knowledge_pack  # noqa: F401
+from .export import chapter_search_indexer  # noqa: F401
+from .export import object_collection_indexer  # noqa: F401
+from .export import frame_blob_uploader  # noqa: F401

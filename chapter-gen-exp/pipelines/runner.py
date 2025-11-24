@@ -1,6 +1,7 @@
 """High-level orchestration helpers for experimentation pipelines."""
 from __future__ import annotations
 
+import json
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -41,6 +42,7 @@ class PipelineRunner:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self._data_store = StepDataStore()
         self._video_metadata: Optional[VideoMetadata] = None
+        self._completed_steps: Dict[str, Dict[str, Dict[str, object]]] = {}
         video_duration = config.video_duration_seconds
 
         try:
@@ -63,6 +65,8 @@ class PipelineRunner:
             video_metadata=self._video_metadata,
         )
 
+        self._load_previous_results()
+
     def run(self) -> PipelineReport:
         start = time.perf_counter()
         records: List[StepExecutionRecord] = []
@@ -73,6 +77,35 @@ class PipelineRunner:
             )
 
         for step_cfg in self.config.pipeline.steps:
+            if step_cfg.id in self._completed_steps:
+                cached = self._completed_steps[step_cfg.id]
+                logger.info(
+                    "[runner] Skipping step '%s' (%s); already completed",
+                    step_cfg.id,
+                    step_cfg.type,
+                )
+                resumed_metrics: Dict[str, float] = {}
+                for key, value in (cached.get("metrics") or {}).items():
+                    try:
+                        resumed_metrics[key] = float(value)
+                    except (TypeError, ValueError):  # pragma: no cover - defensive
+                        logger.debug(
+                            "[runner] Unable to coerce metric '%s' for step '%s'", key, step_cfg.id
+                        )
+
+                resumed_artifacts = {k: str(v) for k, v in (cached.get("artifacts") or {}).items()}
+
+                records.append(
+                    StepExecutionRecord(
+                        step_id=step_cfg.id,
+                        step_type=step_cfg.type,
+                        duration_seconds=0.0,
+                        metrics=resumed_metrics,
+                        artifacts=resumed_artifacts,
+                    )
+                )
+                continue
+
             step_cls = get_step_class(step_cfg.type)
             step = step_cls(step_cfg.id, step_cfg.params)
             logger.info(
@@ -109,3 +142,51 @@ class PipelineRunner:
             steps=records,
             outputs_snapshot={key: value for key, value in self._data_store.as_dict().items()},
         )
+
+    def _load_previous_results(self) -> None:
+        """Load prior step outputs/metadata if a report already exists."""
+
+        report_path = self.output_dir / "report.json"
+        if not report_path.exists():
+            return
+
+        try:
+            with report_path.open("r", encoding="utf-8") as handle:
+                report = json.load(handle)
+        except Exception as exc:  # pragma: no cover - defensive logging
+            logger.warning("[runner] Failed to parse existing report at %s: %s", report_path, exc)
+            return
+
+        previous_pipeline = report.get("pipeline")
+        if previous_pipeline and previous_pipeline != self.config.pipeline.name:
+            logger.warning(
+                "[runner] Existing report references pipeline '%s'; expected '%s'. Skipping resume.",
+                previous_pipeline,
+                self.config.pipeline.name,
+            )
+            return
+
+        outputs = report.get("outputs", {}) or {}
+        for step_id, payload in outputs.items():
+            bucket = self._data_store.namespace(step_id)
+            bucket.update(payload)
+
+        steps = report.get("steps", []) or []
+        cached: Dict[str, Dict[str, Dict[str, object]]] = {}
+        for entry in steps:
+            step_id = entry.get("id")
+            if not step_id:
+                continue
+            cached[step_id] = {
+                "type": entry.get("type", ""),
+                "metrics": entry.get("metrics", {}) or {},
+                "artifacts": entry.get("artifacts", {}) or {},
+            }
+
+        if cached:
+            self._completed_steps = cached
+            logger.info(
+                "[runner] Loaded %d completed steps from %s; resume mode enabled",
+                len(cached),
+                report_path,
+            )
