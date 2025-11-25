@@ -41,42 +41,38 @@ load_dotenv(override=True)
 
 def parse_response_to_dict(content: str) -> Dict[str, Any]:
     """
-    Parse the agent response into a standardized dictionary format.
+    Fast JSON extractor with minimal scanning.
     """
 
-    def try_parse_json(text: str) -> Optional[Dict[str, Any]]:
+    def try_parse_json(s: str):
         try:
-            data = json.loads(text)
+            data = json.loads(s)
             if all(k in data for k in ("answer", "source", "videos")):
                 return data
         except Exception:
             return None
 
     try:
-        # Clean TERMINATE
         clean = content.replace("TERMINATE", "").strip()
 
-        # 1. Try JSON inside ``` ``` blocks
+        # 1. Fast path: JSON inside code block
         block = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", clean, re.DOTALL)
         if block:
             parsed = try_parse_json(block.group(1))
             if parsed:
                 return parsed
 
-        # 2. Try first JSON object in text (simple brace matching)
+        # 2. Fast JSON extraction without brace matching
         start = clean.find("{")
-        if start != -1:
-            depth = 0
-            for i, ch in enumerate(clean[start:], start):
-                if ch == "{": depth += 1
-                if ch == "}": depth -= 1
-                if depth == 0:
-                    parsed = try_parse_json(clean[start:i+1])
-                    if parsed:
-                        return parsed
+        end = clean.rfind("}")
+        if start != -1 and end != -1:
+            candidate = clean[start:end+1]
+            parsed = try_parse_json(candidate)
+            if parsed:
+                return parsed
 
-        # 3. Fallback
-        logger.warning("No valid JSON structure found, returning fallback.")
+        # Fallback
+        logger.warning("No valid JSON found, fallback used.")
         return {
             "answer": clean,
             "source": ["TEXTUAL", "VISUAL"],
@@ -84,12 +80,13 @@ def parse_response_to_dict(content: str) -> Dict[str, Any]:
         }
 
     except Exception as e:
-        logger.error(f"Failed to parse response: {e}")
+        logger.error(f"Parse failed: {e}")
         return {
             "answer": "Error parsing response",
             "source": [],
             "videos": []
         }
+
 
 
 class VideoQnA:
