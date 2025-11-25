@@ -1,11 +1,12 @@
-from mmct.providers.base import LLMProvider
 from loguru import logger
-from mmct.utils.error_handler import ProviderException, ConfigurationException
+from openai import AsyncOpenAI
 from typing import Dict, Any, List
-from mmct.utils.error_handler import handle_exceptions, convert_exceptions
-from openai import AsyncOpenAI, OpenAI
+from mmct.providers.base import LLMProvider
+from pydantic import BaseModel as PydanticBaseModel
 from autogen_ext.models.openai import OpenAIChatCompletionClient
-
+from mmct.utils.error_handler import ProviderException, ConfigurationException
+from mmct.utils.error_handler import handle_exceptions, convert_exceptions
+from mmct.config.llm_model_capabilities import MODEL_CAPABILITIES, LLMModelCapabilities
 
 class OpenAILLMProvider(LLMProvider):
     """OpenAI LLM provider implementation."""
@@ -37,26 +38,42 @@ class OpenAILLMProvider(LLMProvider):
     async def chat_completion(self, messages: List[Dict], **kwargs) -> Dict[str, Any]:
         """Generate chat completion using OpenAI."""
         try:
-            model = self.config.get("model_name", "gpt-4o")
-            temperature = kwargs.get("temperature", self.config.get("temperature", 0.0))
-            max_tokens = kwargs.get("max_tokens", 4000)
+            model_name = self.config.get("model_name")
+            
+            # Build the request kwargs, filtering out parameters we'll handle separately
+            filtered_kwargs = {
+                k: v for k, v in kwargs.items()
+                if k not in LLMModelCapabilities.model_fields.keys()
+            }
+
+            # Build the API call args
+            call_args: Dict[str, Any] = {
+                "model": model_name,
+                "messages": messages,
+                **filtered_kwargs,
+            }
+
+            caps = MODEL_CAPABILITIES.get(model_name)
+            if caps is None:
+                logger.warning(f"No capabilities defined for model `{model_name}`, using non-reasoning capabilities.")
+                caps = MODEL_CAPABILITIES.get("non-reasoning")
+            else:
+                logger.info(f"Model capabilities set to: {caps}")
+            
+            for param in LLMModelCapabilities.model_fields.keys():
+                # If caps is None, assume full support; otherwise check capability
+                if caps is None or getattr(caps, param, False):
+                    call_args[param] = kwargs.get(param, self.config.get(param))
+
             response_format = kwargs.get("response_format")
-            
-            # Remove temperature, max_tokens, and response_format from kwargs to avoid duplicate arguments
-            filtered_kwargs = {k: v for k, v in kwargs.items() if k not in ["temperature", "max_tokens", "response_format"]}
-            
-            # Check if response_format is a BaseModel - if so, use parse() instead of create()
-            from pydantic import BaseModel
-            if response_format and isinstance(response_format, type) and issubclass(response_format, BaseModel):
+            if response_format and isinstance(response_format, type) and issubclass(response_format, PydanticBaseModel):
+                if 'response_format' in call_args:
+                    del call_args['response_format']
+
                 response = await self.client.chat.completions.parse(
-                    model=model,
-                    messages=messages,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                    response_format=response_format,
-                    **filtered_kwargs
+                    **call_args,
+                    response_format=response_format
                 )
-                
                 return {
                     "content": response.choices[0].message.parsed,
                     "usage": response.usage.model_dump() if response.usage else None,
@@ -64,20 +81,7 @@ class OpenAILLMProvider(LLMProvider):
                     "finish_reason": response.choices[0].finish_reason
                 }
             else:
-                # Standard completion without structured output
-                completion_kwargs = {
-                    "model": model,
-                    "messages": messages,
-                    "temperature": temperature,
-                    "max_tokens": max_tokens,
-                    **filtered_kwargs
-                }
-                
-                if response_format:
-                    completion_kwargs["response_format"] = response_format
-                
-                response = await self.client.chat.completions.create(**completion_kwargs)
-                
+                response = await self.client.chat.completions.create(**call_args)
                 return {
                     "content": response.choices[0].message.content,
                     "usage": response.usage.model_dump() if response.usage else None,
@@ -95,15 +99,30 @@ class OpenAILLMProvider(LLMProvider):
             if not api_key:
                 raise ConfigurationException("OpenAI API key is required for autogen client")
 
-            model = self.config.get("model_name", "gpt-4o")
+            model_name = self.config.get("model_name")
             timeout = self.config.get("timeout", 200)
-            temperature = self.config.get("temperature", 0)
+
+            caps = MODEL_CAPABILITIES.get(model_name)
+
+            if caps is None:
+                logger.warning(f"No capabilities defined for model `{model_name}`, using non-reasoning capabilities.")
+                caps = MODEL_CAPABILITIES.get("non-reasoning")
+            else:
+                logger.info(f"Model capabilities set to: {caps}")
+            
+            # Apply model capabilities using a loop for cleaner code
+            model_args: Dict[str, Any] = {}
+           
+            for param in LLMModelCapabilities.model_fields.keys():
+                # If caps is None, assume full support; otherwise check capability
+                if caps is None or getattr(caps, param, False):
+                    model_args[param] = self.config.get(param)
 
             return OpenAIChatCompletionClient(
                 api_key=api_key,
                 timeout=timeout,
-                model=model,
-                temperature=temperature
+                model=model_name,
+                **model_args,
             )
         except Exception as e:
             raise ProviderException(f"Failed to create OpenAI autogen client: {e}")
