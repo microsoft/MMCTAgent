@@ -42,52 +42,47 @@ load_dotenv(override=True)
 def parse_response_to_dict(content: str) -> Dict[str, Any]:
     """
     Parse the agent response into a standardized dictionary format.
-    
-    Attempts to extract JSON from the response. If JSON extraction fails,
-    creates a structured response from the text content.
-    
-    Args:
-        content: The response content from the agent
-        
-    Returns:
-        Dict containing:
-        - answer: The response text (markdown formatted)
-        - source: List of sources used (TEXTUAL, VISUAL, or both)
-        - videos: List of video metadata with timestamps
     """
+
+    def try_parse_json(text: str) -> Optional[Dict[str, Any]]:
+        try:
+            data = json.loads(text)
+            if all(k in data for k in ("answer", "source", "videos")):
+                return data
+        except Exception:
+            return None
+
     try:
-        # Remove TERMINATE keyword
-        clean_content = content.replace('TERMINATE', '').strip()
-        
-        # Extract JSON from markdown code blocks if present
-        json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', clean_content, re.DOTALL)
-        if json_match:
-            json_str = json_match.group(1)
-            parsed_result = json.loads(json_str)
-            
-            # Validate required keys
-            if all(key in parsed_result for key in ['answer', 'source', 'videos']):
-                return parsed_result
-        
-        # Try to find raw JSON object
-        json_match = re.search(r'(\{.*\})', clean_content, re.DOTALL)
-        if json_match:
-            json_str = json_match.group(1)
-            try:
-                parsed_result = json.loads(json_str)
-                if all(key in parsed_result for key in ['answer', 'source', 'videos']):
-                    return parsed_result
-            except json.JSONDecodeError:
-                pass
-        
-        # If no valid JSON found, create structured response from text
-        logger.warning("No valid JSON structure found, creating from text content")
+        # Clean TERMINATE
+        clean = content.replace("TERMINATE", "").strip()
+
+        # 1. Try JSON inside ``` ``` blocks
+        block = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", clean, re.DOTALL)
+        if block:
+            parsed = try_parse_json(block.group(1))
+            if parsed:
+                return parsed
+
+        # 2. Try first JSON object in text (simple brace matching)
+        start = clean.find("{")
+        if start != -1:
+            depth = 0
+            for i, ch in enumerate(clean[start:], start):
+                if ch == "{": depth += 1
+                if ch == "}": depth -= 1
+                if depth == 0:
+                    parsed = try_parse_json(clean[start:i+1])
+                    if parsed:
+                        return parsed
+
+        # 3. Fallback
+        logger.warning("No valid JSON structure found, returning fallback.")
         return {
-            "answer": clean_content,
-            "source": ["TEXTUAL", "VISUAL"],  # Assume both since we can't determine
-            "videos": []  # Can't extract video info from unstructured text
+            "answer": clean,
+            "source": ["TEXTUAL", "VISUAL"],
+            "videos": []
         }
-        
+
     except Exception as e:
         logger.error(f"Failed to parse response: {e}")
         return {
@@ -317,13 +312,6 @@ async def video_qna(
     if stream:
         response_generator = await video_qna_instance.run_stream()
         messages = await Console(response_generator)
-        # Stream messages through logger instead of Console
-        # messages = []
-        # async for message in response_generator:
-        #     # Log the message content without the "Agent Message:" prefix
-        #     if hasattr(message, 'content') and message.content:
-        #         logger.info(f"Agent Message:{message.content}")  # Using : as separator for filtering
-        #     messages.append(message)
         
         # Return the final result in consistent format
         if messages:

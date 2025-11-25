@@ -17,7 +17,6 @@ class LLMConfig(BaseSettings):
     llm_model_name: str
     llm_use_managed_identity: bool = Field(default=True)
     llm_api_key: Optional[str] = Field(default=None)
-    embedding_service_deployment_name: Optional[str] = Field(default=None)
     llm_vision_deployment_name: Optional[str] = Field(default=None)
     llm_vision_api_version: Optional[str] = Field(default=None)
     llm_timeout: int = Field(default=200)
