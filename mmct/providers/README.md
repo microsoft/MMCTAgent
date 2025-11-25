@@ -38,6 +38,110 @@ The `custom_providers/` module is where you add your own provider implementation
 
 ---
 
+## 🎯 Model Capabilities System
+
+The Model Capabilities system provides intelligent parameter management for different LLM models, ensuring that only supported parameters are passed to each model. This is particularly important because **reasoning models** (like o3, o3-mini, gpt-5) and **non-reasoning models** (like gpt-4o, gpt-4.1) support different sets of parameters.
+
+### Why Model Capabilities?
+
+Different LLM models have different parameter support:
+
+- **Reasoning Models** (o3, o3-mini, gpt-5, gpt-5-mini):
+  - ❌ Do NOT support: `temperature`, `top_p`, `presence_penalty`, `frequency_penalty`, `logprobs`, `top_logprobs`, `logit_bias`, `max_tokens`
+  - ✅ Support: `max_completion_tokens`, `reasoning_effort`
+
+- **Non-Reasoning Models** (gpt-4o, gpt-4.1, gpt-4o-mini):
+  - ✅ Support: `temperature`, `top_p`, `presence_penalty`, `frequency_penalty`, `logprobs`, `top_logprobs`, `logit_bias`, `max_tokens`
+  - ❌ Do NOT support: `max_completion_tokens`, `reasoning_effort`
+
+### Configuration File
+
+Model capabilities are defined in `mmct/config/llm_model_capabilities.py`:
+
+```python
+from pydantic import BaseModel, Field
+from typing import Dict
+
+class LLMModelCapabilities(BaseModel):
+    """LLM model capabilities."""
+    temperature: bool
+    top_p: bool
+    presence_penalty: bool
+    frequency_penalty: bool
+    logprobs: bool
+    top_logprobs: bool
+    logit_bias: bool
+    max_tokens: bool
+    max_completion_tokens: bool
+    reasoning_effort: bool
+
+MODEL_CAPABILITIES: Dict[str, LLMModelCapabilities] = {
+    "o3": LLMModelCapabilities(...),  # Reasoning model
+    "gpt-4o": LLMModelCapabilities(...),  # Non-reasoning model
+    "non-reasoning": LLMModelCapabilities(...),  # Fallback template
+    "reasoning": LLMModelCapabilities(...),  # Fallback template
+}
+```
+
+### How It Works
+
+Both OpenAI and Azure LLM providers automatically:
+
+1. **Check model capabilities** when making API calls
+2. **Filter parameters** based on what the model supports
+3. **Use fallback** if model is not defined (defaults to "non-reasoning" capabilities)
+4. **Log warnings** when using undefined models
+
+**Example from OpenAI Provider:**
+
+```python
+# Get model capabilities
+caps = MODEL_CAPABILITIES.get(model_name)
+if caps is None:
+    logger.warning(f"No capabilities defined for model `{model_name}`, using non-reasoning capabilities.")
+    caps = MODEL_CAPABILITIES.get("non-reasoning")
+
+# Apply only supported parameters
+for param in LLMModelCapabilities.model_fields.keys():
+    if caps is None or getattr(caps, param, False):
+        call_args[param] = kwargs.get(param, self.config.get(param))
+```
+
+### Adding a New Model
+
+To add support for a new model, update `mmct/config/llm_model_capabilities.py`:
+
+```python
+MODEL_CAPABILITIES: Dict[str, LLMModelCapabilities] = {
+    # ... existing models ...
+    
+    "your-new-model": LLMModelCapabilities(
+        temperature=True,           # Does it support temperature?
+        top_p=True,                 # Does it support top_p?
+        presence_penalty=True,      # Does it support presence_penalty?
+        frequency_penalty=True,     # Does it support frequency_penalty?
+        logprobs=False,             # Does it support logprobs?
+        top_logprobs=False,         # Does it support top_logprobs?
+        logit_bias=False,           # Does it support logit_bias?
+        max_tokens=True,            # Does it support max_tokens?
+        max_completion_tokens=False,  # Does it support max_completion_tokens? (reasoning models)
+        reasoning_effort=False      # Does it support reasoning_effort? (reasoning models)
+    ),
+}
+```
+
+### Fallback Behavior
+
+If a model is not defined in `MODEL_CAPABILITIES`:
+
+1. A **warning is logged**: `"No capabilities defined for model 'model-name', using non-reasoning capabilities."`
+2. The system uses the **"non-reasoning"** template (supports standard parameters like temperature, top_p, etc.)
+3. The code **continues to run** without errors
+
+This ensures backward compatibility when adding new models.
+
+---
+
 ## 🚀 Adding a Custom Provider
 
 Follow these steps to add your own provider implementation (search provider example is given below):

@@ -1,13 +1,14 @@
-from mmct.providers.base import LLMProvider
 from loguru import logger
-from openai import AsyncAzureOpenAI, AzureOpenAI
-from azure.identity import get_bearer_token_provider
-from mmct.utils.error_handler import ProviderException, ConfigurationException
 from typing import Dict, Any, List
-from mmct.utils.error_handler import handle_exceptions, convert_exceptions
+from openai import AsyncAzureOpenAI
+from mmct.providers.base import LLMProvider
+from pydantic import BaseModel as PydanticBaseModel
+from azure.identity import get_bearer_token_provider
 from mmct.providers.credentials import AzureCredentials
+from mmct.utils.error_handler import handle_exceptions, convert_exceptions
+from mmct.utils.error_handler import ProviderException, ConfigurationException
 from autogen_ext.models.openai import AzureOpenAIChatCompletionClient
-
+from mmct.config.llm_model_capabilities import MODEL_CAPABILITIES, LLMModelCapabilities
 
 class AzureLLMProvider(LLMProvider):
     """Azure OpenAI LLM provider implementation."""
@@ -64,26 +65,42 @@ class AzureLLMProvider(LLMProvider):
             deployment_name = self.config.get("deployment_name")
             if not deployment_name:
                 raise ConfigurationException("Azure OpenAI deployment name is required")
+
+            # Build the request kwargs
+            filtered_kwargs = {
+                k: v for k, v in kwargs.items()
+                if k not in LLMModelCapabilities.model_fields.keys()
+            }
+
+            # Build the API call args
+            call_args: Dict[str, Any] = {
+                "model": deployment_name,
+                "messages": messages,
+                **filtered_kwargs,
+            }
+
+            model_name = self.config.get("model_name")  # assuming you store model name in config
+            caps = MODEL_CAPABILITIES.get(model_name)
+            if caps is None:
+                logger.warning(f"No capabilities defined for model `{model_name}`, using non-reasoning capabilities.")
+                caps = MODEL_CAPABILITIES.get("non-reasoning")
+            else:
+                logger.info(f"Model capabilities set to: {caps}")
             
-            temperature = kwargs.get("temperature", self.config.get("temperature", 0.0))
-            max_tokens = kwargs.get("max_tokens", 4000)
-            response_format = kwargs.get("response_format")
-            
-            # Remove temperature, max_tokens, and response_format from kwargs to avoid duplicate arguments
-            filtered_kwargs = {k: v for k, v in kwargs.items() if k not in ["temperature", "max_tokens", "response_format"]}
-            
-            # Check if response_format is a BaseModel - if so, use parse() instead of create()
-            from pydantic import BaseModel
-            if response_format and isinstance(response_format, type) and issubclass(response_format, BaseModel):
+            for param in LLMModelCapabilities.model_fields.keys():
+                # If caps is None, assume full support; otherwise check capability
+                if caps is None or getattr(caps, param, False):
+                    call_args[param] = kwargs.get(param, self.config.get(param))
+
+            response_format = kwargs.pop("response_format", None)
+            if response_format and isinstance(response_format, type) and issubclass(response_format, PydanticBaseModel):
+                if 'response_format' in call_args:
+                    del call_args['response_format']
+
                 response = await self.client.chat.completions.parse(
-                    model=deployment_name,
-                    messages=messages,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                    response_format=response_format,
-                    **filtered_kwargs
+                    **call_args,
+                    response_format=response_format
                 )
-                
                 return {
                     "content": response.choices[0].message.parsed,
                     "usage": response.usage.model_dump() if response.usage else None,
@@ -91,20 +108,7 @@ class AzureLLMProvider(LLMProvider):
                     "finish_reason": response.choices[0].finish_reason
                 }
             else:
-                # Standard completion without structured output
-                completion_kwargs = {
-                    "model": deployment_name,
-                    "messages": messages,
-                    "temperature": temperature,
-                    "max_tokens": max_tokens,
-                    **filtered_kwargs
-                }
-                
-                if response_format:
-                    completion_kwargs["response_format"] = response_format
-                
-                response = await self.client.chat.completions.create(**completion_kwargs)
-                
+                response = await self.client.chat.completions.create(**call_args)
                 return {
                     "content": response.choices[0].message.content,
                     "usage": response.usage.model_dump() if response.usage else None,
@@ -123,7 +127,23 @@ class AzureLLMProvider(LLMProvider):
             api_version = self.config.get("api_version", "2024-08-01-preview")
             use_managed_identity = self.config.get("use_managed_identity", True)
             timeout = self.config.get("timeout", 200)
-            temperature = self.config.get("temperature", 0)
+
+            model_name = self.config.get("model_name")
+            caps = MODEL_CAPABILITIES.get(model_name)
+
+            if caps is None:
+                logger.warning(f"No capabilities defined for model `{model_name}`, using non-reasoning capabilities.")
+                caps = MODEL_CAPABILITIES.get("non-reasoning")
+            else:
+                logger.info(f"Model capabilities set to: {caps}")
+            
+            # Apply model capabilities using a loop for cleaner code
+            model_args: Dict[str, Any] = {}
+            
+            for param in LLMModelCapabilities.model_fields.keys():
+                # If caps is None, assume full support; otherwise check capability
+                if caps is None or getattr(caps, param, False):
+                    model_args[param] = self.config.get(param)
 
             if not endpoint or not deployment_name:
                 raise ConfigurationException("Azure OpenAI endpoint and deployment name are required for autogen client")
@@ -140,7 +160,7 @@ class AzureLLMProvider(LLMProvider):
                     azure_endpoint=endpoint,
                     azure_ad_token_provider=token_provider,
                     timeout=timeout,
-                    temperature=temperature
+                    **model_args,
                 )
             else:
                 api_key = self.config.get("api_key")
@@ -154,7 +174,7 @@ class AzureLLMProvider(LLMProvider):
                     azure_endpoint=endpoint,
                     api_key=api_key,
                     timeout=timeout,
-                    temperature=temperature
+                    **model_args,
                 )
         except Exception as e:
             raise ProviderException(f"Failed to create Azure OpenAI autogen client: {e}")
