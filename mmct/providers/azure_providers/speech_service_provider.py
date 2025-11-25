@@ -19,9 +19,9 @@ class AzureSpeechServiceProvider(TranscriptionProvider):
     def _get_speech_config_with_token(self, language: str = None) -> speechsdk.SpeechConfig:
         """Create Speech SDK configuration with fresh token."""
         try:
-            region = self.config.get("region")
-            resource_id = self.config.get("resource_id")
-            use_managed_identity = self.config.get("use_managed_identity", True)
+            region = self.config.get("speech_service_region")
+            resource_id = self.config.get("speech_service_resource_id")
+            use_managed_identity = self.config.get("speech_use_managed_identity", True)
 
             if not region:
                 raise ConfigurationException("Azure Speech Service region is required")
@@ -39,7 +39,7 @@ class AzureSpeechServiceProvider(TranscriptionProvider):
                     auth_token=auth_token
                 )
             else:
-                api_key = self.config.get("api_key")
+                api_key = self.config.get("speech_service_key")
                 if not api_key:
                     raise ConfigurationException("Azure Speech Service API key is required when managed identity is disabled")
 

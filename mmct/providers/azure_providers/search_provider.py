@@ -35,25 +35,25 @@ class AzureSearchProvider(SearchProvider):
         # Cache for search clients with different index names
         self._client_cache: Dict[str, SearchClient] = {}
         # Store the default index name for convenience
-        self._default_index_name = self.config.get("index_name", "default")
+        self._default_index_name = self.config.get("search_index_name", "default")
     
     def _create_search_client(self, index_name: str) -> SearchClient:
         """
         Create a SearchClient for a specific index.
-        
+
         Args:
             index_name: Name of the index
-            
+
         Returns:
             SearchClient instance
         """
         try:
-            endpoint = self.config.get("endpoint")
+            endpoint = self.config.get("search_endpoint")
             if not endpoint:
                 raise ConfigurationException("SEARCH_ENDPOINT environment variable not set")
 
-            use_managed_identity = self.config.get("use_managed_identity", True)
-            
+            use_managed_identity = self.config.get("search_use_managed_identity", True)
+
             if use_managed_identity:
                 return SearchClient(
                     endpoint=endpoint,
@@ -61,10 +61,10 @@ class AzureSearchProvider(SearchProvider):
                     credential=self.credential
                 )
             else:
-                api_key = self.config.get("api_key")
+                api_key = self.config.get("search_api_key")
                 if not api_key:
                     raise ConfigurationException("Azure AI Search API key is required when managed identity is disabled")
-                
+
                 from azure.core.credentials import AzureKeyCredential
                 return SearchClient(
                     endpoint=endpoint,
@@ -77,7 +77,7 @@ class AzureSearchProvider(SearchProvider):
     def _initialize_index_client(self) -> SearchIndexClient:
         """Initialize Azure AI Search Index client for index management."""
         try:
-            endpoint = self.config.get("endpoint")
+            endpoint = self.config.get("search_endpoint")
             if not endpoint:
                 raise ConfigurationException("Azure AI Search endpoint is required")
 
@@ -238,7 +238,6 @@ class AzureSearchProvider(SearchProvider):
             vector_search=vector_search
         )
 
-        print(fields)
         return index
 
     def _create_keyframe_index_schema(self, index_name: str, dim: int = 512) -> SearchIndex:

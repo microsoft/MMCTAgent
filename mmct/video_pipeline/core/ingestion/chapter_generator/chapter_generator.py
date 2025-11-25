@@ -5,7 +5,7 @@ import base64
 import asyncio
 from datetime import time
 from typing import List, Dict, Tuple
-from mmct.config.settings import MMCTConfig
+from mmct.config.settings import settings
 from mmct.providers.factory import provider_factory
 from mmct.video_pipeline.core.ingestion.models import (
     ChapterCreationResponse,
@@ -22,7 +22,6 @@ load_dotenv(find_dotenv(), override=True)
 
 class ChapterGenerator:
     def __init__(self, keyframe_index, frame_stacking_grid_size=4, max_concurrent_requests=3):
-        self.config = MMCTConfig()
         self.llm_provider = provider_factory.create_llm_provider()
         self.frame_stacking_grid_size = frame_stacking_grid_size
         self.search_provider = provider_factory.create_search_provider()

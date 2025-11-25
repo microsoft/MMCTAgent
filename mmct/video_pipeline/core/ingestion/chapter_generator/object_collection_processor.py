@@ -4,7 +4,7 @@ import uuid
 from typing import List, Optional, Tuple
 from loguru import logger
 from pydantic import BaseModel, Field
-from mmct.config.settings import MMCTConfig
+from mmct.config.settings import settings
 from mmct.providers.factory import provider_factory
 from mmct.video_pipeline.core.ingestion.models import ChapterCreationResponse, ObjectResponse, ObjectCollectionMetadata
 from mmct.video_pipeline.core.ingestion.chapter_generator.video_summary import VideoSummary
@@ -38,7 +38,6 @@ class ObjectCollectionProcessor:
         Args:
             index_name: Name of the index (used for consistency, actual indexing happens in Phase 3)
         """
-        self.config = MMCTConfig()
         self.llm_provider = provider_factory.create_llm_provider()
         self.index_name = index_name
         self.video_summary_processor = VideoSummary()

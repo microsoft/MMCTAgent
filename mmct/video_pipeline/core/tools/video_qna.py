@@ -338,10 +338,14 @@ async def video_qna(
             
             # Parse the response into structured format
             parsed_result = parse_response_to_dict(final_content)
-            
+
             # Calculate tokens from all messages
-            tokens = await video_qna_instance.calculate_total_tokens(messages if isinstance(messages[0], TaskResult) else 
-                                                                      (last_message.messages if isinstance(last_message, TaskResult) else []))
+            if isinstance(messages, TaskResult):
+                tokens = await video_qna_instance.calculate_total_tokens(last_message.messages if isinstance(last_message, TaskResult) else [])
+            elif isinstance(messages, list) and messages and isinstance(messages[0], TaskResult):
+                tokens = await video_qna_instance.calculate_total_tokens(messages)
+            else:
+                tokens = await video_qna_instance.calculate_total_tokens(last_message.messages if isinstance(last_message, TaskResult) else [])
             
             return {
                 "result": parsed_result,

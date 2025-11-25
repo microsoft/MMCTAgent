@@ -2,7 +2,7 @@ import torch
 from PIL import Image
 import requests
 from mmct.providers.factory import provider_factory
-from mmct.config.settings import MMCTConfig
+from mmct.config.settings import settings
 import io
 import base64
 from dotenv import load_dotenv, find_dotenv
@@ -12,9 +12,6 @@ load_dotenv(find_dotenv(), override=True)
 
 class VisualLLM:
     def __init__(self):
-        # Initialize configuration
-        self.config = MMCTConfig()
-
         # Initialize vision provider
         self.llm_provider = provider_factory.create_llm_provider()
 

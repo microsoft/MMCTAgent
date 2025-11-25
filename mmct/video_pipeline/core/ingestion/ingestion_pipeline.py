@@ -7,7 +7,7 @@ from loguru import logger
 import gc
 
 from mmct.providers.factory import provider_factory
-from mmct.config.settings import MMCTConfig
+from mmct.config.settings import settings
 from mmct.video_pipeline.core.ingestion.transcription.cloud_transcription import CloudTranscription
 from mmct.video_pipeline.core.ingestion.transcription.whisper_transcription import (
     WhisperTranscription,
@@ -163,9 +163,7 @@ class IngestionPipeline:
             "Configuration for keyframe extraction thresholds (e.g., { 'motion_threshold': 1.5, 'sample_fps': 2})",
         ] = {"motion_threshold": 1.5, "sample_fps": 2},
     ):
-        # loading the MMCT config
         try:
-            self.config = MMCTConfig()
             logger.info("Successfully retrieved the MMCT config")
         except Exception as e:
             logger.exception(f"Exception occurred while fetching the MMCT config: {e}")
