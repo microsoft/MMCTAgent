@@ -29,10 +29,14 @@ class ObjectCollectionSearchIndexExporter(PipelineStep):
 
         payload = context.data_store.get(source_step, {}) or {}
         collection_key = self.params.get("collection_key", "object_collection")
-        object_collection = payload.get(collection_key) or []
+        raw_collection = payload.get(collection_key)
+        object_collection = raw_collection or []
         if not object_collection:
-            raise ValueError(
-                f"Step '{source_step}' did not provide '{collection_key}' payload for export."
+            logger.info(
+                "[{}] Step '{}' missing '{}' payload; exporting empty collection with summary only",
+                self.step_id,
+                source_step,
+                collection_key,
             )
 
         video_summary = self._resolve_summary(payload, context)

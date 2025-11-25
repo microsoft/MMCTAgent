@@ -90,10 +90,14 @@ class PipelineRunner:
                         resumed_metrics[key] = float(value)
                     except (TypeError, ValueError):  # pragma: no cover - defensive
                         logger.debug(
-                            "[runner] Unable to coerce metric '%s' for step '%s'", key, step_cfg.id
+                            "[runner] Unable to coerce metric '%s' for step '%s'",
+                            key,
+                            step_cfg.id,
                         )
 
-                resumed_artifacts = {k: str(v) for k, v in (cached.get("artifacts") or {}).items()}
+                resumed_artifacts = {
+                    k: str(v) for k, v in (cached.get("artifacts") or {}).items()
+                }
 
                 records.append(
                     StepExecutionRecord(
@@ -114,7 +118,21 @@ class PipelineRunner:
                 step_cfg.type,
             )
             step_start = time.perf_counter()
-            result = step.run(self._context)
+            try:
+                result = step.run(self._context)
+            except Exception:
+                step_duration = time.perf_counter() - step_start
+                logger.exception(
+                    "[runner] Step '%s' (%s) failed after %.2fs",
+                    step_cfg.id,
+                    step_cfg.type,
+                    step_duration,
+                )
+                total_duration = time.perf_counter() - start
+                report = self._build_report(records, total_duration)
+                self._write_report(report)
+                raise
+
             step_duration = time.perf_counter() - step_start
 
             bucket = self._data_store.namespace(step_cfg.id)
@@ -129,19 +147,15 @@ class PipelineRunner:
                     artifacts=result.artifacts,
                 )
             )
-
         total_duration = time.perf_counter() - start
+        report = self._build_report(records, total_duration)
+        self._write_report(report)
         logger.info(
             "[runner] Pipeline '{}' finished in {:.2f}s",
             self.config.pipeline.name,
             total_duration,
         )
-        return PipelineReport(
-            pipeline_name=self.config.pipeline.name,
-            total_duration_seconds=total_duration,
-            steps=records,
-            outputs_snapshot={key: value for key, value in self._data_store.as_dict().items()},
-        )
+        return report
 
     def _load_previous_results(self) -> None:
         """Load prior step outputs/metadata if a report already exists."""
@@ -190,3 +204,39 @@ class PipelineRunner:
                 len(cached),
                 report_path,
             )
+
+    def _build_report(
+        self,
+        records: List[StepExecutionRecord],
+        total_duration: float,
+    ) -> PipelineReport:
+        return PipelineReport(
+            pipeline_name=self.config.pipeline.name,
+            total_duration_seconds=total_duration,
+            steps=list(records),
+            outputs_snapshot={key: value for key, value in self._data_store.as_dict().items()},
+        )
+
+    def _write_report(self, report: PipelineReport) -> None:
+        report_path = self.output_dir / "report.json"
+        payload = {
+            "pipeline": report.pipeline_name,
+            "duration_seconds": report.total_duration_seconds,
+            "steps": [
+                {
+                    "id": record.step_id,
+                    "type": record.step_type,
+                    "metrics": record.metrics,
+                    "artifacts": record.artifacts,
+                }
+                for record in report.steps
+            ],
+            "outputs": report.outputs_snapshot,
+        }
+
+        try:
+            with report_path.open("w", encoding="utf-8") as handle:
+                json.dump(payload, handle, indent=2)
+            logger.info("[runner] Snapshot report written to %s", report_path)
+        except Exception as exc:  # pragma: no cover - defensive logging
+            logger.warning("[runner] Failed to write report at %s: %s", report_path, exc)
