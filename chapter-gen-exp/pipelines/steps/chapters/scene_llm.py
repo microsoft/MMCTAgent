@@ -63,6 +63,7 @@ class SceneLLMChapterGenerationStep(PipelineStep):
         batch_size = int(self.params.get("batch_size", 5))
         max_parallel_requests = int(self.params.get("max_parallel_requests", batch_size))
         llm_request_options: Dict[str, Any] = dict(self.params.get("llm_request_options", {}) or {})
+        collect_object_collection = bool(self.params.get("collect_object_collection", True))
 
         work_items = self._prepare_work_items(
             context,
@@ -90,6 +91,7 @@ class SceneLLMChapterGenerationStep(PipelineStep):
                 batch_size=batch_size,
                 max_parallel_requests=max_parallel_requests,
                 llm_request_options=llm_request_options,
+                collect_object_collection=collect_object_collection,
             )
         )
 
@@ -181,6 +183,7 @@ class SceneLLMChapterGenerationStep(PipelineStep):
         batch_size: int,
         max_parallel_requests: int,
         llm_request_options: Dict[str, Any],
+        collect_object_collection: bool,
     ) -> List[tuple[ChunkWorkItem, ChapterCreationResponse]]:
         semaphore = asyncio.Semaphore(max(1, max_parallel_requests))
         results: List[tuple[ChunkWorkItem, ChapterCreationResponse]] = []
@@ -189,7 +192,10 @@ class SceneLLMChapterGenerationStep(PipelineStep):
         async def invoke(item: ChunkWorkItem) -> Optional[tuple[ChunkWorkItem, ChapterCreationResponse]]:
             try:
                 async with semaphore:
-                    messages = self._build_messages(item)
+                    messages = self._build_messages(
+                        item,
+                        collect_object_collection=collect_object_collection,
+                    )
                     logger.info(
                         "[{}] Chunk {} -> dispatching {} frames covering {:.2f}s",
                         self.step_id,
@@ -245,14 +251,30 @@ class SceneLLMChapterGenerationStep(PipelineStep):
 
         raise TypeError(f"Unsupported chapter response type: {type(payload)!r}")
 
-    def _build_messages(self, item: ChunkWorkItem) -> List[Dict[str, Any]]:
+    def _build_messages(
+        self,
+        item: ChunkWorkItem,
+        *,
+        collect_object_collection: bool,
+    ) -> List[Dict[str, Any]]:
         system_prompt = (
             "You are a VideoAnalyzerGPT. Analyze the provided frames and transcript snippet to "
-            "produce an exhaustive ChapterCreationResponse describing everything in English. "
-            "Track actions, visible text, and every object with detailed appearance/identity."  # noqa: E501
+            "produce an exhaustive ChapterCreationResponse describing everything in English."
         )
+        if collect_object_collection:
+            system_prompt += (
+                " Track actions, visible text, and every object with detailed appearance/identity."
+            )
+        else:
+            system_prompt += " Focus on the narrative summary and actions; objects SHOULD be omitted."
 
         frame_timeline = self._format_frame_timeline(item.frames)
+        object_instruction = (
+            "- Populate object_collection with every identifiable entity, including people, objects, text, and background items."
+            if collect_object_collection
+            else "- Set object_collection to an empty list or null if no structured tracking is needed."
+        )
+
         transcript_block = (
             f"Chunk Index: {item.index}\n"
             f"Start: {self._format_seconds(item.start)} ({item.start:.2f}s)\n"
@@ -268,7 +290,7 @@ class SceneLLMChapterGenerationStep(PipelineStep):
             "- Return valid JSON matching ChapterCreationResponse fields.\n"
             "- Translate any non-English content to English.\n"
             "- Write detailed_summary directly about the scene (no phrases like 'In this video' or 'In this segment').\n"
-            "- Populate object_collection with every identifiable entity, including people, objects, text, and background items."
+            f"{object_instruction}"
         )
 
         user_blocks: List[Dict[str, Any]] = []

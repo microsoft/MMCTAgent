@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from scenedetect import SceneManager, VideoManager
 from scenedetect.detectors import AdaptiveDetector, ContentDetector
@@ -72,6 +72,35 @@ def _detect_scenes(video_path: Path, params: Dict[str, Any]) -> List[SceneChunk]
     return chunks
 
 
+def _enforce_max_scene_length(
+    chunks: List[SceneChunk],
+    max_length: float,
+    video_end: Optional[float] = None,
+) -> List[SceneChunk]:
+    if max_length <= 0.0:
+        return chunks
+
+    bounded: List[SceneChunk] = []
+    for chunk in chunks:
+        start = chunk.start
+        end = chunk.end if video_end is None else min(chunk.end, video_end)
+
+        while start < end:
+            split_end = min(end, start + max_length)
+            if split_end <= start:
+                break
+            bounded.append(
+                SceneChunk(
+                    index=len(bounded),
+                    start=start,
+                    end=split_end,
+                )
+            )
+            start = split_end
+
+    return bounded
+
+
 @register_step("video.chunk.scene")
 class SceneChunkingStep(PipelineStep):
     """Generates chunk boundaries using PySceneDetect."""
@@ -85,12 +114,32 @@ class SceneChunkingStep(PipelineStep):
 
         params = self.params
         max_scenes = int(params.get("max_scenes", 1000))
+        min_scene_len_seconds = float(params.get("min_scene_length", 2.0))
+        max_scene_length = float(params.get("max_scene_length", min_scene_len_seconds + 5.0))
 
         chunks = _detect_scenes(video_path, params)
         if not chunks:
             # fallback to single chunk covering entire video duration
             duration = context.video_duration_seconds or 0.0
             chunks = [SceneChunk(index=0, start=0.0, end=duration)]
+
+        if max_scene_length > 0.0:
+            chunks = _enforce_max_scene_length(
+                chunks,
+                max_scene_length,
+                context.video_duration_seconds,
+            )
+
+        reindexed: List[SceneChunk] = []
+        for idx, chunk in enumerate(chunks):
+            reindexed.append(
+                SceneChunk(
+                    index=idx,
+                    start=chunk.start,
+                    end=chunk.end,
+                )
+            )
+        chunks = reindexed
 
         chunks = chunks[:max_scenes]
         serialized = [

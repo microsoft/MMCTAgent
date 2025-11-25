@@ -25,6 +25,7 @@ from ..registry import register_step
 
 llm_provider = provider_factory.create_llm_provider()
 PARALLEL_ENRICHMENT_ENABLED = True
+MAX_GLOBAL_SUMMARY_TOKENS = int(os.getenv("CONTEXT_ENRICHER_MAX_SUMMARY_TOKENS", "8000"))
 
 
 @dataclass
@@ -88,6 +89,8 @@ class ChapterContextEnrichmentStep(PipelineStep):
                 f"Step '{self.step_id}' did not find chapters in step '{chapters_step}'."
             )
 
+        self._summary_tokens_per_chapter = self._compute_summary_token_limit(len(records))
+
         if self._video_duration_seconds <= 0.0:
             self._video_duration_seconds = max((rec.end for rec in records), default=0.0)
 
@@ -99,6 +102,14 @@ class ChapterContextEnrichmentStep(PipelineStep):
         )
 
         object_config = self._build_object_config()
+        if object_config:
+            has_objects = any(self._chapter_has_objects(record.raw_chapter) for record in records)
+            if not has_objects:
+                logger.info(
+                    "[{}] Skipping object roster merge because no chapters contain object collections",
+                    self.step_id,
+                )
+                object_config = None
 
         logger.info(
             "[{}] Parallel enrichment {}",
@@ -206,6 +217,12 @@ class ChapterContextEnrichmentStep(PipelineStep):
         records.sort(key=lambda rec: rec.chunk_index)
         return records
 
+    @staticmethod
+    def _chapter_has_objects(chapter: ChapterCreationResponse) -> bool:
+        if not chapter.object_collection:
+            return False
+        return any(bool(obj) for obj in chapter.object_collection)
+
     async def _enrich_with_parallel_tasks(
         self,
         records: List[ChapterRecord],
@@ -245,7 +262,8 @@ class ChapterContextEnrichmentStep(PipelineStep):
                 if response.global_summary_update:
                     summary_sections.append(response.global_summary_update.strip())
 
-            return enriched, "\n\n".join(summary_sections).strip(), summary_sections
+            global_summary_text = "\n\n".join(summary_sections).strip()
+            return enriched, global_summary_text, summary_sections
 
         async def object_task() -> Optional[ObjectRosterResults]:
             if not object_config:
@@ -312,6 +330,15 @@ class ChapterContextEnrichmentStep(PipelineStep):
             "object_stats": results.stats,
         }
 
+    def _compute_summary_token_limit(self, chapter_count: int) -> int:
+        """Divide the global summary token budget equally across all chapters."""
+
+        if chapter_count <= 0:
+            return MAX_GLOBAL_SUMMARY_TOKENS
+
+        per_chapter = MAX_GLOBAL_SUMMARY_TOKENS // chapter_count
+        return max(1, per_chapter)
+
     def _build_messages(
         self,
         record: ChapterRecord,
@@ -328,6 +355,7 @@ class ChapterContextEnrichmentStep(PipelineStep):
         context_block = "\n".join(context_lines) or "No prior chapters available."
 
         timeline_summary = self._inject_timeline_summary(global_summary_so_far, video_duration)
+        token_limit = getattr(self, "_summary_tokens_per_chapter", MAX_GLOBAL_SUMMARY_TOKENS)
 
         user_prompt = (
             f"Chunk Index: {record.chunk_index}\n"
@@ -349,7 +377,7 @@ class ChapterContextEnrichmentStep(PipelineStep):
             "- Maintain factual grounding; do not invent events that contradict the current transcript.\n"
             "- If context does not add value, keep the summary focused but explain continuity if possible.\n"
             "- For procedural videos, enumerate steps, tools, measurements, and results. For stories, include key characters, motivations, and plot progress.\n"
-            "- Append only new information to the global summary update; avoid repeating prior context."
+            f"- Write global_summary_update as 1-2 flowing sentences (max ~{token_limit} tokens) that extend the cumulative narrative, referencing how this chunk advances the story without restating prior details or using bullet points."
         )
 
         return [
