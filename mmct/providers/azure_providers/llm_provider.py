@@ -20,18 +20,18 @@ class AzureLLMProvider(LLMProvider):
     def _initialize_client(self):
         """Initialize Azure OpenAI client."""
         try:
-            endpoint = self.config.get("endpoint")
-            api_version = self.config.get("api_version", "2024-08-01-preview")
-            use_managed_identity = self.config.get("use_managed_identity", True)
-            timeout = self.config.get("timeout", 200)
-            max_retries = self.config.get("max_retries", 2)
-            
+            endpoint = self.config.get("llm_endpoint")
+            api_version = self.config.get("llm_api_version", "2024-08-01-preview")
+            use_managed_identity = self.config.get("llm_use_managed_identity", True)
+            timeout = self.config.get("llm_timeout", 200)
+            max_retries = self.config.get("llm_max_retries", 2)
+
             if not endpoint:
                 raise ConfigurationException("Azure OpenAI endpoint is required")
-            
+
             if use_managed_identity:
                 token_provider = get_bearer_token_provider(
-                    self.credential, 
+                    self.credential,
                     "https://cognitiveservices.azure.com/.default"
                 )
                 return AsyncAzureOpenAI(
@@ -42,10 +42,10 @@ class AzureLLMProvider(LLMProvider):
                     timeout=timeout
                 )
             else:
-                api_key = self.config.get("api_key")
+                api_key = self.config.get("llm_api_key")
                 if not api_key:
                     raise ConfigurationException("Azure OpenAI API key is required when managed identity is disabled")
-                
+
                 return AsyncAzureOpenAI(
                     api_version=api_version,
                     azure_endpoint=endpoint,
@@ -61,11 +61,11 @@ class AzureLLMProvider(LLMProvider):
     async def chat_completion(self, messages: List[Dict], **kwargs) -> Dict[str, Any]:
         """Generate chat completion using Azure OpenAI."""
         try:
-            deployment_name = self.config.get("deployment_name")
+            deployment_name = self.config.get("llm_deployment_name")
             if not deployment_name:
                 raise ConfigurationException("Azure OpenAI deployment name is required")
-            
-            temperature = kwargs.get("temperature", self.config.get("temperature", 0.0))
+
+            temperature = kwargs.get("temperature", self.config.get("llm_temperature", 0.0))
             max_tokens = kwargs.get("max_tokens", 4000)
             response_format = kwargs.get("response_format")
             
@@ -118,12 +118,12 @@ class AzureLLMProvider(LLMProvider):
     def get_autogen_client(self):
         """Get autogen-compatible client for Azure OpenAI."""
         try:
-            endpoint = self.config.get("endpoint")
-            deployment_name = self.config.get("deployment_name")
-            api_version = self.config.get("api_version", "2024-08-01-preview")
-            use_managed_identity = self.config.get("use_managed_identity", True)
-            timeout = self.config.get("timeout", 200)
-            temperature = self.config.get("temperature", 0)
+            endpoint = self.config.get("llm_endpoint")
+            deployment_name = self.config.get("llm_deployment_name")
+            api_version = self.config.get("llm_api_version", "2024-08-01-preview")
+            use_managed_identity = self.config.get("llm_use_managed_identity", True)
+            timeout = self.config.get("llm_timeout", 200)
+            temperature = self.config.get("llm_temperature", 0)
 
             if not endpoint or not deployment_name:
                 raise ConfigurationException("Azure OpenAI endpoint and deployment name are required for autogen client")
@@ -143,7 +143,7 @@ class AzureLLMProvider(LLMProvider):
                     temperature=temperature
                 )
             else:
-                api_key = self.config.get("api_key")
+                api_key = self.config.get("llm_api_key")
                 if not api_key:
                     raise ConfigurationException("Azure OpenAI API key is required when managed identity is disabled")
 

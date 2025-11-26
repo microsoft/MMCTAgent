@@ -99,7 +99,7 @@ class EmbeddingOrchestrator:
                     return
 
                 # Generate embeddings in batches using the provider
-                batch_size = self.embedding_config.batch_size
+                batch_size = self.embedding_config.image_embedding_batch_size
                 for i in range(0, len(valid_file_paths), batch_size):
                     batch_paths = valid_file_paths[i:i + batch_size]
                     batch_keyframes = valid_keyframes[i:i + batch_size]

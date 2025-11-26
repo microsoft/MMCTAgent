@@ -32,7 +32,7 @@ class AzureStorageProvider(StorageProvider):
         """Initialize credential and service client asynchronously."""
         if self.service_client is None:
             try:
-                use_managed_identity = self.config.get("use_managed_identity") or os.getenv("STORAGE_USE_MANAGED_IDENTITY", "true").lower() == "true"
+                use_managed_identity = self.config.get("storage_use_managed_identity") or os.getenv("STORAGE_USE_MANAGED_IDENTITY", "true").lower() == "true"
 
                 if use_managed_identity:
                     self.credential = AzureCredentials.get_async_credentials()
@@ -40,7 +40,7 @@ class AzureStorageProvider(StorageProvider):
                     # For non-managed identity, you'd use connection string or SAS token
                     raise ConfigurationException("Non-managed identity auth not yet implemented for blob storage")
 
-                account_url = self.config.get("account_url") or os.getenv("STORAGE_ACCOUNT_URL")
+                account_url = self.config.get("storage_account_url") or os.getenv("STORAGE_ACCOUNT_URL")
                 if not account_url:
                     raise ConfigurationException("Azure Storage account_url is required")
 
@@ -91,7 +91,7 @@ class AzureStorageProvider(StorageProvider):
                 base_url = self.service_client.url.rstrip('/')
                 url = f"{base_url}/{folder_name}/{file_name}"
             else:
-                account_url = self.config.get("account_url") or os.getenv("STORAGE_ACCOUNT_URL")
+                account_url = self.config.get("storage_account_url") or os.getenv("STORAGE_ACCOUNT_URL")
                 if not account_url:
                     raise ConfigurationException("Azure Storage account_url is required")
                 url = f"{account_url.rstrip('/')}/{folder_name}/{file_name}"

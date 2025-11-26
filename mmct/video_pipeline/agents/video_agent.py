@@ -11,7 +11,7 @@ from mmct.video_pipeline.prompts_and_description import (
     VideoAgentResponse,
 )
 from autogen_agentchat.ui import Console
-from mmct.config.settings import MMCTConfig
+from mmct.config.settings import settings
 from mmct.providers.factory import provider_factory
 
 # Load environment variables
@@ -88,8 +88,6 @@ class VideoAgent:
         self.use_critic_agent = use_critic_agent
         self.stream = stream
         self.cache = cache
-        # Initialize configuration and logging
-        self.config = MMCTConfig()
 
         # Initialize LLM provider
         self.llm_provider = llm_provider or self._create_llm_provider()
@@ -147,7 +145,7 @@ class VideoAgent:
             # Get structured response from LLM
             response = await self.llm_provider.chat_completion(
                 messages=messages,
-                temperature=self.config.llm.temperature,
+                temperature=settings.llm.llm_temperature,
                 response_format=VideoAgentResponse
             )
             return response

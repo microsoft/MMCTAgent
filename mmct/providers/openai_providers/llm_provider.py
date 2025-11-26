@@ -17,13 +17,13 @@ class OpenAILLMProvider(LLMProvider):
     def _initialize_client(self):
         """Initialize OpenAI client."""
         try:
-            api_key = self.config.get("api_key")
+            api_key = self.config.get("llm_api_key")
             if not api_key:
                 raise ConfigurationException("OpenAI API key is required")
-            
-            timeout = self.config.get("timeout", 200)
-            max_retries = self.config.get("max_retries", 2)
-            
+
+            timeout = self.config.get("llm_timeout", 200)
+            max_retries = self.config.get("llm_max_retries", 2)
+
             return AsyncOpenAI(
                 api_key=api_key,
                 timeout=timeout,
@@ -37,8 +37,8 @@ class OpenAILLMProvider(LLMProvider):
     async def chat_completion(self, messages: List[Dict], **kwargs) -> Dict[str, Any]:
         """Generate chat completion using OpenAI."""
         try:
-            model = self.config.get("model_name", "gpt-4o")
-            temperature = kwargs.get("temperature", self.config.get("temperature", 0.0))
+            model = self.config.get("llm_model_name", "gpt-4o")
+            temperature = kwargs.get("temperature", self.config.get("llm_temperature", 0.0))
             max_tokens = kwargs.get("max_tokens", 4000)
             response_format = kwargs.get("response_format")
             
@@ -91,13 +91,13 @@ class OpenAILLMProvider(LLMProvider):
     def get_autogen_client(self):
         """Get autogen-compatible client for OpenAI."""
         try:
-            api_key = self.config.get("api_key")
+            api_key = self.config.get("llm_api_key")
             if not api_key:
                 raise ConfigurationException("OpenAI API key is required for autogen client")
 
-            model = self.config.get("model_name", "gpt-4o")
-            timeout = self.config.get("timeout", 200)
-            temperature = self.config.get("temperature", 0)
+            model = self.config.get("llm_model_name", "gpt-4o")
+            timeout = self.config.get("llm_timeout", 200)
+            temperature = self.config.get("llm_temperature", 0)
 
             return OpenAIChatCompletionClient(
                 api_key=api_key,

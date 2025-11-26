@@ -16,13 +16,13 @@ class OpenAITranscriptionProvider(TranscriptionProvider):
     def _initialize_client(self):
         """Initialize OpenAI client."""
         try:
-            api_key = self.config.get("api_key")
+            api_key = self.config.get("speech_service_key")
             if not api_key:
                 raise ConfigurationException("OpenAI API key is required")
-            
-            timeout = self.config.get("timeout", 200)
-            max_retries = self.config.get("max_retries", 2)
-            
+
+            timeout = self.config.get("speech_timeout", 200)
+            max_retries = self.config.get("speech_max_retries", 2)
+
             return AsyncOpenAI(
                 api_key=api_key,
                 timeout=timeout,
@@ -36,7 +36,7 @@ class OpenAITranscriptionProvider(TranscriptionProvider):
     async def transcribe(self, audio_data: bytes, language: str = None, **kwargs) -> str:
         """Transcribe audio bytes using OpenAI Whisper."""
         try:
-            model = self.config.get("model", "whisper-1")
+            model = self.config.get("speech_service_model_name", "whisper-1")
             
             # Create a temporary file-like object
             import io
@@ -70,7 +70,7 @@ class OpenAITranscriptionProvider(TranscriptionProvider):
     async def transcribe_file(self, audio_path: str, language: str = None, **kwargs) -> str:
         """Transcribe audio file using OpenAI Whisper."""
         try:
-            model = self.config.get("model", "whisper-1")
+            model = self.config.get("speech_service_model_name", "whisper-1")
             
             with open(audio_path, "rb") as audio_file:
                 response = await self.client.audio.transcriptions.create(

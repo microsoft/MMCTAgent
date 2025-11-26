@@ -2,7 +2,7 @@ import json
 from typing import List, Optional
 from loguru import logger
 from pydantic import BaseModel, Field
-from mmct.config.settings import MMCTConfig
+from mmct.config.settings import settings
 from mmct.providers.factory import provider_factory
 from mmct.video_pipeline.core.ingestion.models import ChapterCreationResponse
 
@@ -30,7 +30,6 @@ class VideoSummary:
 
     def __init__(self):
         """Initialize the VideoSummary processor."""
-        self.config = MMCTConfig()
         self.llm_provider = provider_factory.create_llm_provider()
 
     async def create_video_summary(

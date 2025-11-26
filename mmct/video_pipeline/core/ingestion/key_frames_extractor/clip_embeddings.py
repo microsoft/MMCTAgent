@@ -58,8 +58,8 @@ class CLIPEmbeddingsGenerator:
             frame_embeddings = []
 
             # Process frames in batches
-            for i in range(0, len(frame_metadata_list), self.config.batch_size):
-                batch_metadata = frame_metadata_list[i:i + self.config.batch_size]
+            for i in range(0, len(frame_metadata_list), self.config.image_embedding_batch_size):
+                batch_metadata = frame_metadata_list[i:i + self.config.image_embedding_batch_size]
                 batch_frame_paths = []
                 batch_valid_metadata = []
 
@@ -75,7 +75,7 @@ class CLIPEmbeddingsGenerator:
                         logger.warning(f"Frame file not found: {frame_path}")
 
                 if not batch_frame_paths:
-                    logger.warning(f"No valid images in batch {i // self.config.batch_size + 1}")
+                    logger.warning(f"No valid images in batch {i // self.config.image_embedding_batch_size + 1}")
                     continue
 
                 # Generate embeddings for this batch using the provider
@@ -92,11 +92,11 @@ class CLIPEmbeddingsGenerator:
                         )
                         frame_embeddings.append(frame_embedding)
 
-                    logger.info(f"Generated embeddings for batch {i // self.config.batch_size + 1} "
+                    logger.info(f"Generated embeddings for batch {i // self.config.image_embedding_batch_size + 1} "
                               f"({len(batch_embeddings)} embeddings)")
 
                 except Exception as e:
-                    logger.error(f"Failed to process batch {i // self.config.batch_size + 1}: {e}")
+                    logger.error(f"Failed to process batch {i // self.config.image_embedding_batch_size + 1}: {e}")
                     continue
 
             logger.info(f"Successfully generated {len(frame_embeddings)} frame embeddings")

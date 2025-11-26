@@ -17,13 +17,13 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
     def _initialize_client(self):
         """Initialize OpenAI client."""
         try:
-            api_key = self.config.get("api_key")
+            api_key = self.config.get("embedding_service_api_key")
             if not api_key:
                 raise ConfigurationException("OpenAI API key is required")
-            
-            timeout = self.config.get("timeout", 200)
-            max_retries = self.config.get("max_retries", 2)
-            
+
+            timeout = self.config.get("embedding_timeout", 200)
+            max_retries = self.config.get("embedding_max_retries", 2)
+
             return AsyncOpenAI(
                 api_key=api_key,
                 timeout=timeout,
@@ -37,25 +37,25 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
     async def embedding(self, text: str, **kwargs) -> List[float]:
         """Generate embedding using OpenAI."""
         try:
-            model = self.config.get("embedding_model", "text-embedding-3-small")
-            
+            model = self.config.get("embedding_service_model_name", "text-embedding-3-small")
+
             response = await self.client.embeddings.create(
                 model=model,
                 input=text,
                 **kwargs
             )
-            
+
             return response.data[0].embedding
         except Exception as e:
             logger.error(f"OpenAI embedding failed: {e}")
             raise ProviderException(f"OpenAI embedding failed: {e}")
-    
+
     @handle_exceptions(retries=3, exceptions=(Exception,))
     @convert_exceptions({Exception: ProviderException})
     async def batch_embedding(self, texts: List[str], **kwargs) -> List[List[float]]:
         """Generate embeddings for multiple texts using OpenAI."""
         try:
-            model = self.config.get("embedding_model", "text-embedding-3-small")
+            model = self.config.get("embedding_service_model_name", "text-embedding-3-small")
             
             response = await self.client.embeddings.create(
                 model=model,

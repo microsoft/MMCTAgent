@@ -41,60 +41,52 @@ load_dotenv(override=True)
 
 def parse_response_to_dict(content: str) -> Dict[str, Any]:
     """
-    Parse the agent response into a standardized dictionary format.
-    
-    Attempts to extract JSON from the response. If JSON extraction fails,
-    creates a structured response from the text content.
-    
-    Args:
-        content: The response content from the agent
-        
-    Returns:
-        Dict containing:
-        - answer: The response text (markdown formatted)
-        - source: List of sources used (TEXTUAL, VISUAL, or both)
-        - videos: List of video metadata with timestamps
+    Fast JSON extractor with minimal scanning.
     """
+
+    def try_parse_json(s: str):
+        try:
+            data = json.loads(s)
+            if all(k in data for k in ("answer", "source", "videos")):
+                return data
+        except Exception:
+            return None
+
     try:
-        # Remove TERMINATE keyword
-        clean_content = content.replace('TERMINATE', '').strip()
-        
-        # Extract JSON from markdown code blocks if present
-        json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', clean_content, re.DOTALL)
-        if json_match:
-            json_str = json_match.group(1)
-            parsed_result = json.loads(json_str)
-            
-            # Validate required keys
-            if all(key in parsed_result for key in ['answer', 'source', 'videos']):
-                return parsed_result
-        
-        # Try to find raw JSON object
-        json_match = re.search(r'(\{.*\})', clean_content, re.DOTALL)
-        if json_match:
-            json_str = json_match.group(1)
-            try:
-                parsed_result = json.loads(json_str)
-                if all(key in parsed_result for key in ['answer', 'source', 'videos']):
-                    return parsed_result
-            except json.JSONDecodeError:
-                pass
-        
-        # If no valid JSON found, create structured response from text
-        logger.warning("No valid JSON structure found, creating from text content")
+        clean = content.replace("TERMINATE", "").strip()
+
+        # 1. Fast path: JSON inside code block
+        block = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", clean, re.DOTALL)
+        if block:
+            parsed = try_parse_json(block.group(1))
+            if parsed:
+                return parsed
+
+        # 2. Fast JSON extraction without brace matching
+        start = clean.find("{")
+        end = clean.rfind("}")
+        if start != -1 and end != -1:
+            candidate = clean[start:end+1]
+            parsed = try_parse_json(candidate)
+            if parsed:
+                return parsed
+
+        # Fallback
+        logger.warning("No valid JSON found, fallback used.")
         return {
-            "answer": clean_content,
-            "source": ["TEXTUAL", "VISUAL"],  # Assume both since we can't determine
-            "videos": []  # Can't extract video info from unstructured text
+            "answer": clean,
+            "source": ["TEXTUAL", "VISUAL"],
+            "videos": []
         }
-        
+
     except Exception as e:
-        logger.error(f"Failed to parse response: {e}")
+        logger.error(f"Parse failed: {e}")
         return {
             "answer": "Error parsing response",
             "source": [],
             "videos": []
         }
+
 
 
 class VideoQnA:
@@ -317,13 +309,6 @@ async def video_qna(
     if stream:
         response_generator = await video_qna_instance.run_stream()
         messages = await Console(response_generator)
-        # Stream messages through logger instead of Console
-        # messages = []
-        # async for message in response_generator:
-        #     # Log the message content without the "Agent Message:" prefix
-        #     if hasattr(message, 'content') and message.content:
-        #         logger.info(f"Agent Message:{message.content}")  # Using : as separator for filtering
-        #     messages.append(message)
         
         # Return the final result in consistent format
         if messages:
@@ -338,10 +323,14 @@ async def video_qna(
             
             # Parse the response into structured format
             parsed_result = parse_response_to_dict(final_content)
-            
+
             # Calculate tokens from all messages
-            tokens = await video_qna_instance.calculate_total_tokens(messages if isinstance(messages[0], TaskResult) else 
-                                                                      (last_message.messages if isinstance(last_message, TaskResult) else []))
+            if isinstance(messages, TaskResult):
+                tokens = await video_qna_instance.calculate_total_tokens(last_message.messages if isinstance(last_message, TaskResult) else [])
+            elif isinstance(messages, list) and messages and isinstance(messages[0], TaskResult):
+                tokens = await video_qna_instance.calculate_total_tokens(messages)
+            else:
+                tokens = await video_qna_instance.calculate_total_tokens(last_message.messages if isinstance(last_message, TaskResult) else [])
             
             return {
                 "result": parsed_result,
