@@ -5,6 +5,7 @@ from .whisper_transcription_provider import WhisperTranscriptionProvider
 from .speech_service_provider import AzureSpeechServiceProvider
 from .vision_provider import AzureVisionProvider
 from .storage_provider import AzureStorageProvider
+from .azure_reasoning_llm_provider import AzureReasoningLLMProvider
 
 __all__ = [
     "AzureLLMProvider",
@@ -14,4 +15,5 @@ __all__ = [
     "AzureSpeechServiceProvider",
     "AzureVisionProvider",
     "AzureStorageProvider",
+    "AzureReasoningLLMProvider"
 ]

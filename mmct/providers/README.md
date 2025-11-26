@@ -67,6 +67,7 @@ class CustomSearchProvider(SearchProvider):
         """Delete a document."""
         pass
 ```
+
 _Add the relevant implementation for your search provider._
 
 ### Step 2: Add to Custom Providers Module
@@ -196,8 +197,86 @@ results = await azure_search.search(query='some text', top=10)
 ```
 
 Notes:
+
 - Some providers (like `local_faiss`) expect an `embedding` kwarg when searching. Azure accepts `vector_queries` / `search_text` and `filter` strings.
 - If you need to override many config values programmatically, set `prov.config[...]` after creating the provider instance.
+
+---
+
+## 🧠 Using Reasoning Models
+
+Reasoning models (such as OpenAI's o1, o3-mini series) require special handling as they do not support standard LLM parameters like `temperature`, `top_p`, `presence_penalty`, `frequency_penalty`, `logprobs`, `top_logprobs`, `logit_bias`, and `max_tokens`.
+
+### Azure Reasoning LLM Provider
+
+For Azure-hosted reasoning models, use the `AzureReasoningLLMProvider` which automatically filters out unsupported parameters.
+
+#### Configuration
+
+To use reasoning models, update your `.env` file:
+
+```env
+# For Reasoning Models (o1, o3-mini, etc.)
+LLM_PROVIDER=azure_reasoning
+
+# Azure OpenAI Configuration
+LLM_ENDPOINT=https://your-resource.openai.azure.com/
+LLM_DEPLOYMENT_NAME=o1-preview  # or o3-mini, etc.
+LLM_API_VERSION=2024-08-01-preview
+LLM_MODEL_NAME=o1-preview
+LLM_USE_MANAGED_IDENTITY=true
+# LLM_API_KEY=your-api-key  # Only if not using managed identity
+```
+
+> **IMPORTANT** <br>
+> When using `LLM_PROVIDER=azure_reasoning`, the following parameters will be automatically filtered out:
+>
+> - `temperature`
+> - `top_p`
+> - `presence_penalty`
+> - `frequency_penalty`
+> - `logprobs`
+> - `top_logprobs`
+> - `logit_bias`
+> - `max_tokens`
+
+> **NOTE** <br>
+> For non-reasoning models (GPT-4o, GPT-4-turbo, etc.), continue using `LLM_PROVIDER=azure` which supports all standard parameters.
+
+#### Programmatic Usage
+
+```python
+from mmct.providers.factory import provider_factory
+
+# Create reasoning model provider
+reasoning_llm = provider_factory.create_llm_provider('azure_reasoning')
+
+# Use it like any other LLM provider
+response = await reasoning_llm.chat_completion(
+    messages=[
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Explain quantum computing."}
+    ]
+    # Note: temperature, max_tokens, etc. will be automatically filtered
+)
+```
+
+### Switching Between Reasoning and Non-Reasoning Models
+
+To switch between reasoning and non-reasoning models, simply update the `LLM_PROVIDER` in your `.env`:
+
+| Model Type | Provider Value | Supported Parameters |
+|------------|----------------|---------------------|
+| **Non-Reasoning** (GPT-4o, GPT-4-turbo) | `azure` | All standard parameters including temperature, max_tokens, etc. |
+| **Reasoning** (o1, o3-mini) | `azure_reasoning` | Limited parameters only (no temperature, max_tokens, etc.) |
+
+```env
+# For GPT-4o or other non-reasoning models
+LLM_PROVIDER=azure
+
+# For o1, o3-mini or other reasoning models
+LLM_PROVIDER=azure_reasoning
+```
 
 ---
 
