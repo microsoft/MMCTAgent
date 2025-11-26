@@ -23,6 +23,9 @@ class LLMConfig(BaseSettings):
     llm_max_retries: int = Field(default=2)
     llm_temperature: float = Field(default=0.0)
 
+    # OpenAI based vars
+    open
+
     model_config = SettingsConfigDict(
         env_file=find_dotenv(),
         env_file_encoding="utf-8",
@@ -55,10 +58,12 @@ class EmbeddingConfig(BaseSettings):
     embedding_provider: str = Field(default="azure")
     embedding_service_endpoint: str
     embedding_service_deployment_name: str
+    embedding_service_model_name: Optional[str] = Field(default="text-embedding-3-small")
     embedding_service_api_version: str = Field(default="2024-08-01-preview")
     embedding_service_api_key: Optional[str] = Field(default=None)
     embedding_use_managed_identity: bool = Field(default=True)
     embedding_timeout: int = Field(default=200)
+    embedding_max_retries: int = Field(default=2)
 
     model_config = SettingsConfigDict(
         env_file=find_dotenv(),
@@ -99,12 +104,14 @@ class TranscriptionConfig(BaseSettings):
     transcription_provider: str = Field(default="azure")
     whisper_endpoint: Optional[str] = Field(default=None)
     speech_service_deployment_name: Optional[str] = Field(default=None)
+    speech_service_model_name: Optional[str] = Field(default="whisper-1")
     speech_service_api_version: str = Field(default="2024-08-01-preview")
     speech_service_key: Optional[str] = Field(default=None)
     speech_service_region: Optional[str] = Field(default=None)
     speech_service_resource_id: Optional[str] = Field(default=None)
     speech_use_managed_identity: bool = Field(default=True)
     speech_timeout: int = Field(default=200)
+    speech_max_retries: int = Field(default=2)
 
     model_config = SettingsConfigDict(
         env_file=find_dotenv(),
