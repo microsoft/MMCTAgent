@@ -101,6 +101,37 @@ def _enforce_max_scene_length(
     return bounded
 
 
+def _apply_chunk_overlap(
+    chunks: List[SceneChunk],
+    overlap_seconds: float,
+    video_end: Optional[float] = None,
+) -> List[SceneChunk]:
+    if overlap_seconds <= 0.0 or not chunks:
+        return chunks
+
+    overlapped: List[SceneChunk] = []
+    for chunk in chunks:
+        start = max(0.0, chunk.start - overlap_seconds)
+        end = chunk.end + overlap_seconds
+        if video_end is not None:
+            end = min(end, video_end)
+
+        if end <= start:
+            # If the chunk collapsed due to clamping, fall back to the original span.
+            start = chunk.start
+            end = chunk.end
+
+        overlapped.append(
+            SceneChunk(
+                index=chunk.index,
+                start=start,
+                end=end,
+            )
+        )
+
+    return overlapped
+
+
 @register_step("video.chunk.scene")
 class SceneChunkingStep(PipelineStep):
     """Generates chunk boundaries using PySceneDetect."""
@@ -116,6 +147,7 @@ class SceneChunkingStep(PipelineStep):
         max_scenes = int(params.get("max_scenes", 1000))
         min_scene_len_seconds = float(params.get("min_scene_length", 2.0))
         max_scene_length = float(params.get("max_scene_length", min_scene_len_seconds + 5.0))
+        overlap_seconds = float(params.get("overlap_seconds", 0.0))
 
         chunks = _detect_scenes(video_path, params)
         if not chunks:
@@ -129,6 +161,12 @@ class SceneChunkingStep(PipelineStep):
                 max_scene_length,
                 context.video_duration_seconds,
             )
+
+        chunks = _apply_chunk_overlap(
+            chunks,
+            overlap_seconds,
+            context.video_duration_seconds,
+        )
 
         reindexed: List[SceneChunk] = []
         for idx, chunk in enumerate(chunks):
