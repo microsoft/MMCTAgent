@@ -11,6 +11,7 @@ from .base import (
 )
 from .azure_providers import (
     AzureLLMProvider,
+    AzureReasoningLLMProvider,
     AzureEmbeddingProvider,
     AzureSearchProvider,
     WhisperTranscriptionProvider,
@@ -37,6 +38,7 @@ class ProviderFactory:
     
     _llm_providers: Dict[str, Type[LLMProvider]] = {
         'azure': AzureLLMProvider,
+        'azure_reasoning': AzureReasoningLLMProvider,
         'openai': OpenAILLMProvider,
     }
     

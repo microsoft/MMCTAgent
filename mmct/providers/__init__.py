@@ -10,6 +10,7 @@ from .base import (
 from .factory import ProviderFactory, provider_factory
 from .azure_providers import (
     AzureLLMProvider,
+    AzureReasoningLLMProvider,
     AzureEmbeddingProvider,
     AzureSearchProvider,
     AzureVisionProvider,
@@ -34,6 +35,7 @@ __all__ = [
     'provider_factory',
     # Azure providers
     'AzureLLMProvider',
+    'AzureReasoningLLMProvider',
     'AzureEmbeddingProvider',
     'AzureSearchProvider',
     'AzureVisionProvider',
