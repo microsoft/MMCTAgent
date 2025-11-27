@@ -82,7 +82,10 @@ class VideoAgentProviderConfig(ProviderConfigBase):
 class IngestionProviderConfig(ProviderConfigBase):
     llm_provider: BaseLLMProvider = Field(...)
     embedding_provider: BaseEmbeddingProvider = Field(...)
-    search_provider: BaseSearchProvider = Field(...)
+    image_embedding_provider: BaseImageEmbeddingProvider = Field(...)
+    vectordb_chapter: BaseSearchProvider = Field(...)
+    vectordb_object_registry: BaseSearchProvider = Field(...)
+    vectordb_keyframes: BaseSearchProvider = Field(...)
     storage_provider: BaseStorageProvider = Field(...)
     transcription_provider: BaseTranscriptionProvider = Field(...)
-    image_embedding_provider: BaseImageEmbeddingProvider = Field(...)
+   
