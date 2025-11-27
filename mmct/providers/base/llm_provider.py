@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List
 
-class LLMProvider(ABC):
+class BaseLLMProvider(ABC):
     """Abstract base class for LLM providers."""
     
     @abstractmethod

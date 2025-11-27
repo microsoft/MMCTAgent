@@ -1,26 +1,26 @@
 from abc import ABC, abstractmethod
 from typing import Dict, List, Any, Optional
 
-class SearchProvider(ABC):
+class BaseSearchProvider(ABC):
     """Abstract base class for search providers."""
 
     @abstractmethod
-    async def search(self, query: str, index_name: str, **kwargs) -> List[Dict]:
+    async def search(self, query: str, **kwargs) -> List[Dict]:
         """Search for documents."""
         pass
 
     @abstractmethod
-    async def index_document(self, document: Dict, index_name: str) -> bool:
+    async def index_document(self, document: Dict) -> bool:
         """Index a document."""
         pass
 
     @abstractmethod
-    async def delete_document(self, doc_id: str, index_name: str) -> bool:
+    async def delete_document(self, doc_id: str) -> bool:
         """Delete a document."""
         pass
 
     @abstractmethod
-    async def create_index(self, index_name: str, index_schema: Any) -> bool:
+    async def create_index(self, index_schema: Any) -> bool:
         """
         Create a search index with the given schema.
 
@@ -36,7 +36,7 @@ class SearchProvider(ABC):
         pass
 
     @abstractmethod
-    async def index_exists(self, index_name: str) -> bool:
+    async def index_exists(self) -> bool:
         """
         Check if an index exists.
 
@@ -49,7 +49,7 @@ class SearchProvider(ABC):
         pass
 
     @abstractmethod
-    async def delete_index(self, index_name: str) -> bool:
+    async def delete_index(self) -> bool:
         """
         Delete a search index.
 
@@ -62,7 +62,7 @@ class SearchProvider(ABC):
         pass
 
     @abstractmethod
-    async def upload_documents(self, documents: List[Dict], index_name: str = None) -> Dict[str, Any]:
+    async def upload_documents(self, documents: List[Dict]) -> Dict[str, Any]:
         """
         Upload multiple documents to the search index.
 
@@ -76,7 +76,7 @@ class SearchProvider(ABC):
         pass
 
     @abstractmethod
-    async def check_is_document_exist(self, hash_id: str, index_name: str = None) -> bool:
+    async def check_is_document_exist(self, hash_id: str) -> bool:
         """
         Check if a document with the given hash_id exists in the index.
 

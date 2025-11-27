@@ -1,17 +1,17 @@
-from .llm_provider import LLMProvider
-from .embedding_provider import EmbeddingProvider
-from .image_embedding_provider import ImageEmbeddingProvider
-from .search_provider import SearchProvider
-from .transcription_provider import TranscriptionProvider
-from .vision_provider import VisionProvider
-from .storage_provider import StorageProvider
+from .llm_provider import BaseLLMProvider
+from .embedding_provider import BaseEmbeddingProvider
+from .image_embedding_provider import BaseImageEmbeddingProvider
+from .search_provider import BaseSearchProvider
+from .transcription_provider import BaseTranscriptionProvider
+from .vision_provider import BaseVisionProvider
+from .storage_provider import BaseStorageProvider
 
 __all__ = [
-    'LLMProvider',
-    'EmbeddingProvider',
-    'ImageEmbeddingProvider',
-    'SearchProvider',
-    'VisionProvider',
-    'TranscriptionProvider',
-    'StorageProvider',
+    'BaseLLMProvider',
+    'BaseEmbeddingProvider',
+    'BaseImageEmbeddingProvider',
+    'BaseSearchProvider',
+    'BaseVisionProvider',
+    'BaseTranscriptionProvider',
+    'BaseStorageProvider',
 ]

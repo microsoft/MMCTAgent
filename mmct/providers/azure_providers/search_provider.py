@@ -22,100 +22,77 @@ from azure.search.documents.indexes.models import (
     ExhaustiveKnnAlgorithmConfiguration,
     VectorSearchProfile
 )
-from mmct.providers.base import SearchProvider
+from mmct.providers.base import BaseSearchProvider
 from mmct.providers.credentials import AzureCredentials
 
-class AzureSearchProvider(SearchProvider):
+class AzureSearchProvider(BaseSearchProvider):
     """Azure AI Search provider implementation."""
 
     def __init__(self, config: Dict[str, Any]):
         self.config = config
         self.credential = AzureCredentials.get_async_credentials()
         self.index_client = self._initialize_index_client()
-        # Cache for search clients with different index names
-        self._client_cache: Dict[str, SearchClient] = {}
-        # Store the default index name for convenience
-        self._default_index_name = self.config.get("search_index_name", "default")
+        # Get index name from config (required)
+        self.index_name = self.config.get("index_name")
+        if not self.index_name:
+            raise ConfigurationException("index_name is required in AzureSearchProvider config")
+        # Cache for search client
+        self._search_client: Optional[SearchClient] = None
     
-    def _create_search_client(self, index_name: str) -> SearchClient:
+    def _get_search_client(self) -> SearchClient:
         """
-        Create a SearchClient for a specific index.
-
-        Args:
-            index_name: Name of the index
+        Get or create the SearchClient for this provider's index.
 
         Returns:
             SearchClient instance
         """
+        if self._search_client is not None:
+            return self._search_client
+
         try:
-            endpoint = self.config.get("search_endpoint")
+            endpoint = self.config.get("endpoint")
             if not endpoint:
                 raise ConfigurationException("SEARCH_ENDPOINT environment variable not set")
 
-            use_managed_identity = self.config.get("search_use_managed_identity", True)
+            use_managed_identity = self.config.get("use_managed_identity", True)
 
             if use_managed_identity:
-                return SearchClient(
+                self._search_client = SearchClient(
                     endpoint=endpoint,
-                    index_name=index_name,
+                    index_name=self.index_name,
                     credential=self.credential
                 )
             else:
-                api_key = self.config.get("search_api_key")
+                api_key = self.config.get("api_key")
                 if not api_key:
                     raise ConfigurationException("Azure AI Search API key is required when managed identity is disabled")
 
                 from azure.core.credentials import AzureKeyCredential
-                return SearchClient(
+                self._search_client = SearchClient(
                     endpoint=endpoint,
-                    index_name=index_name,
+                    index_name=self.index_name,
                     credential=AzureKeyCredential(api_key)
                 )
+
+            return self._search_client
         except Exception as e:
             raise ProviderException(f"Failed to initialize Azure AI Search client: {e}")
 
     def _initialize_index_client(self) -> SearchIndexClient:
         """Initialize Azure AI Search Index client for index management."""
         try:
-            endpoint = self.config.get("search_endpoint")
+            endpoint = self.config.get("endpoint")
             if not endpoint:
                 raise ConfigurationException("Azure AI Search endpoint is required")
 
             return SearchIndexClient(endpoint=endpoint, credential=self.credential)
         except Exception as e:
             raise ProviderException(f"Failed to initialize Azure AI Search Index client: {e}")
-    
-    def _get_client_for_index(self, index_name: Optional[str] = None) -> SearchClient:
-        """
-        Get or create a SearchClient for the specified index.
-        Uses caching to avoid creating multiple clients for the same index.
-        
-        Args:
-            index_name: Name of the index. If None, uses the default index.
-            
-        Returns:
-            SearchClient instance for the specified index
-        """
-        # Use default index name if not specified
-        if not index_name:
-            index_name = self._default_index_name
-        
-        # Check cache for existing client
-        if index_name in self._client_cache:
-            return self._client_cache[index_name]
-        
-        # Create and cache new client
-        new_client = self._create_search_client(index_name)
-        self._client_cache[index_name] = new_client
-        return new_client
 
-    def _create_video_chapter_index_schema(self, index_name: str, dim: int = 1536) -> SearchIndex:
+    def _create_video_chapter_index_schema(self, dim: int = 1536) -> SearchIndex:
         """
         Create the index schema definition for video chapter search.
         This schema is based on AISearchDocument model.
-
-        Args:
-            index_name: Name of the index to create
 
         Returns:
             SearchIndex: The index schema definition
@@ -232,7 +209,7 @@ class AzureSearchProvider(SearchProvider):
 
         # Create the index with all configurations
         index = SearchIndex(
-            name=index_name,
+            name=self.index_name,
             fields=fields,
             semantic_search=semantic_config,
             vector_search=vector_search
@@ -240,12 +217,11 @@ class AzureSearchProvider(SearchProvider):
 
         return index
 
-    def _create_keyframe_index_schema(self, index_name: str, dim: int = 512) -> SearchIndex:
+    def _create_keyframe_index_schema(self, dim: int = 512) -> SearchIndex:
         """
         Create Azure AI Search index schema for keyframes.
 
         Args:
-            index_name: Name of the index to create
             dim: Dimensionality of the CLIP embedding vectors (default: 512)
 
         Returns:
@@ -291,18 +267,17 @@ class AzureSearchProvider(SearchProvider):
             ],
         )
 
-        index = SearchIndex(name=index_name, fields=fields, vector_search=vector_search)
+        index = SearchIndex(name=self.index_name, fields=fields, vector_search=vector_search)
         return index
 
     @handle_exceptions(retries=3, exceptions=(Exception,))
     @convert_exceptions({Exception: ProviderException})
-    async def search(self, query: str, index_name: str = None, **kwargs) -> List[Dict]:
+    async def search(self, query: str, **kwargs) -> List[Dict]:
         """
         Search documents using Azure AI Search.
         
         Args:
             query: Search query string
-            index_name: Optional index name (uses default if not provided)
             **kwargs: Additional search parameters including:
                 - search_text: Text to search for (defaults to query)
                 - top: Number of results to return
@@ -346,7 +321,7 @@ class AzureSearchProvider(SearchProvider):
                 vector_queries = [vector_query]
 
             # Get appropriate client for the index
-            client = self._get_client_for_index(index_name)
+            client = self._get_search_client()
             
             # Execute search
             results = await client.search(
@@ -365,19 +340,18 @@ class AzureSearchProvider(SearchProvider):
         
     @handle_exceptions(retries=3, exceptions=(Exception,))
     @convert_exceptions({Exception: ProviderException})
-    async def index_document(self, document: Dict, index_name: str = None) -> bool:
+    async def index_document(self, document: Dict) -> bool:
         """
         Index a document in Azure AI Search.
         
         Args:
             document: Document dictionary to index
-            index_name: Optional index name (uses default if not provided)
             
         Returns:
             bool: True if successful, False otherwise
         """
         try:
-            client = self._get_client_for_index(index_name)
+            client = self._get_search_client()
             result = await client.upload_documents(documents=[document])
             return result[0].succeeded
         except Exception as e:
@@ -386,19 +360,18 @@ class AzureSearchProvider(SearchProvider):
     
     @handle_exceptions(retries=3, exceptions=(Exception,))
     @convert_exceptions({Exception: ProviderException})
-    async def delete_document(self, doc_id: str, index_name: str = None) -> bool:
+    async def delete_document(self, doc_id: str) -> bool:
         """
         Delete a document from Azure AI Search.
         
         Args:
             doc_id: ID of the document to delete
-            index_name: Optional index name (uses default if not provided)
             
         Returns:
             bool: True if successful, False otherwise
         """
         try:
-            client = self._get_client_for_index(index_name)
+            client = self._get_search_client()
             result = await client.delete_documents(documents=[{"id": doc_id}])
             return result[0].succeeded
         except Exception as e:
@@ -407,12 +380,11 @@ class AzureSearchProvider(SearchProvider):
 
     @handle_exceptions(retries=3, exceptions=(Exception,))
     @convert_exceptions({Exception: ProviderException})
-    async def create_index(self, index_name: str, index_schema: Any) -> bool:
+    async def create_index(self, index_schema: Any) -> bool:
         """
         Create a search index with the given schema.
 
         Args:
-            index_name: Name of the index to create
             index_schema: Can be:
                 - String: "chapter" or "keyframe" for standard schemas
                 - SearchIndex: Azure SearchIndex object (used directly)
@@ -426,46 +398,46 @@ class AzureSearchProvider(SearchProvider):
             if isinstance(index_schema, str):
                 # Simple string indicator
                 if index_schema == "keyframe":
-                    index_schema = self._create_keyframe_index_schema(index_name)
+                    index_schema = self._create_keyframe_index_schema(self.index_name)
                 elif index_schema == "chapter":
-                    index_schema = self._create_video_chapter_index_schema(index_name)
+                    index_schema = self._create_video_chapter_index_schema(self.index_name)
                 elif index_schema == "object_collection":
                     from mmct.providers.search_index_schema import create_object_collection_index_schema
-                    index_schema = create_object_collection_index_schema(index_name)
+                    index_schema = create_object_collection_index_schema(self.index_name)
                 else:
-                    raise ProviderException(f"Unknown index schema type: {index_schema}")
+                    raise ProviderException(f"Unknown index schema type: {self.index_schema}")
 
             elif isinstance(index_schema, dict):
                 # Dict with type indicator and optional params
                 schema_type = index_schema.get("type", "chapter")
                 if schema_type == "keyframe":
                     dim = index_schema.get("dim", 512)
-                    index_schema = self._create_keyframe_index_schema(index_name, dim)
+                    index_schema = self._create_keyframe_index_schema(self.index_name, dim)
                 elif schema_type == "chapter":
                     dim = index_schema.get("dim", 1536)
-                    index_schema = self._create_video_chapter_index_schema(index_name, dim)
+                    index_schema = self._create_video_chapter_index_schema(self.index_name, dim)
                 elif schema_type == "object_collection":
                     from mmct.providers.search_index_schema import create_object_collection_index_schema
-                    index_schema = create_object_collection_index_schema(index_name)
+                    index_schema = create_object_collection_index_schema(self.index_name)
                 else:
                     raise ProviderException(f"Unknown index schema type: {schema_type}")
             
             # Otherwise assume it's already a SearchIndex object
             
             await self.index_client.create_index(index_schema)
-            logger.info(f"Successfully created index '{index_name}'")
+            logger.info(f"Successfully created index '{self.index_name}'")
             return True
         except Exception as e:
             if "ResourceNameAlreadyInUse" in str(e) or "already exists" in str(e):
-                logger.info(f"Index '{index_name}' already exists")
+                logger.info(f"Index '{self.index_name}' already exists")
                 return False
             else:
-                logger.error(f"Failed to create index '{index_name}': {e}")
-                raise ProviderException(f"Failed to create index '{index_name}': {e}")
+                logger.error(f"Failed to create index '{self.index_name}': {e}")
+                raise ProviderException(f"Failed to create index '{self.index_name}': {e}")
 
     @handle_exceptions(retries=3, exceptions=(Exception,))
     @convert_exceptions({Exception: ProviderException})
-    async def index_exists(self, index_name: str) -> bool:
+    async def index_exists(self) -> bool:
         """
         Check if an index exists.
 
@@ -476,7 +448,7 @@ class AzureSearchProvider(SearchProvider):
             bool: True if index exists, False otherwise
         """
         try:
-            await self.index_client.get_index(index_name)
+            await self.index_client.get_index(self.index_name)
             return True
         except Exception as e:
             error_str = str(e)
@@ -491,44 +463,40 @@ class AzureSearchProvider(SearchProvider):
             if any(pattern in error_str for pattern in not_found_patterns):
                 return False
             else:
-                logger.error(f"Error checking if index '{index_name}' exists: {e}")
-                raise ProviderException(f"Error checking if index '{index_name}' exists: {e}")
+                logger.error(f"Error checking if index '{self.index_name}' exists: {e}")
+                raise ProviderException(f"Error checking if index '{self.index_name}' exists: {e}")
 
     @handle_exceptions(retries=3, exceptions=(Exception,))
     @convert_exceptions({Exception: ProviderException})
-    async def delete_index(self, index_name: str) -> bool:
+    async def delete_index(self) -> bool:
         """
         Delete a search index.
-
-        Args:
-            index_name: Name of the index to delete
 
         Returns:
             bool: True if successful
         """
         try:
-            await self.index_client.delete_index(index_name)
-            logger.info(f"Successfully deleted index '{index_name}'")
+            await self.index_client.delete_index(self.index_name)
+            logger.info(f"Successfully deleted index '{self.index_name}'")
             return True
         except Exception as e:
-            logger.error(f"Failed to delete index '{index_name}': {e}")
-            raise ProviderException(f"Failed to delete index '{index_name}': {e}")
+            logger.error(f"Failed to delete index '{self.index_name}': {e}")
+            raise ProviderException(f"Failed to delete index '{self.index_name}': {e}")
 
     @handle_exceptions(retries=3, exceptions=(Exception,))
     @convert_exceptions({Exception: ProviderException})
-    async def upload_documents(self, documents: List[Dict], index_name: str = None) -> Dict[str, Any]:
+    async def upload_documents(self, documents: List[Dict]) -> Dict[str, Any]:
         """
         Upload multiple documents to the search index.
 
         Args:
             documents: List of document dictionaries to upload
-            index_name: Optional index name (uses default if not provided)
 
         Returns:
             Dict with upload results including success status, count, and result details
         """
         try:
-            client = self._get_client_for_index(index_name)
+            client = self._get_search_client()
             result = await client.upload_documents(documents=documents)
             logger.info(f"Successfully uploaded {len(documents)} documents to index")
             return {"success": True, "count": len(documents), "result": result}
@@ -562,19 +530,18 @@ class AzureSearchProvider(SearchProvider):
 
     @handle_exceptions(retries=3, exceptions=(Exception,))
     @convert_exceptions({Exception: ProviderException})
-    async def check_is_document_exist(self, hash_id: str, index_name: str = None) -> bool:
+    async def check_is_document_exist(self, hash_id: str) -> bool:
         """
         Check if a document with the given hash_id exists in the index.
 
         Args:
             hash_id: Hash ID of the document to check
-            index_name: Optional index name (uses default if not provided)
 
         Returns:
             bool: True if document exists, False otherwise
         """
         try:
-            client = self._get_client_for_index(index_name)
+            client = self._get_search_client()
 
             # Search for document with the given hash_id
             results = await client.search(

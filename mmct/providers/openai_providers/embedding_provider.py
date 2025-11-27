@@ -1,5 +1,5 @@
 
-from mmct.providers.base import EmbeddingProvider
+from mmct.providers.base import BaseEmbeddingProvider
 from typing import Dict, Any, List
 from loguru import logger
 from mmct.utils.error_handler import handle_exceptions, convert_exceptions, ProviderException, ConfigurationException
@@ -7,7 +7,7 @@ from openai import AsyncOpenAI, OpenAI
 
 
 
-class OpenAIEmbeddingProvider(EmbeddingProvider):
+class OpenAIEmbeddingProvider(BaseEmbeddingProvider):
     """OpenAI embedding provider implementation."""
     
     def __init__(self, config: Dict[str, Any]):

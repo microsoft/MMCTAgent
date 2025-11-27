@@ -1,5 +1,5 @@
 
-from mmct.providers.base import EmbeddingProvider
+from mmct.providers.base import BaseEmbeddingProvider
 from typing import Dict, Any, List
 from azure.identity import get_bearer_token_provider
 from loguru import logger
@@ -9,7 +9,7 @@ from mmct.utils.error_handler import handle_exceptions, convert_exceptions
 from mmct.providers.credentials import AzureCredentials
 
 
-class AzureEmbeddingProvider(EmbeddingProvider):
+class AzureEmbeddingProvider(BaseEmbeddingProvider):
     """Azure OpenAI embedding provider implementation."""
 
     def __init__(self, config: Dict[str, Any]):
@@ -20,14 +20,14 @@ class AzureEmbeddingProvider(EmbeddingProvider):
     def _initialize_client(self):
         """Initialize Azure OpenAI client."""
         try:
-            endpoint = self.config.get("embedding_service_endpoint")
-            api_version = self.config.get("embedding_service_api_version", "2024-08-01-preview")
-            use_managed_identity = self.config.get("embedding_use_managed_identity", True)
-            timeout = self.config.get("embedding_timeout", 200)
-            max_retries = self.config.get("llm_max_retries", 2)
+            endpoint = self.config.get("endpoint")
+            api_version = self.config.get("api_version", "2024-08-01-preview")
+            use_managed_identity = self.config.get("use_managed_identity", True)
+            timeout = self.config.get("timeout", 200)
+            max_retries = self.config.get("max_retries", 2)
 
             if not endpoint:
-                raise ConfigurationException("Azure OpenAI endpoint is required")
+                raise ConfigurationException("Azure OpenAI endpoint is required for Embedding Provider!")
 
             if use_managed_identity:
                 scope = self.config.get("token_scope", "https://cognitiveservices.azure.com/.default")
@@ -40,9 +40,9 @@ class AzureEmbeddingProvider(EmbeddingProvider):
                     timeout=timeout
                 )
             else:
-                api_key = self.config.get("embedding_service_api_key")
+                api_key = self.config.get("api_key")
                 if not api_key:
-                    raise ConfigurationException("Azure OpenAI API key is required when managed identity is disabled")
+                    raise ConfigurationException("Azure OpenAI API key is required when managed identity is disabled for Embedding Provider")
 
                 return AsyncAzureOpenAI(
                     api_version=api_version,
@@ -59,7 +59,7 @@ class AzureEmbeddingProvider(EmbeddingProvider):
     async def embedding(self, text: str, **kwargs) -> List[float]:
         """Generate embedding using Azure OpenAI."""
         try:
-            deployment_name = self.config.get("embedding_service_deployment_name") or self.config.get("embedding_deployment_name")
+            deployment_name = self.config.get("deployment_name") or self.config.get("embedding_deployment_name")
             if not deployment_name:
                 raise ConfigurationException(
                     "Azure OpenAI embedding deployment name is required. "
@@ -82,7 +82,7 @@ class AzureEmbeddingProvider(EmbeddingProvider):
     async def batch_embedding(self, texts: List[str], **kwargs) -> List[List[float]]:
         """Generate embeddings for multiple texts using Azure OpenAI."""
         try:
-            deployment_name = self.config.get("embedding_service_deployment_name") or self.config.get("embedding_deployment_name")
+            deployment_name = self.config.get("deployment_name") or self.config.get("embedding_deployment_name")
             if not deployment_name:
                 raise ConfigurationException(
                     "Azure OpenAI embedding deployment name is required. "

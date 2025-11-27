@@ -1,4 +1,4 @@
-from mmct.providers.base import LLMProvider
+from mmct.providers.base import BaseLLMProvider
 from loguru import logger
 from mmct.utils.error_handler import ProviderException, ConfigurationException
 from typing import Dict, Any, List
@@ -7,7 +7,7 @@ from openai import AsyncOpenAI, OpenAI
 from autogen_ext.models.openai import OpenAIChatCompletionClient
 
 
-class OpenAILLMProvider(LLMProvider):
+class OpenAILLMProvider(BaseLLMProvider):
     """OpenAI LLM provider implementation."""
     
     def __init__(self, config: Dict[str, Any]):

@@ -10,11 +10,11 @@ import numpy as np
 import faiss
 
 from loguru import logger
-from mmct.providers.base import SearchProvider
+from mmct.providers.base import BaseSearchProvider
 from mmct.utils.error_handler import ProviderException, handle_exceptions, convert_exceptions
 
 
-class LocalFaissSearchProvider(SearchProvider):
+class LocalFaissSearchProvider(BaseSearchProvider):
     """Local FAISS-backed search provider.
 
     This provider:

@@ -5,12 +5,12 @@ from pathlib import Path
 from urllib.parse import urlparse
 from loguru import logger
 from typing import Dict, Any
-from mmct.providers.base import StorageProvider
+from mmct.providers.base import BaseStorageProvider
 from mmct.utils.error_handler import handle_exceptions, convert_exceptions
 from mmct.utils.error_handler import ProviderException
 
 
-class LocalStorageProvider(StorageProvider):
+class LocalStorageProvider(BaseStorageProvider):
     """Local filesystem-based storage provider."""
 
     def __init__(self, config: Dict[str, Any]):

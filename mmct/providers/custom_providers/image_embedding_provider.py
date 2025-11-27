@@ -1,5 +1,4 @@
-from mmct.providers.base import ImageEmbeddingProvider
-from mmct.config.settings import ImageEmbeddingConfig
+from mmct.providers.base import BaseImageEmbeddingProvider
 from typing import Dict, Any, List, Union, Optional
 from PIL import Image
 import numpy as np
@@ -10,10 +9,10 @@ from mmct.utils.error_handler import handle_exceptions, convert_exceptions, Prov
 import asyncio
 
 
-class CustomImageEmbeddingProvider(ImageEmbeddingProvider):
+class CustomImageEmbeddingProvider(BaseImageEmbeddingProvider):
     """CLIP-based image and text embedding provider implementation."""
 
-    def __init__(self, config: Union[Dict[str, Any], ImageEmbeddingConfig]):
+    def __init__(self, config: Dict[str, Any]):
         """
         Initialize CLIP image embedding provider.
 
@@ -27,10 +26,6 @@ class CustomImageEmbeddingProvider(ImageEmbeddingProvider):
         Note:
             Embeddings are always L2 normalized for optimal CLIP performance.
         """
-        # Convert ImageEmbeddingConfig to dict if needed
-        if isinstance(config, ImageEmbeddingConfig):
-            config = config.to_provider_config()
-
         self.config = config
         self.model_name = config.get("model_name", "openai/clip-vit-base-patch32")
         self.device = self._get_device()

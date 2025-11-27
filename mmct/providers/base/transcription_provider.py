@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional, List
 
-class TranscriptionProvider(ABC):
+class BaseTranscriptionProvider(ABC):
     """Abstract base class for transcription providers."""
     
     @abstractmethod

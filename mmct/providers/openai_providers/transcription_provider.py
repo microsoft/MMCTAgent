@@ -1,12 +1,12 @@
 from loguru import logger
 from typing import Dict, Any
 from mmct.utils.error_handler import ProviderException, ConfigurationException
-from mmct.providers.base import TranscriptionProvider
+from mmct.providers.base import BaseTranscriptionProvider
 from mmct.utils.error_handler import handle_exceptions, convert_exceptions
 from openai import AsyncOpenAI, OpenAI
 
 
-class OpenAITranscriptionProvider(TranscriptionProvider):
+class OpenAITranscriptionProvider(BaseTranscriptionProvider):
     """OpenAI Whisper transcription provider implementation."""
     
     def __init__(self, config: Dict[str, Any]):

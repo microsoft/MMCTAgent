@@ -4,12 +4,12 @@ import os
 import tempfile
 from pydub import AudioSegment
 from mmct.utils.error_handler import ProviderException, ConfigurationException, handle_exceptions, convert_exceptions
-from mmct.providers.base import TranscriptionProvider
+from mmct.providers.base import BaseTranscriptionProvider
 from mmct.providers.credentials import AzureCredentials
 from openai import AsyncAzureOpenAI
 from azure.identity import get_bearer_token_provider
 
-class WhisperTranscriptionProvider(TranscriptionProvider):
+class WhisperTranscriptionProvider(BaseTranscriptionProvider):
     """Azure OpenAI Whisper transcription provider implementation."""
 
     def __init__(self, config: Dict[str, Any]):
@@ -21,9 +21,9 @@ class WhisperTranscriptionProvider(TranscriptionProvider):
         """Initialize Azure OpenAI client for Whisper."""
         try:
             logger.info(f"Transcription config received: {self.config}")
-            endpoint = self.config.get("whisper_endpoint")
-            api_version = self.config.get("speech_service_api_version", "2024-08-01-preview")
-            use_managed_identity = self.config.get("speech_use_managed_identity", True)
+            endpoint = self.config.get("endpoint")
+            api_version = self.config.get("api_version", "2024-08-01-preview")
+            use_managed_identity = self.config.get("use_managed_identity", True)
             timeout = self.config.get("speech_timeout", 200)
 
             logger.info(f"Endpoint from config: {endpoint}")
@@ -42,7 +42,7 @@ class WhisperTranscriptionProvider(TranscriptionProvider):
                     timeout=timeout
                 )
             else:
-                api_key = self.config.get("speech_service_key")
+                api_key = self.config.get("api_key")
                 if not api_key:
                     raise ConfigurationException("Azure OpenAI API key is required when managed identity is disabled")
 
@@ -156,7 +156,7 @@ class WhisperTranscriptionProvider(TranscriptionProvider):
         Handles content size limit errors by splitting audio into halves and transcribing separately.
         """
         try:
-            deployment_name = self.config.get("speech_service_deployment_name")
+            deployment_name = self.config.get("deployment_name")
             if not deployment_name:
                 raise ConfigurationException("Azure OpenAI Whisper deployment name is required")
 

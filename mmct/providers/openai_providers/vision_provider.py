@@ -1,11 +1,11 @@
 from mmct.utils.error_handler import handle_exceptions, convert_exceptions
-from mmct.providers.base import VisionProvider
+from mmct.providers.base import BaseVisionProvider
 from openai import AsyncOpenAI, OpenAI
 from mmct.utils.error_handler import ProviderException, ConfigurationException
 from loguru import logger
 from typing import Dict, Any
 
-class OpenAIVisionProvider(VisionProvider):
+class OpenAIVisionProvider(BaseVisionProvider):
     """OpenAI Vision provider implementation."""
     
     def __init__(self, config: Dict[str, Any]):

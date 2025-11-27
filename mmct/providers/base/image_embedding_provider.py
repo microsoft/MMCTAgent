@@ -3,7 +3,7 @@ from typing import List, Union
 from PIL import Image
 import numpy as np
 
-class ImageEmbeddingProvider(ABC):
+class BaseImageEmbeddingProvider(ABC):
     """Abstract base class for image embedding providers."""
 
     @abstractmethod

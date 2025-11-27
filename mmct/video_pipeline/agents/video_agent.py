@@ -11,8 +11,7 @@ from mmct.video_pipeline.prompts_and_description import (
     VideoAgentResponse,
 )
 from autogen_agentchat.ui import Console
-from mmct.config.settings import settings
-from mmct.providers.factory import provider_factory
+from mmct.config.providers import VideoAgentProviderConfig
 
 # Load environment variables
 load_dotenv(override=True)
@@ -20,28 +19,58 @@ load_dotenv(override=True)
 
 class VideoAgent:
     """
-    Simplified agent for video question answering using the updated video_qna function with Swarm orchestration.
+    Video question answering agent using Swarm orchestration.
+    
+    This agent uses VideoAgentProviderConfig for dependency injection to access:
+    - llm_provider: For LLM-based reasoning and structured response generation
+    - vectordb_chapter: For retrieving video context and transcripts
+    - vectordb_object_registry: For retrieving video summaries and object collections
+    - vectordb_keyframes: For searching relevant video frames
+    - embedding_provider: For generating embeddings for semantic search
+    - storage_provider: For accessing stored video frames
 
     This agent provides a clean interface that:
-    1. Calls video_qna (v2 with Swarm) with the provided parameters
+    1. Calls video_qna (with Swarm orchestration) with the provided parameters
     2. Formats the response using LLM with structured output
     3. Returns a properly structured VideoAgentResponse
 
     Args:
         query (str): The natural language question about video content.
-        index_name (str): Name of the Azure Cognitive Search index for video retrieval.
+        index_name (str): Name of the search index for video retrieval.
+        providers (VideoAgentProviderConfig): Provider configuration containing all required providers.
         video_id (Optional[str]): Specific video ID to query. Defaults to None.
         url (Optional[str]): URL to filter the search results for that particular video. Defaults to None.
         use_critic_agent (bool): Whether to use the critic agent for validation. Defaults to True.
         stream (bool): Whether to stream the response output. Defaults to False.
-        llm_provider (Optional[object]): LLM provider instance. Defaults to None (uses config).
+        cache (bool): Whether to enable caching for model responses. Defaults to False.
 
     Example:
         Basic usage with query and index:
         ```python
+        from mmct.config.providers import VideoAgentProviderConfig
+        from mmct.providers.azure import (
+            AzureOpenAILLMProvider,
+            AzureOpenAIEmbeddingProvider,
+            AzureAISearchProvider,
+            AzureBlobStorageProvider,
+            AzureSpeechTranscriptionProvider
+        )
+        
+        # Initialize all required providers
+        providers = VideoAgentProviderConfig(
+            llm_provider=AzureOpenAILLMProvider(...),
+            embedding_provider=AzureOpenAIEmbeddingProvider(...),
+            vectordb_chapter=AzureAISearchProvider(...),
+            vectordb_object_registry=AzureAISearchProvider(...),
+            vectordb_keyframes=AzureAISearchProvider(...),
+            storage_provider=AzureBlobStorageProvider(...),
+            transcription_provider=AzureSpeechTranscriptionProvider(...)
+        )
+        
         video_agent = VideoAgent(
             query="What are the benefits of organic farming?",
-            index_name="farming-video-index"
+            index_name="farming-video-index",
+            providers=providers
         )
         result = await video_agent()
         print(result.response)
@@ -52,6 +81,7 @@ class VideoAgent:
         video_agent = VideoAgent(
             query="Explain the farming technique shown",
             index_name="farming-video-index",
+            providers=providers,
             video_id="abc123def456"
         )
         result = await video_agent()
@@ -62,6 +92,7 @@ class VideoAgent:
         video_agent = VideoAgent(
             query="Summarize this farming video",
             index_name="farming-video-index",
+            providers=providers,
             url="https://video-url.mp4",
             stream=True
         )
@@ -73,11 +104,11 @@ class VideoAgent:
         self,
         query: str,
         index_name: str,
+        providers: VideoAgentProviderConfig,
         video_id: Optional[str] = None,
         url: Optional[str] = None,
         use_critic_agent: Optional[bool] = True,
         stream: bool = False,
-        llm_provider: Optional[object] = None,
         cache: Optional[bool] = False
     ):
         # Store parameters
@@ -88,13 +119,8 @@ class VideoAgent:
         self.use_critic_agent = use_critic_agent
         self.stream = stream
         self.cache = cache
+        self.providers = providers
 
-        # Initialize LLM provider
-        self.llm_provider = llm_provider or self._create_llm_provider()
-
-    def _create_llm_provider(self) -> object:
-        """Create LLM provider from configuration."""
-        return provider_factory.create_llm_provider()
 
     async def __call__(self) -> VideoAgentResponse:
         """
@@ -104,7 +130,7 @@ class VideoAgent:
             VideoAgentResponse: Structured response containing the answer to the query.
         """
         try:
-            # Call the video_qna function (v2 with Swarm) with simplified parameters
+            # Call the video_qna function
             # Get response from video_qna with Swarm orchestration
             video_qna_response = await video_qna(
                 query=self.query,
@@ -113,7 +139,7 @@ class VideoAgent:
                 use_critic_agent=self.use_critic_agent,
                 index_name=self.index_name,
                 stream=self.stream,
-                llm_provider=self.llm_provider,
+                providers = self.providers,
                 cache = self.cache
             )
 
@@ -124,8 +150,7 @@ class VideoAgent:
         except Exception as e:
             return self._create_error_response(f"VideoAgent execution failed: {str(e)}")
         finally:
-            # Clean up resources
-            await self.cleanup()
+            pass
 
     async def _generate_final_answer(self, video_qna_response: dict) -> VideoAgentResponse:
         """
@@ -143,9 +168,9 @@ class VideoAgent:
             messages = self._prepare_messages(context_text)
 
             # Get structured response from LLM
-            response = await self.llm_provider.chat_completion(
+            response = await self.providers.llm_provider.chat_completion(
                 messages=messages,
-                temperature=settings.llm.llm_temperature,
+                temperature=0.0,  # Use default temperature
                 response_format=VideoAgentResponse
             )
             return response
@@ -171,14 +196,6 @@ class VideoAgent:
             source=[],
             tokens={"input_token": 0, "output_token": 0}
         )
-
-    async def cleanup(self):
-        """Clean up resources and close connections."""
-        try:
-            if self.llm_provider and hasattr(self.llm_provider, 'close'):
-                await self.llm_provider.close()
-        except Exception as e:
-            logger.error(f"Error during VideoAgent cleanup: {e}")
 
 
 if __name__ == "__main__":

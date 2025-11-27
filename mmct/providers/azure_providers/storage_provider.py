@@ -6,13 +6,13 @@ from urllib.parse import urlparse
 from azure.storage.blob.aio import BlobServiceClient
 from loguru import logger
 from typing import Dict, Any
-from mmct.providers.base import StorageProvider
+from mmct.providers.base import BaseStorageProvider
 from mmct.providers.credentials import AzureCredentials
 from mmct.utils.error_handler import handle_exceptions, convert_exceptions
 from mmct.utils.error_handler import ProviderException, ConfigurationException
 
 
-class AzureStorageProvider(StorageProvider):
+class AzureStorageProvider(BaseStorageProvider):
     """Azure Blob Storage provider implementation."""
 
     def __init__(self, config: Dict[str, Any]):

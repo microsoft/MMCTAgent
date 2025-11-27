@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-class StorageProvider(ABC):
+class BaseStorageProvider(ABC):
     """Abstract base class for storage providers."""
 
     @abstractmethod

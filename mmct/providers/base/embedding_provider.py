@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import List
 
-class EmbeddingProvider(ABC):
+class BaseEmbeddingProvider(ABC):
     """Abstract base class for embedding providers."""
     
     @abstractmethod

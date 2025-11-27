@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Dict, Any
 
-class VisionProvider(ABC):
+class BaseVisionProvider(ABC):
     """Abstract base class for vision providers."""
 
     @abstractmethod

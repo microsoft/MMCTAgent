@@ -2,56 +2,45 @@
 """
 Keyframe Search Script
 
-This script searches for keyframes in the Azure AI Search index by:
+This script searches for keyframes using injected providers:
 1. Taking a text query from user
-2. Generating CLIP embedding for the query
-3. Finding top 5 most similar keyframes
-4. Displaying results with details
+2. Generating image embedding for the query using image_embedding_provider
+3. Finding top k most similar keyframes using search_provider
+4. Returning results
 """
 
 from typing import List, Dict, Any, Optional
+import numpy as np
+from azure.search.documents.models import VectorizedQuery
+from loguru import logger
 
-from mmct.video_pipeline.utils.video_frame_search import VideoFrameSearchClient
-from mmct.video_pipeline.utils.embedding_utils import EmbeddingsGenerator
-from mmct.config.settings import ImageEmbeddingConfig
+from mmct.providers.base import BaseSearchProvider, BaseImageEmbeddingProvider
 
 
 class KeyframeSearcher:
-    """Search for keyframes using text queries."""
+    """Search for keyframes using text queries with injected providers."""
 
     def __init__(self,
-                 search_endpoint: str,
-                 search_key: Optional[str] = None,
-                 index_name: str = "video-frames-index",
-                 clip_model: str = "openai/clip-vit-base-patch32",
-                 provider: Optional[object] = None,
-                 provider_name: Optional[str] = None,
+                 search_provider: BaseSearchProvider,
+                 image_embedding_provider: BaseImageEmbeddingProvider,
                  provider_config: Optional[dict] = None):
         """
-        Initialize the keyframe searcher.
+        Initialize the keyframe searcher with injected providers.
 
         Args:
-            search_endpoint: VectorDB endpoint
-            search_key: VectorDB API key (optional)
-            index_name: VectorDB index name
-            clip_model: CLIP model name for query embeddings
+            search_provider: BaseSearchProvider instance for vector search
+            image_embedding_provider: BaseImageEmbeddingProvider for generating query embeddings
+            provider_config: Optional provider configuration overrides
         """
-        # Initialize search client; allow injecting a provider instance or provider_name.
-        self.search_client = VideoFrameSearchClient(
-            search_endpoint=search_endpoint,
-            search_key=search_key,
-            index_name=index_name,
-            provider=provider,
-            provider_name=provider_name,
-            provider_config=provider_config,
-        )
-
-        # Initialize embeddings generator for query encoding
-        embeddings_config = ImageEmbeddingConfig(
-            model_name=clip_model,
-            batch_size=1
-        )
-        self.embeddings_generator = EmbeddingsGenerator(embeddings_config)
+        self.search_provider = search_provider
+        self.image_embedding_provider = image_embedding_provider
+        
+        # Apply provider config overrides if provided
+        if provider_config and hasattr(self.search_provider, 'config'):
+            try:
+                self.search_provider.config.update(provider_config)
+            except Exception:
+                self.search_provider.config = provider_config
 
 
     async def search_keyframes(self,
@@ -65,27 +54,39 @@ class KeyframeSearcher:
         Args:
             query: Text query to search for
             top_k: Number of results to return
-            video_filter: Optional filter for specific video name/path
-            min_motion_score: Optional minimum motion score filter
-            min_similarity_score: Minimum similarity score threshold (0.0-1.0). Default 0.7
+            video_filter: Optional filter for specific video
 
         Returns:
-            List of search results filtered by similarity score
+            List of search results
         """
         try:
+            # Generate query embedding using image embedding provider
+            query_embedding = await self.image_embedding_provider.text_embedding(query)
+            
+            # Convert to list if numpy array
+            if isinstance(query_embedding, np.ndarray):
+                query_embedding = query_embedding.tolist()
+        
+            # Create vector query for search
+            vector_query = VectorizedQuery(
+                vector=query_embedding,
+                k_nearest_neighbors=top_k,
+                fields="embeddings"
+            )
 
-            # Generate query embedding
-            query_embedding = await self.embeddings_generator.generate_text_embedding(query)
-       
-            results = await self.search_client.search_similar_frames(
-                query_vector=query_embedding,
-                query_text=query,
-                top_k=top_k,
-                filters=video_filter
+            # Perform search using provider
+            results = await self.search_provider.search(
+                query=query if query else "*",
+                search_text=query if query else "*",
+                vector_queries=[vector_query],
+                embedding=query_embedding,
+                filter=video_filter,
+                top=top_k,
+                select=["keyframe_filename", "video_id", "timestamp_seconds", "motion_score"],
+                query_type="vector",
             )
 
             return results
 
         except Exception as e:
-            return []
-
+            raise Exception(f"An error occurred while fetching keyframe from index: {str(e)}") from e

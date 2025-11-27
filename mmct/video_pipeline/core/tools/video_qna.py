@@ -18,12 +18,12 @@ from autogen_agentchat.ui import Console
 from autogen_agentchat.teams import Swarm, RoundRobinGroupChat
 from autogen_agentchat.conditions import MaxMessageTermination, TextMentionTermination
 from autogen_agentchat.base import TaskResult
-from mmct.video_pipeline.core.tools.get_context import get_context
-from mmct.video_pipeline.core.tools.get_relevant_frames import get_relevant_frames
-from mmct.video_pipeline.core.tools.query_frame import query_frame
-from mmct.video_pipeline.core.tools.get_video_summary import get_video_summary
-from mmct.video_pipeline.core.tools.get_object_collection import get_object_collection
-from mmct.video_pipeline.core.tools.critic import critic_tool
+from mmct.video_pipeline.core.tools.get_context import GetContextTool
+from mmct.video_pipeline.core.tools.get_relevant_frames import GetRelevantFrames
+from mmct.video_pipeline.core.tools.query_frame import QueryFrameTool
+from mmct.video_pipeline.core.tools.get_video_summary import GetVideoSummaryTool
+from mmct.video_pipeline.core.tools.get_object_collection import GetObjectCollection
+from mmct.video_pipeline.core.tools.critic import CriticTool
 from mmct.video_pipeline.prompts_and_description import (
     get_planner_system_prompt,
     CRITIC_AGENT_SYSTEM_PROMPT,
@@ -34,7 +34,7 @@ from mmct.video_pipeline.prompts_and_description import (
 from autogen_ext.models.cache import ChatCompletionCache, CHAT_CACHE_VALUE_TYPE
 from autogen_ext.cache_store.diskcache import DiskCacheStore
 from diskcache import Cache as DiskCache
-from mmct.providers.factory import provider_factory
+from mmct.config.providers import VideoAgentProviderConfig
 
 load_dotenv(override=True)
 
@@ -66,32 +66,31 @@ def parse_response_to_dict(content: str) -> Dict[str, Any]:
         start = clean.find("{")
         end = clean.rfind("}")
         if start != -1 and end != -1:
-            candidate = clean[start:end+1]
+            candidate = clean[start : end + 1]
             parsed = try_parse_json(candidate)
             if parsed:
                 return parsed
 
         # Fallback
         logger.warning("No valid JSON found, fallback used.")
-        return {
-            "answer": clean,
-            "source": ["TEXTUAL", "VISUAL"],
-            "videos": []
-        }
+        return {"answer": clean, "source": ["TEXTUAL", "VISUAL"], "videos": []}
 
     except Exception as e:
         logger.error(f"Parse failed: {e}")
-        return {
-            "answer": "Error parsing response",
-            "source": [],
-            "videos": []
-        }
-
+        return {"answer": "Error parsing response", "source": [], "videos": []}
 
 
 class VideoQnA:
     """
     VideoQnA with comprehensive multi-tool support for video analysis using Swarm orchestration.
+
+    This class uses dependency injection via VideoAgentProviderConfig to access:
+    - llm_provider: For LLM-based reasoning and response generation
+    - vectordb_chapter: For retrieving video context and transcripts
+    - vectordb_object_registry: For retrieving video summaries and object collections
+    - vectordb_keyframes: For searching relevant video frames
+    - embedding_provider: For generating embeddings for semantic search
+    - storage_provider: For accessing stored video frames
 
     MMCT consists of:
     - **Planner Agent**: Has access to five tools for comprehensive video analysis:
@@ -110,20 +109,23 @@ class VideoQnA:
 
     Args:
         query (str): The natural language question to be answered based on the video content.
-        video_id (str): The unique identifier of the video.
+        providers (VideoAgentProviderConfig): Provider configuration containing all required providers.
+        video_id (Optional[str]): The unique identifier of the video.
+        url (Optional[str]): URL of the video to filter search results.
         use_critic_agent (bool, optional): Whether to use the critic agent for answer refinement. Defaults to True.
         index_name (str, optional): Vector index name for context retrieval.
+        cache (bool, optional): Whether to enable caching for model responses. Defaults to True.
     """
 
     def __init__(
         self,
         query: str,
-        video_id:  Optional[str] = None,
-        url:  Optional[str] = None,
+        providers: VideoAgentProviderConfig,
+        video_id: Optional[str] = None,
+        url: Optional[str] = None,
         use_critic_agent: bool = True,
         index_name: str = None,
-        llm_provider: Optional[object] = None,
-        cache: bool = True
+        cache: bool = True,
     ):
         self.query = query
         self.video_id = video_id
@@ -131,12 +133,30 @@ class VideoQnA:
         self.index_name = index_name
         self.url = url
         self.cache = cache
+        self.providers = providers
+        self.model_client = self.providers.llm_provider.get_autogen_client()
 
-        # Initialize providers if not provided
-        if llm_provider is None:
-            llm_provider = provider_factory.create_llm_provider()
-
-        self.model_client = llm_provider.get_autogen_client()
+        get_context_tool_object = GetContextTool(
+            embed_provider=self.providers.embedding_provider,
+            vectordb_chapter=self.providers.vectordb_chapter,
+        )
+        get_video_summary_object = GetVideoSummaryTool(
+            vectordb_object_registry=self.providers.vectordb_object_registry,
+            embed_provider=self.providers.embedding_provider,
+        )
+        get_object_collection_object = GetObjectCollection(
+            vectordb_object_registry=self.providers.vectordb_object_registry
+        )
+        get_relevant_frames_object = GetRelevantFrames(
+            vectordb_keyframes=self.providers.vectordb_keyframes,
+            image_embedding_provider=self.providers.image_embedding_provider,
+        )
+        query_frame_object = QueryFrameTool(
+            llm_provider=self.providers.llm_provider,
+            storage_provider=self.providers.storage_provider,
+            vectordb_keyframes=self.providers.vectordb_keyframes,
+            image_embedding_provider=self.providers.image_embedding_provider,
+        )
 
         # Only enable caching if cache parameter is True
         if self.cache:
@@ -145,6 +165,7 @@ class VideoQnA:
                 # Shared cache across processes
                 from autogen_ext.cache_store.redis import RedisStore
                 import redis
+
                 redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
                 redis_client = redis.from_url(redis_url)
                 store = RedisStore[CHAT_CACHE_VALUE_TYPE](redis_client)  # type: ignore
@@ -156,7 +177,13 @@ class VideoQnA:
             # Wrap the base model client so AgentChat uses the cached client everywhere
             self.model_client = ChatCompletionCache(self.model_client, store)
 
-        self.tools = [get_video_summary, get_object_collection, get_context, get_relevant_frames, query_frame]
+        self.tools = [
+            get_video_summary_object.get_video_summary,
+            get_object_collection_object.get_object_collection,
+            get_context_tool_object.get_context,
+            get_relevant_frames_object.get_relevant_frames,
+            query_frame_object.query_frame,
+        ]
         self.planner_agent = None
         self.critic_agent = None
         self.team = None
@@ -174,7 +201,7 @@ class VideoQnA:
             use_critic_agent=self.use_critic_agent,
         )
 
-        # Define Planner agent - has access to get_video_summary, get_object_collection, get_context, get_relevant_frames, and query_frame tools
+        # Define Planner agent
         self.planner = AssistantAgent(
             name="planner",
             model_client=self.model_client,
@@ -184,7 +211,7 @@ class VideoQnA:
             tools=self.tools,
             reflect_on_tool_use=True,
             max_tool_iterations=15,  # Reduced from 100 to 15 for faster response
-            handoffs=["critic"] if self.use_critic_agent else []
+            handoffs=["critic"] if self.use_critic_agent else [],
         )
 
         text_mention_termination = TextMentionTermination("TERMINATE")
@@ -192,25 +219,24 @@ class VideoQnA:
         termination = text_mention_termination
 
         if self.use_critic_agent:
+            critic_tool_object = CriticTool(llm_provider = self.providers.llm_provider)
             self.critic = AssistantAgent(
                 name="critic",
                 model_client=self.model_client,
                 model_client_stream=False,
                 description=CRITIC_DESCRIPTION,
                 system_message=(f"{CRITIC_AGENT_SYSTEM_PROMPT}"),
-                tools=[critic_tool],
+                tools=[critic_tool_object.critic_tool],
                 reflect_on_tool_use=False,
-                handoffs=["planner"]
+                handoffs=["planner"],
             )
 
             self.team = Swarm(
-                participants=[self.planner, self.critic],
-                termination_condition=termination
+                participants=[self.planner, self.critic], termination_condition=termination
             )
         else:
             self.team = RoundRobinGroupChat(
-                participants=[self.planner],
-                termination_condition=termination
+                participants=[self.planner], termination_condition=termination
             )
 
     async def setup(self):
@@ -241,7 +267,7 @@ class VideoQnA:
     async def run(self):
         """
         Run the video QnA workflow and return structured response.
-        
+
         Returns:
             Dict containing:
             - result: Parsed response dict with answer, source, and videos
@@ -251,15 +277,12 @@ class VideoQnA:
 
         result = await self.team.run(task=self.task)
         tokens = await self.calculate_total_tokens(result.messages)
-        
+
         # Extract and parse the last message content
         last_message = result.messages[-1].content if result.messages else ""
         parsed_result = parse_response_to_dict(last_message)
-        
-        return {
-            "result": parsed_result,
-            "tokens": tokens
-        }
+
+        return {"result": parsed_result, "tokens": tokens}
 
     async def run_stream(self):
         await self.setup()
@@ -268,8 +291,8 @@ class VideoQnA:
 
 async def video_qna(
     query: Annotated[str, "The question to be answered based on the content of the video."],
-    video_id: Annotated[str, "The unique identifier of the video."]=None,
-    url: Annotated[str, "The URL of the video to filter out the search results"]=None,
+    video_id: Annotated[str, "The unique identifier of the video."] = None,
+    url: Annotated[str, "The URL of the video to filter out the search results"] = None,
     use_critic_agent: Annotated[
         bool, "Set to True to enable a critic agent that validates the response."
     ] = True,
@@ -277,11 +300,14 @@ async def video_qna(
         str, "Vector index name for context retrieval"
     ] = "education-video-index-v2",
     stream: Annotated[bool, "Set to True to return the response as a stream."] = False,
-    llm_provider: Optional[object] = None,
-    cache: Annotated[bool, "Set to True to enable cache for model responses."] = True
+    providers: VideoAgentProviderConfig = None,
+    cache: Annotated[bool, "Set to True to enable cache for model responses."] = True,
 ):
     """
     Video QnA with comprehensive multi-tool support for video analysis using Swarm orchestration.
+
+    This function uses dependency injection via VideoAgentProviderConfig to access all required providers
+    for video analysis including LLM, vector databases, embeddings, and storage.
 
     Answers a user query based on the content of a specified video using five complementary tools:
     1. get_video_summary: Retrieves high-level video summary and context (can be called without video_id for discovery)
@@ -294,8 +320,22 @@ async def video_qna(
     With Swarm orchestration, agents can dynamically hand off tasks for better collaboration.
 
     Workflow: If video_id not provided, get_video_summary is called first to discover relevant videos.
-    """
 
+    Args:
+        query (str): The question to be answered based on the content of the video.
+        video_id (Optional[str]): The unique identifier of the video.
+        url (Optional[str]): The URL of the video to filter out the search results.
+        use_critic_agent (bool): Set to True to enable a critic agent that validates the response. Defaults to True.
+        index_name (str): Vector index name for context retrieval. Defaults to "education-video-index-v2".
+        stream (bool): Set to True to return the response as a stream. Defaults to False.
+        providers (VideoAgentProviderConfig): Provider configuration containing all required providers.
+        cache (bool): Set to True to enable cache for model responses. Defaults to True.
+
+    Returns:
+        Dict containing:
+        - result: Parsed response dict with answer, source, and videos
+        - tokens: Token usage information
+    """
 
     video_qna_instance = VideoQnA(
         video_id=video_id,
@@ -303,47 +343,44 @@ async def video_qna(
         query=query,
         use_critic_agent=use_critic_agent,
         index_name=index_name,
-        llm_provider=llm_provider,
+        providers=providers,
         cache=cache,
     )
     if stream:
         response_generator = await video_qna_instance.run_stream()
         messages = await Console(response_generator)
-        
+
         # Return the final result in consistent format
         if messages:
-            if isinstance(messages,list):
+            if isinstance(messages, list):
                 last_message = messages[-1]
             else:
                 last_message = messages
             if isinstance(last_message, TaskResult):
                 final_content = last_message.messages[-1].content if last_message.messages else ""
             else:
-                final_content = getattr(last_message, 'content', str(last_message))
-            
+                final_content = getattr(last_message, "content", str(last_message))
+
             # Parse the response into structured format
             parsed_result = parse_response_to_dict(final_content)
 
             # Calculate tokens from all messages
             if isinstance(messages, TaskResult):
-                tokens = await video_qna_instance.calculate_total_tokens(last_message.messages if isinstance(last_message, TaskResult) else [])
+                tokens = await video_qna_instance.calculate_total_tokens(
+                    last_message.messages if isinstance(last_message, TaskResult) else []
+                )
             elif isinstance(messages, list) and messages and isinstance(messages[0], TaskResult):
                 tokens = await video_qna_instance.calculate_total_tokens(messages)
             else:
-                tokens = await video_qna_instance.calculate_total_tokens(last_message.messages if isinstance(last_message, TaskResult) else [])
-            
-            return {
-                "result": parsed_result,
-                "tokens": tokens
-            }
-        
+                tokens = await video_qna_instance.calculate_total_tokens(
+                    last_message.messages if isinstance(last_message, TaskResult) else []
+                )
+
+            return {"result": parsed_result, "tokens": tokens}
+
         return {
-            "result": {
-                "answer": "No response generated",
-                "source": [],
-                "videos": []
-            },
-            "tokens": {"total_input": 0, "total_output": 0}
+            "result": {"answer": "No response generated", "source": [], "videos": []},
+            "tokens": {"total_input": 0, "total_output": 0},
         }
     else:
         return await video_qna_instance.run()
@@ -361,11 +398,11 @@ if __name__ == "__main__":
     result = asyncio.run(
         video_qna(
             query=query,
-            #video_id=video_id, #Optional
+            # video_id=video_id, #Optional
             # url=url, #Optional
             use_critic_agent=use_critic_agent,
             stream=stream,
             index_name=index_name,
-            cache = False
+            cache=False,
         )
     )
