@@ -38,7 +38,7 @@ MMCTAgent is a state-of-the-art multi-modal AI framework that brings human-like 
 
 <p align="center">
   <a href="https://arxiv.org/abs/2405.18358">
-    <img src="docs/multimedia/VideoPipelineUpdated.png" alt="Video Pipeline - Main Architecture" width="80%" />
+    <img src="docs/multimedia/mmct-video-pipeline.png" alt="Video Pipeline - Main Architecture" width="95%" />
   </a>
 </p>
 
@@ -63,7 +63,7 @@ MMCTAgent includes two specialized agents:
 
 <summary>ImageAgent</summary>
 
-[![](docs/multimedia/imageAgent.webp)](https://arxiv.org/abs/2405.18358)
+[![](docs/multimedia/image-agent.png)](https://arxiv.org/abs/2405.18358)
 
 A reasoning engine tailored for static image understanding.  
 It supports a configurable set of tools via the `ImageQnaTools` enum:
@@ -85,11 +85,12 @@ Optimized for deep video understanding:
 
 **Video Question Answering**  
 
-[![](docs/multimedia/videoAgent.png)](https://arxiv.org/abs/2405.18358)
+[![](docs/multimedia/video-agent.png)](https://arxiv.org/abs/2405.18358)
 
    Applies a fixed toolchain orchestrated by the Planner:
 
-- `GET_VIDEO_ANALYSIS` – Retrieves the most relevant video for the query, along with its summary and detected objects.
+- `GET_VIDEO_SUMMARY` – Retrieves the most relevant video for the query, along with its summary.
+- `GET_OBJECT_COLLECTION` – Retrieves the most relevant video for the query, along with its detected objects.
 - `GET_CONTEXT` – Extracts transcript, visual summary chunks and object collection info relevant to the query.
 - `GET_RELEVANT_FRAMES` – Provides semantically similar keyframes related to the query. This tool is based on the CLIP embedding.
 - `QUERY_FRAME` – Queries specific video keyframes to extract detailed information and provide additional visual context to the Planner.
