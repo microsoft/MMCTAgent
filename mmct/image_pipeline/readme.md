@@ -1,8 +1,10 @@
 # **MMCT - Image Pipeline**
-[![](/docs/multimedia/imageAgent.webp)](https://arxiv.org/pdf/2405.18358)
+
+[![](docs/multimedia/image-agent.png)](https://arxiv.org/pdf/2405.18358)
+
 ## **Overview**
 
-Image Pipeline consists of Image Agent which is is built on top of the **Multi-Modal Critical Thinking (MMCT)** ([arxiv.org/abs/2405.18358](https://arxiv.org/abs/2405.18358)) architecture, which leverages two collaborative agents:
+Image Pipeline consists of Image Agent which is built on top of the **Multi-Modal Critical Thinking (MMCT)** ([arxiv.org/abs/2405.18358](https://arxiv.org/abs/2405.18358)) architecture, which leverages two collaborative agents:
 
 - **Planner**: Generates an initial response based on the provided input. It uses a set of default tools from `ImageQnaTools` but can be customized.
 - **Critic (optional)**: Evaluates the planner’s response and provides feedback for improvement. This feedback loop helps increase accuracy and quality.

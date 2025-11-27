@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="https://arxiv.org/abs/2405.18358">
-    <img src="/docs/multimedia/VideoPipeline.png" alt="Video Pipeline - Main Architecture" width="80%" />
+    <img src="/docs/multimedia/mmct-video-pipeline.png" alt="Video Pipeline - Main Architecture" width="95%" />
   </a>
 </p>
 
@@ -70,6 +70,8 @@ The agent uses the **Multi-Modal Critical Thinking (MMCT)** framework ([arxiv.or
 
 **VideoAgent uses a fixed toolchain** that works collaboratively during the video question answering process. These tools are automatically orchestrated by the planner:
 
+- `GET_VIDEO_SUMMARY` – Retrieves the most relevant video for the query, along with its summary.
+- `GET_OBJECT_COLLECTION` – Retrieves the most relevant video for the query, along with its detected objects.
 - `GET_CONTEXT` – Extracts relevant transcript and visual summary chunks related to the query.
 - `GET_RELEVANT_FRAMES` – Provides semantically similar keyframes related to the query using CLIP embeddings.
 - `QUERY_FRAME` – Queries specific video keyframes to extract detailed visual information and provide additional context to the planner.
@@ -95,7 +97,7 @@ ingestion = IngestionPipeline(
     language=source_language,
 )
 
-asyncio.run(ingestion())
+asyncio.run(ingestion.run())
 ```
 
 > MMCT Video Agent
