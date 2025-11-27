@@ -15,6 +15,7 @@ pipeline:
         detector: adaptive
         threshold: 3
         min_scene_length: 10
+        max_scene_length: 15
         max_scenes: 1000
     - id: scene_chunk_alignment
       type: video.chunk.align-transcript
@@ -38,6 +39,7 @@ pipeline:
         batch_size: 5
         max_parallel_requests: 5
         max_frames_per_chapter: 10
+        collect_object_collection: true
     - id: enriched_chapters
       type: chapters.context-enrich
       params:
@@ -48,6 +50,13 @@ pipeline:
           max_active_context: 10
           min_screen_time_seconds: 8.0
           min_chunk_occurrences: 2
+    - id: timeline_global_summary
+      type: chapters.timeline-summary
+      params:
+        chapters_step: enriched_chapters
+        window_minutes: 10
+        window_overlap_minutes: 2
+        target_token_budget: 4000
     - id: frame_blob_export
       type: export.frame-blob-upload
       params:
@@ -63,4 +72,5 @@ pipeline:
       type: export.object-collection-index
       params:
         source_step: enriched_chapters
+        summary_step: timeline_global_summary
         index_name: objects-new-chapter-gen

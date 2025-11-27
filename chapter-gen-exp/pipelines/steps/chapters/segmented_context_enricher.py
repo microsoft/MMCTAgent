@@ -13,7 +13,6 @@ from ..registry import register_step
 from .context_enricher import (
     ChapterContextEnrichmentStep,
     ChapterRecord,
-    ContextEnrichmentResponse,
     ObjectEnrichmentConfig,
     llm_provider,
 )
@@ -35,7 +34,6 @@ class EnrichedChapterData:
 
     record: ChapterRecord
     chapter: ChapterCreationResponse
-    summary_update: str
 
 
 @dataclass
@@ -64,18 +62,11 @@ class SegmentedChapterContextEnrichmentStep(ChapterContextEnrichmentStep):
         segment_count = int(self.params.get("segment_count", 5))
         boundary_window = int(self.params.get("boundary_window", max(1, context_window)))
         llm_request_options: Dict[str, Any] = dict(self.params.get("llm_request_options", {}) or {})
-        self._video_duration_seconds = float(context.video_duration_seconds or 0.0)
-
         records = self._load_chapters(context, chapters_step)
         if not records:
             raise ValueError(
                 f"Step '{self.step_id}' did not find chapters in step '{chapters_step}'."
             )
-
-        self._summary_tokens_per_chapter = self._compute_summary_token_limit(len(records))
-
-        if self._video_duration_seconds <= 0.0:
-            self._video_duration_seconds = max((rec.end for rec in records), default=0.0)
 
         if segment_count <= 0:
             raise ValueError("segment_count must be positive")
@@ -105,8 +96,6 @@ class SegmentedChapterContextEnrichmentStep(ChapterContextEnrichmentStep):
 
         (
             enriched_data,
-            global_summary,
-            summary_sections,
             object_results,
         ) = asyncio.run(
             self._process_segments(
@@ -151,15 +140,8 @@ class SegmentedChapterContextEnrichmentStep(ChapterContextEnrichmentStep):
                 }
             )
 
-        timeline_summary = self._inject_timeline_summary(
-            global_summary or "No summary captured yet.",
-            self._video_duration_seconds,
-        )
-
         produced_payload = {
             "chapters": produced_chapters,
-            "global_summary": timeline_summary,
-            "global_summary_sections": summary_sections,
         }
         if object_payload:
             produced_payload.update(object_payload)
@@ -199,14 +181,14 @@ class SegmentedChapterContextEnrichmentStep(ChapterContextEnrichmentStep):
         boundary_window: int,
         llm_request_options: Dict[str, Any],
         object_config: Optional[ObjectEnrichmentConfig],
-    ) -> Tuple[List[EnrichedChapterData], str, List[str], Optional[ObjectRosterResults]]:
+    ) -> Tuple[List[EnrichedChapterData], Optional[ObjectRosterResults]]:
         segment_results = await self._run_segment_enrichment(
             segments,
             context_window=context_window,
             llm_request_options=llm_request_options,
         )
 
-        final_data, summary_sections = await self._smooth_segment_boundaries(
+        final_data = await self._smooth_segment_boundaries(
             segment_results,
             context_window=context_window,
             boundary_window=boundary_window,
@@ -217,7 +199,7 @@ class SegmentedChapterContextEnrichmentStep(ChapterContextEnrichmentStep):
         if object_config:
             object_results = await self._run_object_roster(final_data, object_config)
 
-        return final_data, "\n\n".join(summary_sections).strip(), summary_sections, object_results
+        return final_data, object_results
 
     async def _run_segment_enrichment(
         self,
@@ -251,7 +233,6 @@ class SegmentedChapterContextEnrichmentStep(ChapterContextEnrichmentStep):
             len(batch.records),
         )
         history: List[ChapterCreationResponse] = []
-        summary_sections: List[str] = []
         enriched: List[EnrichedChapterData] = []
         options = dict(llm_request_options)
 
@@ -259,8 +240,6 @@ class SegmentedChapterContextEnrichmentStep(ChapterContextEnrichmentStep):
             messages = self._build_messages(
                 record,
                 previous_context=history[-context_window:] if context_window > 0 else [],
-                global_summary_so_far="\n\n".join(summary_sections) or "No summary captured yet.",
-                video_duration=self._video_duration_seconds,
             )
             logger.info(
                 "[{}] Segment {} chunk {} (local history={})",
@@ -271,21 +250,17 @@ class SegmentedChapterContextEnrichmentStep(ChapterContextEnrichmentStep):
             )
             raw = await llm_provider.chat_completion(
                 messages,
-                response_format=ContextEnrichmentResponse,
+                response_format=ChapterCreationResponse,
                 **options,
             )
             response = self._coerce_response(raw)
-            summary_update = response.global_summary_update.strip()
             enriched.append(
                 EnrichedChapterData(
                     record=record,
-                    chapter=response.chapter,
-                    summary_update=summary_update,
+                    chapter=response,
                 )
             )
-            history.append(response.chapter)
-            if summary_update:
-                summary_sections.append(summary_update)
+            history.append(response)
 
         return SegmentResult(segment_index=batch.segment_index, chapters=enriched)
 
@@ -296,14 +271,11 @@ class SegmentedChapterContextEnrichmentStep(ChapterContextEnrichmentStep):
         context_window: int,
         boundary_window: int,
         llm_request_options: Dict[str, Any],
-    ) -> Tuple[List[EnrichedChapterData], List[str]]:
+    ) -> List[EnrichedChapterData]:
         if boundary_window <= 0 or context_window <= 0 or len(segment_results) <= 1:
-            flattened = self._flatten_segments(segment_results)
-            summary_sections = [data.summary_update for data in flattened if data.summary_update]
-            return flattened, summary_sections
+            return self._flatten_segments(segment_results)
 
         history: List[ChapterCreationResponse] = []
-        summary_sections: List[str] = []
         options = dict(llm_request_options)
 
         for result in segment_results:
@@ -313,8 +285,6 @@ class SegmentedChapterContextEnrichmentStep(ChapterContextEnrichmentStep):
                     messages = self._build_messages(
                         data.record,
                         previous_context=history[-context_window:] if context_window > 0 else [],
-                        global_summary_so_far="\n\n".join(summary_sections) or "No summary captured yet.",
-                        video_duration=self._video_duration_seconds,
                     )
                     logger.info(
                         "[{}] Boundary smoothing chunk {} (segment={}, localslot={}, context={})",
@@ -326,19 +296,14 @@ class SegmentedChapterContextEnrichmentStep(ChapterContextEnrichmentStep):
                     )
                     raw = await llm_provider.chat_completion(
                         messages,
-                        response_format=ContextEnrichmentResponse,
+                        response_format=ChapterCreationResponse,
                         **options,
                     )
-                    response = self._coerce_response(raw)
-                    data.chapter = response.chapter
-                    data.summary_update = response.global_summary_update.strip()
+                    data.chapter = self._coerce_response(raw)
 
                 history.append(data.chapter)
-                if data.summary_update:
-                    summary_sections.append(data.summary_update)
 
-        flattened = self._flatten_segments(segment_results)
-        return flattened, summary_sections
+        return self._flatten_segments(segment_results)
 
     @staticmethod
     def _flatten_segments(segment_results: Sequence[SegmentResult]) -> List[EnrichedChapterData]:

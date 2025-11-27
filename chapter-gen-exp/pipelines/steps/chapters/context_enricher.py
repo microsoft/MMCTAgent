@@ -3,13 +3,11 @@ from __future__ import annotations
 
 import asyncio
 import json
-import math
-import os
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 from loguru import logger
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from providers.factory import provider_factory
 
@@ -25,7 +23,6 @@ from ..registry import register_step
 
 llm_provider = provider_factory.create_llm_provider()
 PARALLEL_ENRICHMENT_ENABLED = True
-MAX_GLOBAL_SUMMARY_TOKENS = int(os.getenv("CONTEXT_ENRICHER_MAX_SUMMARY_TOKENS", "8000"))
 
 
 @dataclass
@@ -43,19 +40,6 @@ class ChapterRecord:
     @property
     def duration(self) -> float:
         return max(0.0, self.end - self.start)
-
-
-class ContextEnrichmentResponse(BaseModel):
-    """Structured response containing the enriched chapter plus a global summary delta."""
-
-    chapter: ChapterCreationResponse = Field(
-        ...,
-        description="Fully enriched chapter payload",
-    )
-    global_summary_update: str = Field(
-        ...,
-        description="Narrative delta summarizing newly discovered information to append to the global story",
-    )
 
 
 @dataclass
@@ -81,18 +65,12 @@ class ChapterContextEnrichmentStep(PipelineStep):
 
         context_window = int(self.params.get("context_window", 3))
         llm_request_options: Dict[str, Any] = dict(self.params.get("llm_request_options", {}) or {})
-        self._video_duration_seconds = float(context.video_duration_seconds or 0.0)
 
         records = self._load_chapters(context, chapters_step)
         if not records:
             raise ValueError(
                 f"Step '{self.step_id}' did not find chapters in step '{chapters_step}'."
             )
-
-        self._summary_tokens_per_chapter = self._compute_summary_token_limit(len(records))
-
-        if self._video_duration_seconds <= 0.0:
-            self._video_duration_seconds = max((rec.end for rec in records), default=0.0)
 
         logger.info(
             "[{}] Enriching {} chapters with context window {}",
@@ -119,8 +97,6 @@ class ChapterContextEnrichmentStep(PipelineStep):
 
         (
             chapters,
-            global_summary,
-            summary_sections,
             object_results,
         ) = asyncio.run(
             self._enrich_with_parallel_tasks(
@@ -162,15 +138,8 @@ class ChapterContextEnrichmentStep(PipelineStep):
                 }
             )
 
-        timeline_summary = self._inject_timeline_summary(
-            global_summary or "No summary captured yet.",
-            self._video_duration_seconds,
-        )
-
         produced_payload = {
             "chapters": produced_chapters,
-            "global_summary": timeline_summary,
-            "global_summary_sections": summary_sections,
         }
         if object_payload:
             produced_payload.update(object_payload)
@@ -231,19 +200,16 @@ class ChapterContextEnrichmentStep(PipelineStep):
         llm_request_options: Dict[str, Any],
         object_config: Optional[ObjectEnrichmentConfig],
         parallel: bool,
-    ) -> Tuple[List[ChapterCreationResponse], str, List[str], Optional[ObjectRosterResults]]:
-        async def chapter_task() -> Tuple[List[ChapterCreationResponse], str, List[str]]:
+    ) -> Tuple[List[ChapterCreationResponse], Optional[ObjectRosterResults]]:
+        async def chapter_task() -> List[ChapterCreationResponse]:
             history: List[ChapterCreationResponse] = []
             enriched: List[ChapterCreationResponse] = []
-            summary_sections: List[str] = []
             options = dict(llm_request_options)
 
             for record in records:
                 messages = self._build_messages(
                     record,
                     previous_context=history[-context_window:] if context_window > 0 else [],
-                    global_summary_so_far="\n\n".join(summary_sections) or "No summary captured yet.",
-                    video_duration=self._video_duration_seconds,
                 )
                 logger.info(
                     "[{}] Enriching chunk {} with {} prior chapters",
@@ -253,17 +219,14 @@ class ChapterContextEnrichmentStep(PipelineStep):
                 )
                 raw = await llm_provider.chat_completion(
                     messages,
-                    response_format=ContextEnrichmentResponse,
+                    response_format=ChapterCreationResponse,
                     **options,
                 )
                 response = self._coerce_response(raw)
-                enriched.append(response.chapter)
-                history.append(response.chapter)
-                if response.global_summary_update:
-                    summary_sections.append(response.global_summary_update.strip())
+                enriched.append(response)
+                history.append(response)
 
-            global_summary_text = "\n\n".join(summary_sections).strip()
-            return enriched, global_summary_text, summary_sections
+            return enriched
 
         async def object_task() -> Optional[ObjectRosterResults]:
             if not object_config:
@@ -320,8 +283,7 @@ class ChapterContextEnrichmentStep(PipelineStep):
             else:
                 object_results = None
 
-        chapters, global_summary, summary_sections = chapters_data
-        return chapters, global_summary, summary_sections, object_results
+        return chapters_data, object_results
 
     def _serialize_object_results(self, results: ObjectRosterResults) -> Dict[str, Any]:
         return {
@@ -330,22 +292,11 @@ class ChapterContextEnrichmentStep(PipelineStep):
             "object_stats": results.stats,
         }
 
-    def _compute_summary_token_limit(self, chapter_count: int) -> int:
-        """Divide the global summary token budget equally across all chapters."""
-
-        if chapter_count <= 0:
-            return MAX_GLOBAL_SUMMARY_TOKENS
-
-        per_chapter = MAX_GLOBAL_SUMMARY_TOKENS // chapter_count
-        return max(1, per_chapter)
-
     def _build_messages(
         self,
         record: ChapterRecord,
         *,
         previous_context: List[ChapterCreationResponse],
-        global_summary_so_far: str,
-        video_duration: float,
     ) -> List[Dict[str, Any]]:
         context_lines: List[str] = []
         for idx, chapter in enumerate(previous_context, start=1):
@@ -353,9 +304,6 @@ class ChapterContextEnrichmentStep(PipelineStep):
                 f"Context {idx}: summary='{chapter.detailed_summary}' | actions='{chapter.action_taken or 'None'}'"
             )
         context_block = "\n".join(context_lines) or "No prior chapters available."
-
-        timeline_summary = self._inject_timeline_summary(global_summary_so_far, video_duration)
-        token_limit = getattr(self, "_summary_tokens_per_chapter", MAX_GLOBAL_SUMMARY_TOKENS)
 
         user_prompt = (
             f"Chunk Index: {record.chunk_index}\n"
@@ -370,14 +318,11 @@ class ChapterContextEnrichmentStep(PipelineStep):
             f"{record.transcript or 'No transcript text.'}\n\n"
             "Relevant Prior Chapters (oldest first within the window):\n"
             f"{context_block}\n\n"
-            "Video Summary So Far (timeline annotated):\n"
-            f"{timeline_summary}\n\n"
             "Instructions:\n"
-            "- Produce a ContextEnrichmentResponse containing (a) a fully updated ChapterCreationResponse and (b) a succinct global_summary_update paragraph that captures any new storyline, procedural steps, materials, or outcomes introduced in this chunk.\n"
+            "- Produce a ChapterCreationResponse payload that reflects any new insights from the transcript and limited context.\n"
             "- Maintain factual grounding; do not invent events that contradict the current transcript.\n"
             "- If context does not add value, keep the summary focused but explain continuity if possible.\n"
-            "- For procedural videos, enumerate steps, tools, measurements, and results. For stories, include key characters, motivations, and plot progress.\n"
-            f"- Write global_summary_update as 1-2 flowing sentences (max ~{token_limit} tokens) that extend the cumulative narrative, referencing how this chunk advances the story without restating prior details or using bullet points."
+            "- For procedural videos, enumerate steps, tools, measurements, and results. For stories, include key characters, motivations, and plot progress."
         )
 
         return [
@@ -391,26 +336,26 @@ class ChapterContextEnrichmentStep(PipelineStep):
             {"role": "user", "content": user_prompt},
         ]
 
-    def _coerce_response(self, payload: Any) -> ContextEnrichmentResponse:
+    def _coerce_response(self, payload: Any) -> ChapterCreationResponse:
         content: Any = payload
         if isinstance(payload, dict) and "content" in payload:
             content = payload["content"]
 
-        if isinstance(content, ContextEnrichmentResponse):
+        if isinstance(content, ChapterCreationResponse):
             return content
 
         if isinstance(content, BaseModel):
-            return ContextEnrichmentResponse.model_validate(content.model_dump())
+            return ChapterCreationResponse.model_validate(content.model_dump())
 
         if isinstance(content, dict):
-            return ContextEnrichmentResponse.model_validate(content)
+            return ChapterCreationResponse.model_validate(content)
 
         if isinstance(content, str):
             try:
                 parsed = json.loads(content)
             except json.JSONDecodeError as err:
                 raise ValueError("LLM provider returned non-JSON string content") from err
-            return ContextEnrichmentResponse.model_validate(parsed)
+            return ChapterCreationResponse.model_validate(parsed)
 
         raise TypeError(f"Unsupported enrichment response type: {type(payload)!r}")
 
@@ -422,38 +367,3 @@ class ChapterContextEnrichmentStep(PipelineStep):
         secs = int(seconds % 60)
         millis = int((seconds - int(seconds)) * 1000)
         return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
-
-    def _inject_timeline_summary(self, summary: str, video_duration: float) -> str:
-        text = summary.strip()
-        if not text or text.lower() == "no summary captured yet.":
-            return summary
-
-        duration = max(0.0, video_duration)
-        base_segments = 5
-        if duration > 0:
-            base_segments = int(duration // 600) + 5
-        num_segments = max(5, min(8, base_segments))
-
-        words = text.split()
-        if not words:
-            return summary
-
-        chunk_size = max(1, math.ceil(len(words) / num_segments))
-        segments: List[str] = []
-        for idx in range(num_segments):
-            start_word = idx * chunk_size
-            if start_word >= len(words):
-                break
-            end_word = min(len(words), start_word + chunk_size)
-            sub_text = " ".join(words[start_word:end_word]).strip()
-            if duration > 0:
-                start_time = (duration / num_segments) * idx
-                end_time = (duration / num_segments) * (idx + 1)
-            else:
-                start_time = float(idx * 60)
-                end_time = float((idx + 1) * 60)
-            segments.append(
-                f"{self._format_seconds(start_time)} - {self._format_seconds(end_time)}: {sub_text}"
-            )
-
-        return "\n".join(segments)
