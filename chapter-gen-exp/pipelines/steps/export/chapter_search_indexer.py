@@ -41,16 +41,8 @@ class ChapterSearchIndexExporter(PipelineStep):
             )
 
         video_id = self._resolve_video_id(context)
-        hash_video_id = str(
-            self.params.get("hash_video_id")
-            or context.metadata.get("hash_video_id")
-            or video_id
-        )
-        parent_id = str(
-            self.params.get("parent_id")
-            or context.metadata.get("parent_id")
-            or video_id
-        )
+        hash_video_id = video_id
+        parent_id = video_id
         parent_duration = self._resolve_duration(
             key="parent_duration_seconds",
             context=context,
@@ -363,7 +355,7 @@ class ChapterSearchIndexExporter(PipelineStep):
             "topic_of_video": self._resolve_string(
                 context,
                 "topic_of_video",
-                fallback=global_summary or "None",
+                fallback="None",
             ),
             "category": self._resolve_string(context, "category", fallback="None"),
             "sub_category": self._resolve_string(context, "sub_category", fallback="None"),
@@ -418,14 +410,53 @@ class ChapterSearchIndexExporter(PipelineStep):
         return f"chapters-{self._slugify(video_id)}"
 
     def _extract_transcript(self, entry: Dict[str, Any]) -> str:
+        segments = entry.get("transcript_segments") or []
+        if segments:
+            formatted = self._format_timestamped_transcript(segments)
+            if formatted:
+                return formatted
+
         transcript = entry.get("transcript")
         if transcript:
             return str(transcript)
-        segments = entry.get("transcript_segments") or []
-        if segments:
-            combined = " ".join(seg.get("text", "") for seg in segments)
-            return combined.strip() or ""
+
         return ""
+
+    @staticmethod
+    def _format_timestamped_transcript(segments: List[Dict[str, Any]]) -> str:
+        lines: List[str] = []
+        for seg in segments:
+            text = (seg.get("text") or "").strip()
+            if not text:
+                continue
+            start = ChapterSearchIndexExporter._format_timestamp(seg.get("start", 0.0))
+            end = ChapterSearchIndexExporter._format_timestamp(seg.get("end", seg.get("start", 0.0)))
+            lines.append(f"[{start} - {end}] {text}")
+        return "\n".join(lines)
+
+    @staticmethod
+    def _format_timestamp(value: Any) -> str:
+        try:
+            total_seconds = max(0.0, float(value))
+        except (TypeError, ValueError):
+            total_seconds = 0.0
+
+        hours = int(total_seconds // 3600)
+        minutes = int((total_seconds % 3600) // 60)
+        seconds = int(total_seconds % 60)
+        millis = int(round((total_seconds - int(total_seconds)) * 1000))
+
+        if millis == 1000:
+            millis = 0
+            seconds += 1
+            if seconds == 60:
+                seconds = 0
+                minutes += 1
+                if minutes == 60:
+                    minutes = 0
+                    hours += 1
+
+        return f"{hours:02d}:{minutes:02d}:{seconds:02d}.{millis:03d}"
 
     def _serialize_object_collection(self, chapter: ChapterCreationResponse) -> str:
         if not chapter.object_collection:
