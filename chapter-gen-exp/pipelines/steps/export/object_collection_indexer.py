@@ -5,7 +5,7 @@ import asyncio
 import json
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from loguru import logger
 
@@ -28,6 +28,14 @@ class ObjectCollectionSearchIndexExporter(PipelineStep):
             raise ValueError("'source_step' parameter is required")
 
         payload = context.data_store.get(source_step, {}) or {}
+        summary_step = self.params.get("summary_step")
+        if not summary_step:
+            raise ValueError("'summary_step' parameter is required and must point to the timeline summary output")
+        summary_payload = context.data_store.get(summary_step, {}) or {}
+        if not summary_payload:
+            raise ValueError(
+                f"Step '{self.step_id}' expected summary payload from '{summary_step}', but none was found in the data store."
+            )
         collection_key = self.params.get("collection_key", "object_collection")
         raw_collection = payload.get(collection_key)
         object_collection = raw_collection or []
@@ -39,13 +47,9 @@ class ObjectCollectionSearchIndexExporter(PipelineStep):
                 collection_key,
             )
 
-        video_summary = self._resolve_summary(payload, context)
+        video_summary = self._resolve_summary(summary_payload, summary_step)
         video_id = self._resolve_video_id(context)
-        hash_video_id = str(
-            self.params.get("hash_video_id")
-            or context.metadata.get("hash_video_id")
-            or video_id
-        )
+        hash_video_id = video_id
         youtube_url = self.params.get("youtube_url") or context.metadata.get("youtube_url") or ""
         index_name = self._resolve_index_name(video_id, context.metadata)
         video_duration = self._resolve_duration(context)
@@ -185,19 +189,19 @@ class ObjectCollectionSearchIndexExporter(PipelineStep):
             safe_normalized = json.loads(json.dumps(normalized, default=str))
             return json.dumps(safe_normalized, ensure_ascii=False)
 
-    def _resolve_summary(self, payload: Dict[str, Any], context: StepContext) -> str:
-        if self.params.get("video_summary") is not None:
-            return str(self.params["video_summary"])
+    def _resolve_summary(
+        self,
+        summary_payload: Dict[str, Any],
+        summary_step: str,
+    ) -> str:
         summary_key = self.params.get("summary_key", "video_summary")
-        if payload.get(summary_key):
-            return str(payload[summary_key])
-        if payload.get("global_summary"):
-            return str(payload["global_summary"])
-        if context.metadata.get("video_summary"):
-            return str(context.metadata["video_summary"])
-        if context.metadata.get("global_summary"):
-            return str(context.metadata["global_summary"])
-        return ""
+        if summary_payload.get(summary_key):
+            return str(summary_payload[summary_key])
+        if summary_payload.get("global_summary"):
+            return str(summary_payload["global_summary"])
+        raise ValueError(
+            f"Step '{summary_step}' did not provide '{summary_key}' or 'global_summary'; unable to export object collection summary."
+        )
 
     def _resolve_video_id(self, context: StepContext) -> str:
         if self.params.get("video_id"):
