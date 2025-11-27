@@ -290,6 +290,7 @@ class SceneLLMChapterGenerationStep(PipelineStep):
             "- Return valid JSON matching ChapterCreationResponse fields.\n"
             "- Translate any non-English content to English.\n"
             "- Write detailed_summary directly about the scene (no phrases like 'In this video' or 'In this segment').\n"
+            "- Ensure detailed_summary integrates every observable detail from the frames, even if not stated in the transcript.\n"
             f"{object_instruction}"
         )
 

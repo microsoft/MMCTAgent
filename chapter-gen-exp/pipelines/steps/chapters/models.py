@@ -85,7 +85,7 @@ class ChapterCreationResponse(BaseModel):
 
     detailed_summary: str = Field(
         ...,
-        description="Comprehensive summary of the video content including frame analysis"
+        description="Comprehensive summary of the video content according to the transcript and frame analysis"
     )
     action_taken: Optional[str] = Field(
         None,
@@ -113,27 +113,28 @@ class ChapterCreationResponse(BaseModel):
             str: Natural language representation of the chapter
         """
         # Start with the detailed summary
-        text = f"{self.detailed_summary} "
+        # text = f"{self.detailed_summary} "
 
-        # Add actions if available
-        if self.action_taken and self.action_taken.lower() != "none":
-            text += f"The following actions are demonstrated in the video: {self.action_taken}. "
+        # # Add actions if available
+        # if self.action_taken and self.action_taken.lower() != "none":
+        #     text += f"The following actions are demonstrated in the video: {self.action_taken}. "
 
-        # Add text from scene if available
-        if self.text_from_scene and self.text_from_scene.lower() != "none":
-            text += f"Text visible in the video includes: {self.text_from_scene}. "
+        # # Add text from scene if available
+        # if self.text_from_scene and self.text_from_scene.lower() != "none":
+        #     text += f"Text visible in the video includes: {self.text_from_scene}. "
 
         # Add object collection information if available
-        if self.object_collection:
-            text += "Objects in the video: "
-            object_descriptions = []
-            for object_info in self.object_collection:
-                object_desc = f"{object_info.name} (first seen at {object_info.first_seen}s)"
-                object_descriptions.append(object_desc)
-            text += ", ".join(object_descriptions) + ". "
+        # if self.object_collection:
+        #     text += "Objects in the video: "
+        #     object_descriptions = []
+        #     for object_info in self.object_collection:
+        #         object_desc = f"{object_info.name} (first seen at {object_info.first_seen}s)"
+        #         object_descriptions.append(object_desc)
+        #     text += ", ".join(object_descriptions) + ". "
         
         # Add transcript if provided
-        if transcript:
-            text += f"The complete transcript of the video is as follows: {transcript}"
+        # if transcript:
+        #     text += f"The complete transcript of the video is as follows: {transcript}"
         
-        return text
+        # return text
+        return self.detailed_summary
