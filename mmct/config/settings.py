@@ -2,9 +2,15 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
 from typing import Optional
 from dotenv import load_dotenv, find_dotenv
+import os
 
 # Load environment variables once at module level
-load_dotenv(find_dotenv())
+# Try current working directory first, then search upward
+env_file = os.path.join(os.getcwd(), '.env')
+if os.path.exists(env_file):
+    load_dotenv(env_file)
+else:
+    load_dotenv(find_dotenv())
 
 
 class LLMConfig(BaseSettings):
@@ -22,9 +28,6 @@ class LLMConfig(BaseSettings):
     llm_timeout: int = Field(default=200)
     llm_max_retries: int = Field(default=2)
     llm_temperature: float = Field(default=0.0)
-
-    # OpenAI based vars
-    open
 
     model_config = SettingsConfigDict(
         env_file=find_dotenv(),
