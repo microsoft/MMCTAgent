@@ -1,8 +1,10 @@
 from mcp_server.server import mcp
+from mcp_server.tools.nptel.video_agent_tool import video_agent_tool  # noqa: F401
+from mcp_server.tools.nptel.get_relevant_frames_tool import get_relevant_frames_tool  # noqa: F401
 
 from loguru import logger
 # from mcp_server.tools.query_federator_tool import query_federator_tool
-from mcp_server.tools.video_agent_tool import video_agent_tool
+# from mcp_server.tools.video_agent_tool import video_agent_tool
 # from mcp_server.tools.image_agent_tool import image_agent_tool
 # from mcp_server.tools.video_ingestion_tool import video_ingestion_tool
 # from mcp_server.tools.kb_tool import kb_tool
