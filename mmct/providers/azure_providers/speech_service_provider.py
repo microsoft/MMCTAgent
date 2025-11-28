@@ -1,52 +1,55 @@
 import asyncio
 import time
 from loguru import logger
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Union, Optional
 from mmct.utils.error_handler import ProviderException, ConfigurationException
 from mmct.providers.base import BaseTranscriptionProvider
-from mmct.providers.credentials import AzureCredentials
+from azure.core.credentials import AzureKeyCredential
+from azure.core.credentials_async import AsyncTokenCredential
 import azure.cognitiveservices.speech as speechsdk
 
 
 class AzureSpeechServiceProvider(BaseTranscriptionProvider):
     """Azure Speech Service provider for conversation transcription using Azure Speech SDK."""
 
-    def __init__(self, config: Dict[str, Any]):
-        self.config = config
-        self.credential = AzureCredentials.get_credentials()
-        self.speech_config = None  # Will be initialized per-request with token
+    def __init__(
+        self,
+        speech_service_region: str,
+        speech_service_resource_id: str,
+        credentials: Optional[Union[AzureKeyCredential, AsyncTokenCredential]] = None,
+        speech_config: Optional[dict] = None,
+        api_key: Optional[str] = None
+
+    ):
+        if not speech_service_region:
+            raise ConfigurationException("Speech service region is required!")
+        
+        if not speech_service_resource_id:
+            raise ConfigurationException("Speech service resource Id is required!")
+        
+        # Validate that exactly one of credentials or api_key is provided
+        if credentials is None and api_key is None:
+            raise ConfigurationException("Either credentials or api_key must be provided!")
+
+        if credentials is not None and api_key is not None:
+            raise ConfigurationException("Only one of credentials or api_key should be provided, not both!")
+        
+        self.credential =credentials
+        self.speech_config = speech_config  # Will be initialized per-request with token
+        self.speech_service_region = speech_service_region
+        self.speech_service_resource_id = speech_service_resource_id
+        self.api_key = api_key
 
     def _get_speech_config_with_token(self, language: str = None) -> speechsdk.SpeechConfig:
         """Create Speech SDK configuration with fresh token."""
         try:
-            region = self.config.get("speech_service_region")
-            resource_id = self.config.get("speech_service_resource_id")
-            use_managed_identity = self.config.get("speech_use_managed_identity", True)
-
-            if not region:
-                raise ConfigurationException("Azure Speech Service region is required")
-
-            if use_managed_identity:
-                if not resource_id:
-                    raise ConfigurationException("Azure Speech Service resource_id is required for managed identity")
-
+            if self.credentials is not None:
                 # Get token for managed identity
                 token = self.credential.get_token("https://cognitiveservices.azure.com/.default")
-                auth_token = f"aad#{resource_id}#{token.token}"
-
-                speech_config = speechsdk.SpeechConfig(
-                    region=region,
-                    auth_token=auth_token
-                )
+                auth_token = f"aad#{self.speech_service_resource_id}#{token.token}"
+                speech_config = speechsdk.SpeechConfig(region=self.speech_service_region, auth_token=auth_token)
             else:
-                api_key = self.config.get("speech_service_key")
-                if not api_key:
-                    raise ConfigurationException("Azure Speech Service API key is required when managed identity is disabled")
-
-                speech_config = speechsdk.SpeechConfig(
-                    region=region,
-                    subscription=api_key
-                )
+                speech_config = speechsdk.SpeechConfig(region=self.speech_service_region, subscription=self.api_key)
 
             # Set language if provided
             if language:
@@ -76,7 +79,9 @@ class AzureSpeechServiceProvider(BaseTranscriptionProvider):
             audio_config = speechsdk.audio.AudioConfig(filename=audio_path)
 
             auto_detect_source_language_config = (
-                speechsdk.languageconfig.AutoDetectSourceLanguageConfig(languages=candidate_languages)
+                speechsdk.languageconfig.AutoDetectSourceLanguageConfig(
+                    languages=candidate_languages
+                )
             )
 
             speech_recognizer = speechsdk.SpeechRecognizer(
@@ -96,7 +101,9 @@ class AzureSpeechServiceProvider(BaseTranscriptionProvider):
             logger.error(f"Language detection failed: {e}")
             raise ProviderException(f"Language detection failed: {e}")
 
-    async def transcribe_file(self, audio_path: str, language: str = None, phrase_list: List[str] = None, **kwargs) -> List[Dict[str, Any]]:
+    async def transcribe_file(
+        self, audio_path: str, language: str = None, phrase_list: List[str] = None, **kwargs
+    ) -> List[Dict[str, Any]]:
         """
         Transcribe audio file using Azure Speech Service with conversation transcription.
 
@@ -122,8 +129,7 @@ class AzureSpeechServiceProvider(BaseTranscriptionProvider):
 
             # Create conversation transcriber
             transcriber = speechsdk.transcription.ConversationTranscriber(
-                speech_config=speech_config,
-                audio_config=audio_config
+                speech_config=speech_config, audio_config=audio_config
             )
 
             # Add phrase list if provided (for better recognition)
@@ -166,7 +172,9 @@ class AzureSpeechServiceProvider(BaseTranscriptionProvider):
                         "end_time": time.strftime("%H:%M:%S", time.gmtime(end_s)),
                         "speaker_id": evt.result.speaker_id,
                     }
-                    logger.info(f"Transcribed: {rec['text']} [{rec['start_time']}–{rec['end_time']}]")
+                    logger.info(
+                        f"Transcribed: {rec['text']} [{rec['start_time']}–{rec['end_time']}]"
+                    )
                     result.append(rec)
                 elif evt.result.reason == speechsdk.ResultReason.NoMatch:
                     logger.warning(f"NoMatch: {evt.result.no_match_details}")
@@ -201,12 +209,22 @@ class AzureSpeechServiceProvider(BaseTranscriptionProvider):
 
     async def transcribe(self, audio_data: bytes, language: str = None, **kwargs) -> str:
         """Transcribe audio bytes to text (not implemented for Speech SDK)."""
-        raise NotImplementedError("Speech SDK only supports file-based transcription. Use transcribe_file() instead.")
-
-    def get_credential(self):
-        """Get Azure credentials for token-based auth."""
-        return self.credential
+        raise NotImplementedError(
+            "Speech SDK only supports file-based transcription. Use transcribe_file() instead."
+        )
 
     async def close(self):
         """Close the speech service client and cleanup resources."""
-        logger.info("Azure Speech Service provider closed")
+        try:
+            # Close credential if it has a close method
+            if self.credential is not None and hasattr(self.credential, 'close'):
+                if asyncio.iscoroutinefunction(self.credential.close):
+                    await self.credential.close()
+                else:
+                    self.credential.close()
+                self.credential = None
+
+            logger.info("Azure Speech Service provider closed")
+        except Exception as e:
+            logger.error(f"Error closing Azure Speech Service provider: {e}")
+            raise

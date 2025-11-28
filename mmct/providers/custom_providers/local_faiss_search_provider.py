@@ -2,7 +2,7 @@ import os
 import json
 import threading
 import uuid
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 import asyncio
 import operator
 
@@ -18,15 +18,14 @@ class LocalFaissSearchProvider(BaseSearchProvider):
     """Local FAISS-backed search provider.
 
     This provider:
-    - Stores FAISS indexes on-disk under `index_path` (config) or mmct_faiss_indices
+    - Stores FAISS indexes on-disk under `index_path` or mmct_faiss_indices
     - Persists metadata JSON per index mapping document IDs to internal numeric IDs
     - Exposes async interface by running blocking FAISS calls in background threads
     - Supports both regular embeddings and CLIP embeddings
     """
 
-    def __init__(self, config: Dict[str, Any]):
-        self.config = config or {}
-        self.base_path = self.config.get("index_path", "mmct_faiss_indices")
+    def __init__(self, index_path:Optional[str] = "mmct_faiss_indices"):
+        self.base_path = index_path
         os.makedirs(self.base_path, exist_ok=True)
 
         # Runtime caches for indexes, metadata, and thread locks

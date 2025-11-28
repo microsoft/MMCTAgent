@@ -74,10 +74,6 @@ class QueryFrameTool:
             parent_id = video_id[:64]
 
         save_frames_locally = False # variable to debug the frames
-        index_name = self.vectordb_keyframes.config.get("index_name")
-        if not index_name:
-            raise ValueError("Keyframe index_name is missing in vectordb configuration.")
-
         # If there is a FAISS index directory in examples/ (e.g. from exported indices), prefer it
         provider_config = None
         alt_faiss_dir = os.path.join(os.getcwd(), "examples", "mmct_faiss_indices")

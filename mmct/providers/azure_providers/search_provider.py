@@ -1,10 +1,12 @@
-
 from mmct.utils.error_handler import handle_exceptions, convert_exceptions
 from mmct.utils.error_handler import ProviderException, ConfigurationException
 from loguru import logger
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Union
 from datetime import datetime
+from azure.core.credentials import AzureKeyCredential
+from azure.core.credentials_async import AsyncTokenCredential
 from azure.search.documents.aio import SearchClient
+from azure.core.credentials import AzureKeyCredential
 from azure.search.documents.indexes.aio import SearchIndexClient
 from azure.search.documents.models import VectorizedQuery
 from azure.search.documents.indexes.models import (
@@ -20,25 +22,43 @@ from azure.search.documents.indexes.models import (
     VectorSearch,
     HnswAlgorithmConfiguration,
     ExhaustiveKnnAlgorithmConfiguration,
-    VectorSearchProfile
+    VectorSearchProfile,
 )
 from mmct.providers.base import BaseSearchProvider
 from mmct.providers.credentials import AzureCredentials
 
+
 class AzureSearchProvider(BaseSearchProvider):
     """Azure AI Search provider implementation."""
 
-    def __init__(self, config: Dict[str, Any]):
-        self.config = config
-        self.credential = AzureCredentials.get_async_credentials()
+    def __init__(
+        self,
+        index_name: str,
+        endpoint: str,
+        credentials: Optional[Union[AzureKeyCredential, AsyncTokenCredential]] = None,
+        api_key: Optional[str] = None,
+    ):
+        if not endpoint:
+                raise ConfigurationException("Azure AI Search endpoint is required!")
+        
+        if not index_name:
+            raise ConfigurationException("index name is required for indexing!")
+        
+        # Validate that exactly one of credentials or api_key is provided
+        if credentials is None and api_key is None:
+            raise ConfigurationException("Either credentials or api_key must be provided!")
+
+        if credentials is not None and api_key is not None:
+            raise ConfigurationException("Only one of credentials or api_key should be provided, not both!")
+
+        self.credentials = credentials
+        self.index_name = index_name
+        self.endpoint = endpoint
         self.index_client = self._initialize_index_client()
-        # Get index name from config (required)
-        self.index_name = self.config.get("index_name")
-        if not self.index_name:
-            raise ConfigurationException("index_name is required in AzureSearchProvider config")
+       
         # Cache for search client
         self._search_client: Optional[SearchClient] = None
-    
+
     def _get_search_client(self) -> SearchClient:
         """
         Get or create the SearchClient for this provider's index.
@@ -50,28 +70,16 @@ class AzureSearchProvider(BaseSearchProvider):
             return self._search_client
 
         try:
-            endpoint = self.config.get("endpoint")
-            if not endpoint:
-                raise ConfigurationException("SEARCH_ENDPOINT environment variable not set")
-
-            use_managed_identity = self.config.get("use_managed_identity", True)
-
-            if use_managed_identity:
+            if self.credentials is not None:
                 self._search_client = SearchClient(
-                    endpoint=endpoint,
-                    index_name=self.index_name,
-                    credential=self.credential
+                    endpoint=self.endpoint, index_name=self.index_name, credential=self.credentials
                 )
             else:
-                api_key = self.config.get("api_key")
-                if not api_key:
-                    raise ConfigurationException("Azure AI Search API key is required when managed identity is disabled")
 
-                from azure.core.credentials import AzureKeyCredential
                 self._search_client = SearchClient(
-                    endpoint=endpoint,
+                    endpoint=self.endpoint,
                     index_name=self.index_name,
-                    credential=AzureKeyCredential(api_key)
+                    credential=AzureKeyCredential(self.api_key),
                 )
 
             return self._search_client
@@ -81,11 +89,7 @@ class AzureSearchProvider(BaseSearchProvider):
     def _initialize_index_client(self) -> SearchIndexClient:
         """Initialize Azure AI Search Index client for index management."""
         try:
-            endpoint = self.config.get("endpoint")
-            if not endpoint:
-                raise ConfigurationException("Azure AI Search endpoint is required")
-
-            return SearchIndexClient(endpoint=endpoint, credential=self.credential)
+            return SearchIndexClient(endpoint=self.endpoint, credential=self.credentials)
         except Exception as e:
             raise ProviderException(f"Failed to initialize Azure AI Search Index client: {e}")
 
@@ -118,7 +122,7 @@ class AzureSearchProvider(BaseSearchProvider):
                         sortable=extra.get("sortable", False),
                         hidden=not extra.get("stored", True),
                         vector_search_dimensions=dim,  # e.g. 1536 for text-embedding-ada-002
-                        vector_search_profile_name="embedding_profile"
+                        vector_search_profile_name="embedding_profile",
                     )
                 )
                 continue
@@ -148,30 +152,26 @@ class AzureSearchProvider(BaseSearchProvider):
                 searchable_fields_names.append(name)
                 fields.append(
                     SearchableField(
-                        **common_kwargs,
-                        analyzer_name="en.microsoft"  # or your preferred analyzer
+                        **common_kwargs, analyzer_name="en.microsoft"  # or your preferred analyzer
                     )
                 )
             else:
-                fields.append(
-                    SimpleField(**common_kwargs)
-                )
+                fields.append(SimpleField(**common_kwargs))
 
         # Configure semantic search
         important_fields = [
             SemanticField(field_name="chapter_transcript"),
             SemanticField(field_name="text_from_scene"),
             SemanticField(field_name="action_taken"),
-            SemanticField(field_name="detailed_summary")
+            SemanticField(field_name="detailed_summary"),
         ]
         semantic_config = SemanticSearch(
             configurations=[
                 SemanticConfiguration(
                     name="my-semantic-search-config",
                     prioritized_fields=SemanticPrioritizedFields(
-                        content_fields=important_fields,
-                        keywords_fields=important_fields
-                    )
+                        content_fields=important_fields, keywords_fields=important_fields
+                    ),
                 )
             ]
         )
@@ -181,30 +181,20 @@ class AzureSearchProvider(BaseSearchProvider):
             algorithms=[
                 HnswAlgorithmConfiguration(
                     name="hnsw_config",
-                    parameters={
-                        "m": 4,
-                        "efConstruction": 400,
-                        "efSearch": 500,
-                        "metric": "cosine"
-                    }
+                    parameters={"m": 4, "efConstruction": 400, "efSearch": 500, "metric": "cosine"},
                 ),
                 ExhaustiveKnnAlgorithmConfiguration(
-                    name="myExhaustiveKnn",
-                    parameters={
-                        "metric": "cosine"
-                    }
-                )
+                    name="myExhaustiveKnn", parameters={"metric": "cosine"}
+                ),
             ],
             profiles=[
                 VectorSearchProfile(
-                    name="embedding_profile",
-                    algorithm_configuration_name="hnsw_config"
+                    name="embedding_profile", algorithm_configuration_name="hnsw_config"
                 ),
                 VectorSearchProfile(
-                    name="myExhaustiveKnnProfile",
-                    algorithm_configuration_name="myExhaustiveKnn"
-                )
-            ]
+                    name="myExhaustiveKnnProfile", algorithm_configuration_name="myExhaustiveKnn"
+                ),
+            ],
         )
 
         # Create the index with all configurations
@@ -212,7 +202,7 @@ class AzureSearchProvider(BaseSearchProvider):
             name=self.index_name,
             fields=fields,
             semantic_search=semantic_config,
-            vector_search=vector_search
+            vector_search=vector_search,
         )
 
         return index
@@ -231,8 +221,15 @@ class AzureSearchProvider(BaseSearchProvider):
             # identifier
             SimpleField(name="id", type=SearchFieldDataType.String, key=True),
             # metadata fields
-            SearchableField(name="video_id", type=SearchFieldDataType.String, filterable=True, facetable=True),
-            SearchableField(name="keyframe_filename", type=SearchFieldDataType.String, filterable=True, facetable=True),
+            SearchableField(
+                name="video_id", type=SearchFieldDataType.String, filterable=True, facetable=True
+            ),
+            SearchableField(
+                name="keyframe_filename",
+                type=SearchFieldDataType.String,
+                filterable=True,
+                facetable=True,
+            ),
             # vector field for CLIP embeddings
             SearchField(
                 name="embeddings",
@@ -241,13 +238,35 @@ class AzureSearchProvider(BaseSearchProvider):
                 vector_search_dimensions=dim,
                 vector_search_profile_name="clip-profile",
             ),
-            SimpleField(name="created_at", type=SearchFieldDataType.DateTimeOffset, filterable=True, sortable=True),
-            SimpleField(name="motion_score", type=SearchFieldDataType.Double, filterable=True, sortable=True),
-            SimpleField(name="timestamp_seconds", type=SearchFieldDataType.Double, filterable=True, sortable=True),
+            SimpleField(
+                name="created_at",
+                type=SearchFieldDataType.DateTimeOffset,
+                filterable=True,
+                sortable=True,
+            ),
+            SimpleField(
+                name="motion_score", type=SearchFieldDataType.Double, filterable=True, sortable=True
+            ),
+            SimpleField(
+                name="timestamp_seconds",
+                type=SearchFieldDataType.Double,
+                filterable=True,
+                sortable=True,
+            ),
             SimpleField(name="blob_url", type=SearchFieldDataType.String),
             SimpleField(name="parent_id", type=SearchFieldDataType.String, filterable=True),
-            SimpleField(name="parent_duration", type=SearchFieldDataType.Double, filterable=True, sortable=True),
-            SimpleField(name="video_duration", type=SearchFieldDataType.Double, filterable=True, sortable=True),
+            SimpleField(
+                name="parent_duration",
+                type=SearchFieldDataType.Double,
+                filterable=True,
+                sortable=True,
+            ),
+            SimpleField(
+                name="video_duration",
+                type=SearchFieldDataType.Double,
+                filterable=True,
+                sortable=True,
+            ),
         ]
 
         vector_search = VectorSearch(
@@ -263,7 +282,9 @@ class AzureSearchProvider(BaseSearchProvider):
                 )
             ],
             profiles=[
-                VectorSearchProfile(name="clip-profile", algorithm_configuration_name="hnsw-algorithm")
+                VectorSearchProfile(
+                    name="clip-profile", algorithm_configuration_name="hnsw-algorithm"
+                )
             ],
         )
 
@@ -275,7 +296,7 @@ class AzureSearchProvider(BaseSearchProvider):
     async def search(self, query: str, **kwargs) -> List[Dict]:
         """
         Search documents using Azure AI Search.
-        
+
         Args:
             query: Search query string
             **kwargs: Additional search parameters including:
@@ -285,7 +306,7 @@ class AzureSearchProvider(BaseSearchProvider):
                 - query_type: Type of query (e.g., "semantic", "vector")
                 - vector_queries: Pre-built vector queries
                 - semantic_configuration_name: Name of semantic configuration
-                
+
         Returns:
             List of matching documents
         """
@@ -305,14 +326,16 @@ class AzureSearchProvider(BaseSearchProvider):
 
             # Handle semantic search configuration
             if query_type == "semantic":
-                semantic_configuration_name = kwargs.pop("semantic_configuration_name", "my-semantic-search-config")
+                semantic_configuration_name = kwargs.pop(
+                    "semantic_configuration_name", "my-semantic-search-config"
+                )
                 search_text = None
-                
+
             # Handle vector search configuration
             if query_type == "vector":
                 query_type = None
                 search_text = None
-           
+
             # Build vector queries if embedding provided
             if embedding and top and not vector_queries:
                 vector_query = VectorizedQuery(
@@ -322,7 +345,7 @@ class AzureSearchProvider(BaseSearchProvider):
 
             # Get appropriate client for the index
             client = self._get_search_client()
-            
+
             # Execute search
             results = await client.search(
                 search_text=search_text,
@@ -330,23 +353,23 @@ class AzureSearchProvider(BaseSearchProvider):
                 query_type=query_type,
                 vector_queries=vector_queries,
                 semantic_configuration_name=semantic_configuration_name,
-                **kwargs
+                **kwargs,
             )
-            
+
             return [dict(result) async for result in results]
         except Exception as e:
             logger.error(f"Azure AI Search failed: {e}")
             raise ProviderException(f"Azure AI Search failed: {e}")
-        
+
     @handle_exceptions(retries=3, exceptions=(Exception,))
     @convert_exceptions({Exception: ProviderException})
     async def index_document(self, document: Dict) -> bool:
         """
         Index a document in Azure AI Search.
-        
+
         Args:
             document: Document dictionary to index
-            
+
         Returns:
             bool: True if successful, False otherwise
         """
@@ -357,16 +380,16 @@ class AzureSearchProvider(BaseSearchProvider):
         except Exception as e:
             logger.error(f"Azure AI Search indexing failed: {e}")
             raise ProviderException(f"Azure AI Search indexing failed: {e}")
-    
+
     @handle_exceptions(retries=3, exceptions=(Exception,))
     @convert_exceptions({Exception: ProviderException})
     async def delete_document(self, doc_id: str) -> bool:
         """
         Delete a document from Azure AI Search.
-        
+
         Args:
             doc_id: ID of the document to delete
-            
+
         Returns:
             bool: True if successful, False otherwise
         """
@@ -402,7 +425,10 @@ class AzureSearchProvider(BaseSearchProvider):
                 elif index_schema == "chapter":
                     index_schema = self._create_video_chapter_index_schema(self.index_name)
                 elif index_schema == "object_collection":
-                    from mmct.providers.search_index_schema import create_object_collection_index_schema
+                    from mmct.providers.search_index_schema import (
+                        create_object_collection_index_schema,
+                    )
+
                     index_schema = create_object_collection_index_schema(self.index_name)
                 else:
                     raise ProviderException(f"Unknown index schema type: {self.index_schema}")
@@ -417,13 +443,16 @@ class AzureSearchProvider(BaseSearchProvider):
                     dim = index_schema.get("dim", 1536)
                     index_schema = self._create_video_chapter_index_schema(self.index_name, dim)
                 elif schema_type == "object_collection":
-                    from mmct.providers.search_index_schema import create_object_collection_index_schema
+                    from mmct.providers.search_index_schema import (
+                        create_object_collection_index_schema,
+                    )
+
                     index_schema = create_object_collection_index_schema(self.index_name)
                 else:
                     raise ProviderException(f"Unknown index schema type: {schema_type}")
-            
+
             # Otherwise assume it's already a SearchIndex object
-            
+
             await self.index_client.create_index(index_schema)
             logger.info(f"Successfully created index '{self.index_name}'")
             return True
@@ -458,7 +487,7 @@ class AzureSearchProvider(BaseSearchProvider):
                 "NotFound",
                 "does not exist",
                 "was not found",
-                "No index with the name"
+                "No index with the name",
             ]
             if any(pattern in error_str for pattern in not_found_patterns):
                 return False
@@ -503,7 +532,7 @@ class AzureSearchProvider(BaseSearchProvider):
         except Exception as e:
             logger.error(f"Azure AI Search bulk upload failed: {e}")
             raise ProviderException(f"Azure AI Search bulk upload failed: {e}")
-    
+
     async def _build_filter_query(self, filters: Dict[str, Any]) -> str:
         """
         Build filter query string from a dictionary of filters.
@@ -545,9 +574,7 @@ class AzureSearchProvider(BaseSearchProvider):
 
             # Search for document with the given hash_id
             results = await client.search(
-                search_text="*",
-                filter=f"hash_video_id eq '{hash_id}'",
-                top=1
+                search_text="*", filter=f"hash_video_id eq '{hash_id}'", top=1
             )
 
             # Check if any results were returned
@@ -565,10 +592,10 @@ class AzureSearchProvider(BaseSearchProvider):
             for index_name, client in self._client_cache.items():
                 logger.info(f"Closing Azure AI Search client for index '{index_name}'")
                 await client.close()
-            
+
             # Clear the cache
             self._client_cache.clear()
-            
+
             # Close index client
             if self.index_client:
                 logger.info("Closing Azure AI Search Index client")

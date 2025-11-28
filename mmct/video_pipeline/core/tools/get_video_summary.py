@@ -42,14 +42,6 @@ class GetVideoSummaryTool:
             List of dictionaries containing requested fields, including video_id for use in other tools
         """
 
-        # Construct the full index name
-        full_index_name = self.vectordb_object_registry.config.get("index_name")#f"object-collection-{index_name}"
-
-        # Get search endpoint from environment
-        search_endpoint = self.vectordb_object_registry.config.get("endpoint")#os.getenv("SEARCH_ENDPOINT")
-        if not search_endpoint:
-            raise ValueError("endpoint not provided in object registry vector database provider")
-
         # embedding the query
         embedding = await self.embed_provider.embedding(query)
 

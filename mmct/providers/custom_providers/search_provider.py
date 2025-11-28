@@ -9,7 +9,7 @@ from mmct.providers.custom_providers.graph_rag.document_graph_handler import Doc
 class CustomSearchProvider(BaseSearchProvider):
     """Custom Search provider implementation using GraphRAG."""
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self):
         self._initialize_client()
 
     def _initialize_client(self):

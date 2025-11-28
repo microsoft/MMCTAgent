@@ -2,8 +2,10 @@ from mmct.providers.base import BaseLLMProvider
 from loguru import logger
 from openai import AsyncAzureOpenAI, AzureOpenAI
 from azure.identity import get_bearer_token_provider
+from azure.core.credentials import AzureKeyCredential
+from azure.core.credentials_async import AsyncTokenCredential
 from mmct.utils.error_handler import ProviderException, ConfigurationException
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Union, Optional
 from mmct.utils.error_handler import handle_exceptions, convert_exceptions
 from mmct.providers.credentials import AzureCredentials
 from autogen_ext.models.openai import AzureOpenAIChatCompletionClient
@@ -12,46 +14,82 @@ from autogen_ext.models.openai import AzureOpenAIChatCompletionClient
 class AzureLLMProvider(BaseLLMProvider):
     """Azure OpenAI LLM provider implementation."""
 
-    def __init__(self, config: Dict[str, Any]):
-        self.config = config
-        self.credential = AzureCredentials.get_credentials()
+    def __init__(self,
+        endpoint: str,
+        deployment_name: str,
+        model_name: Optional[str] = None,
+        api_version: str = "2024-08-01-preview",
+        credentials: Optional[Union[AzureKeyCredential, AsyncTokenCredential]] = None,
+        api_key: Optional[str] = None,
+        timeout: Optional[int] = 200,
+        max_retries: Optional[int] = 2):
+        """Initialize AzureLLMProvider.
+
+        Args:
+            endpoint: Azure OpenAI endpoint URL
+            deployment_name: Name of the LLM deployment
+            api_version: Azure OpenAI API version (default: 2024-08-01-preview)
+            credentials: Azure credentials for token-based authentication (mutually exclusive with api_key)
+            api_key: API key for key-based authentication (mutually exclusive with credentials)
+            timeout: Request timeout in seconds (default: 200)
+            max_retries: Maximum number of retry attempts (default: 2)
+
+        Raises:
+            ConfigurationException: If neither credentials nor api_key is provided,
+                                   or if both are provided, or if required fields are missing
+            """
+         
+
+        if not endpoint:
+            raise ConfigurationException("Azure OpenAI endpoint is required for LLM Provider!")
+
+        if not deployment_name:
+            raise ConfigurationException("Azure OpenAI deployment name is required for LLM Provider!")
+        
+        if not api_version:
+            raise ConfigurationException("Azure OpenAI api version is required for Whisper Transcription Provider!")
+
+        # Validate that exactly one of credentials or api_key is provided
+        if credentials is None and api_key is None:
+            raise ConfigurationException("Either credentials or api_key must be provided!")
+
+        if credentials is not None and api_key is not None:
+            raise ConfigurationException("Only one of credentials or api_key should be provided, not both!")
+
+        self.endpoint = endpoint
+        self.deployment_name = deployment_name
+        self.api_version = api_version
+        self.credentials = credentials
+        self.api_key = api_key
+        self.timeout = timeout
+        self.max_retries = max_retries
+        self.model_name = model_name
         self.client = self._initialize_client()
     
     def _initialize_client(self):
-        """Initialize Azure OpenAI client."""
+        """Initialize Azure OpenAI client with either credentials or API key."""
         try:
-            endpoint = self.config.get("endpoint")
-            api_version = self.config.get("api_version", "2024-08-01-preview")
-            use_managed_identity = self.config.get("use_managed_identity", True)
-            timeout = self.config.get("timeout", 200)
-            max_retries = self.config.get("max_retries", 2)
-
-            if not endpoint:
-                raise ConfigurationException("Azure OpenAI endpoint is required")
-
-            if use_managed_identity:
+            if self.credentials is not None:
+                # Use credentials with token-based authentication
                 token_provider = get_bearer_token_provider(
-                    self.credential,
+                    self.credentials,
                     "https://cognitiveservices.azure.com/.default"
                 )
                 return AsyncAzureOpenAI(
-                    api_version=api_version,
-                    azure_endpoint=endpoint,
+                    api_version=self.api_version,
+                    azure_endpoint=self.endpoint,
                     azure_ad_token_provider=token_provider,
-                    max_retries=max_retries,
-                    timeout=timeout
+                    max_retries=self.max_retries,
+                    timeout=self.timeout
                 )
             else:
-                api_key = self.config.get("api_key")
-                if not api_key:
-                    raise ConfigurationException("Azure OpenAI API key is required when managed identity is disabled")
-
+                # Use API key authentication
                 return AsyncAzureOpenAI(
-                    api_version=api_version,
-                    azure_endpoint=endpoint,
-                    api_key=api_key,
-                    max_retries=max_retries,
-                    timeout=timeout
+                    api_version=self.api_version,
+                    azure_endpoint=self.endpoint,
+                    api_key=self.api_key,
+                    max_retries=self.max_retries,
+                    timeout=self.timeout
                 )
         except Exception as e:
             raise ProviderException(f"Failed to initialize Azure OpenAI client: {e}")
@@ -61,12 +99,10 @@ class AzureLLMProvider(BaseLLMProvider):
     async def chat_completion(self, messages: List[Dict], **kwargs) -> Dict[str, Any]:
         """Generate chat completion using Azure OpenAI."""
         try:
-            deployment_name = self.config.get("deployment_name")
-            if not deployment_name:
-                raise ConfigurationException("Azure OpenAI deployment name is required")
 
-            temperature = kwargs.get("temperature", self.config.get("llm_temperature", 0.0))
-            max_tokens = kwargs.get("max_tokens", 4000)
+            temperature = kwargs.get("temperature",0)
+            print(temperature)
+            max_tokens = kwargs.get("max_tokens",4000)
             response_format = kwargs.get("response_format")
             
             # Remove temperature, max_tokens, and response_format from kwargs to avoid duplicate arguments
@@ -76,7 +112,7 @@ class AzureLLMProvider(BaseLLMProvider):
             from pydantic import BaseModel
             if response_format and isinstance(response_format, type) and issubclass(response_format, BaseModel):
                 response = await self.client.chat.completions.parse(
-                    model=deployment_name,
+                    model=self.deployment_name,
                     messages=messages,
                     temperature=temperature,
                     max_tokens=max_tokens,
@@ -93,7 +129,7 @@ class AzureLLMProvider(BaseLLMProvider):
             else:
                 # Standard completion without structured output
                 completion_kwargs = {
-                    "model": deployment_name,
+                    "model": self.deployment_name,
                     "messages": messages,
                     "temperature": temperature,
                     "max_tokens": max_tokens,
@@ -115,45 +151,34 @@ class AzureLLMProvider(BaseLLMProvider):
             logger.error(f"Azure OpenAI chat completion failed: {e}")
             raise ProviderException(f"Azure OpenAI chat completion failed: {e}")
 
-    def get_autogen_client(self):
+    def get_autogen_client(self,**kwargs):
         """Get autogen-compatible client for Azure OpenAI."""
         try:
-            endpoint = self.config.get("endpoint")
-            deployment_name = self.config.get("deployment_name")
-            api_version = self.config.get("api_version", "2024-08-01-preview")
-            use_managed_identity = self.config.get("use_managed_identity", True)
-            timeout = self.config.get("timeout", 200)
-            temperature = self.config.get("temperature", 0)
+            temperature = kwargs.get("temperature",0)
 
-            if not endpoint or not deployment_name:
-                raise ConfigurationException("Azure OpenAI endpoint and deployment name are required for autogen client")
-
-            if use_managed_identity:
-                token_provider = get_bearer_token_provider(
-                    self.credential,
-                    "https://cognitiveservices.azure.com/.default"
-                )
-                return AzureOpenAIChatCompletionClient(
-                    azure_deployment=deployment_name,
-                    model=deployment_name,
-                    api_version=api_version,
-                    azure_endpoint=endpoint,
-                    azure_ad_token_provider=token_provider,
-                    timeout=timeout,
-                    temperature=temperature
-                )
+            if self.credentials is not None:
+                    # Use credentials with token-based authentication
+                    token_provider = get_bearer_token_provider(
+                        self.credentials,
+                        "https://cognitiveservices.azure.com/.default"
+                    )
+                    return AzureOpenAIChatCompletionClient(
+                        azure_deployment=self.deployment_name,
+                        model=self.model_name if self.model_name else self.deployment_name,
+                        api_version=self.api_version,
+                        azure_endpoint=self.endpoint,
+                        azure_ad_token_provider=token_provider,
+                        timeout=self.timeout,
+                        temperature=temperature
+                    )
             else:
-                api_key = self.config.get("api_key")
-                if not api_key:
-                    raise ConfigurationException("Azure OpenAI API key is required when managed identity is disabled")
-
                 return AzureOpenAIChatCompletionClient(
-                    azure_deployment=deployment_name,
-                    model=deployment_name,
-                    api_version=api_version,
-                    azure_endpoint=endpoint,
-                    api_key=api_key,
-                    timeout=timeout,
+                    azure_deployment=self.deployment_name,
+                    model=self.model_name if self.model_name else self.deployment_name,
+                    api_version=self.api_version,
+                    azure_endpoint=self.endpoint,
+                    api_key=self.api_key,
+                    timeout=self.timeout,
                     temperature=temperature
                 )
         except Exception as e:

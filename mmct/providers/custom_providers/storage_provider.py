@@ -4,7 +4,7 @@ import aiofiles
 from pathlib import Path
 from urllib.parse import urlparse
 from loguru import logger
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from mmct.providers.base import BaseStorageProvider
 from mmct.utils.error_handler import handle_exceptions, convert_exceptions
 from mmct.utils.error_handler import ProviderException
@@ -13,17 +13,14 @@ from mmct.utils.error_handler import ProviderException
 class LocalStorageProvider(BaseStorageProvider):
     """Local filesystem-based storage provider."""
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, base_path: Optional[str] = "./local_storage"):
         """
         Initialize Local Storage Provider.
 
         Args:
-            config: {
-                        "base_path": str -> Root directory for local storage (default: ./local_storage)
-                    }
+              "base_path": str -> Root directory for local storage (default: ./local_storage)
         """
-        self.config = config
-        self.base_path = Path("./local_storage").resolve()
+        self.base_path = base_path
         self.base_path.mkdir(parents=True, exist_ok=True)
         logger.info(f"LocalStorageProvider initialized at {self.base_path}")
 
