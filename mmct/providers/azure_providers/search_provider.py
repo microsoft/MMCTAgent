@@ -420,18 +420,18 @@ class AzureSearchProvider(BaseSearchProvider):
             # Handle different schema input formats
             if isinstance(index_schema, str):
                 # Simple string indicator
-                if index_schema == "keyframe":
-                    index_schema = self._create_keyframe_index_schema(self.index_name)
+                if index_schema == "keyframes":
+                    index_schema = self._create_keyframe_index_schema()
                 elif index_schema == "chapter":
-                    index_schema = self._create_video_chapter_index_schema(self.index_name)
-                elif index_schema == "object_collection":
+                    index_schema = self._create_video_chapter_index_schema()
+                elif index_schema == "object_registry":
                     from mmct.providers.search_index_schema import (
                         create_object_collection_index_schema,
                     )
 
                     index_schema = create_object_collection_index_schema(self.index_name)
                 else:
-                    raise ProviderException(f"Unknown index schema type: {self.index_schema}")
+                    raise ProviderException(f"Unknown index schema type: {index_schema}")
 
             elif isinstance(index_schema, dict):
                 # Dict with type indicator and optional params

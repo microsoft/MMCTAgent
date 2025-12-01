@@ -12,10 +12,17 @@ import numpy as np
 import os
 from typing import List
 from loguru import logger
+from pydantic import BaseModel
 from sklearn.metrics.pairwise import cosine_similarity
 from dotenv import load_dotenv, find_dotenv
-from mmct.providers.factory import provider_factory
-from mmct.video_pipeline.core.ingestion.semantic_chunking.process_transcript import TranscriptSegment
+from mmct.providers.base import BaseEmbeddingProvider
+
+
+class TranscriptSegment(BaseModel):
+    """Represents a single segment of parsed transcript with timing information."""
+    sentence: str
+    start_time: float  # in seconds
+    end_time: float    # in seconds
 
 # Load environment variables
 load_dotenv(find_dotenv(), override=True)
@@ -38,16 +45,17 @@ class SemanticChunker:
     LONG_VIDEO_TIME_LIMIT = 120  # seconds for videos > 20 minutes
     VIDEO_DURATION_THRESHOLD = 20  # minutes
 
-    def __init__(self, transcript: str):
+    def __init__(self, transcript: str, embedding_provider: BaseEmbeddingProvider):
         """
         Initialize SemanticChunker.
 
         Args:
             transcript (str): Raw SRT transcript text to be processed
+            embedding_provider (BaseEmbeddingProvider): Embedding provider instance (required)
         """
         self.transcript = transcript
         self.chunked_segments = []
-        self.embedding_provider = provider_factory.create_embedding_provider()
+        self.embedding_provider = embedding_provider
 
     async def _calculate_transcript_duration(self, srt_text: str) -> float:
         """

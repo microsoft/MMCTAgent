@@ -20,6 +20,7 @@ class AzureStorageProvider(BaseStorageProvider):
     def __init__(
         self,
         storage_account_name: str,
+        keyframe_container_name: str,
         credentials: Optional[Union[AzureKeyCredential, AsyncTokenCredential]] = None,
         blob_connection_string: Optional[str] = None,
     ):
@@ -37,6 +38,9 @@ class AzureStorageProvider(BaseStorageProvider):
         """
         if not storage_account_name:
             raise ConfigurationException("Storage account name is required!")
+        
+        if not keyframe_container_name:
+            raise ConfigurationException("Keyframe container name is required!")
 
         # Validate that exactly one of credentials or blob_connection_string is provided
         if credentials is None and blob_connection_string is None:
@@ -52,6 +56,7 @@ class AzureStorageProvider(BaseStorageProvider):
         self.credentials = credentials
         self.blob_connection_string = blob_connection_string
         self.storage_account_name = storage_account_name
+        self.keyframe_container_name = keyframe_container_name
         self.storage_account_url = f"https://{self.storage_account_name}.blob.core.windows.net/"
         self.service_client = self._initialize()
 
@@ -100,7 +105,7 @@ class AzureStorageProvider(BaseStorageProvider):
         Generate a URL for a file that doesn't yet exist in storage.
         """
         try:
-            folder_name = kwargs.pop("folder_name")
+            folder_name = self.keyframe_container_name
             # Use service client URL if available, otherwise fall back to config
             if self.service_client:
                 # Remove trailing slash to avoid double slashes in URL

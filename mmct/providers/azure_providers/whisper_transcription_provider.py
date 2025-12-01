@@ -1,7 +1,9 @@
 from loguru import logger
-from typing import Dict, Any, Union, Optional
+from typing import Union, Optional, List, Tuple
 import os
 import tempfile
+import asyncio
+import aiofiles
 from pydub import AudioSegment
 from mmct.utils.error_handler import (
     ProviderException,
@@ -10,7 +12,6 @@ from mmct.utils.error_handler import (
     convert_exceptions,
 )
 from mmct.providers.base import BaseTranscriptionProvider
-from mmct.providers.credentials import AzureCredentials
 from azure.core.credentials import AzureKeyCredential
 from azure.core.credentials_async import AsyncTokenCredential
 from openai import AsyncAzureOpenAI
@@ -239,6 +240,122 @@ class WhisperTranscriptionProvider(BaseTranscriptionProvider):
     def get_async_client(self):
         """Get async OpenAI client for direct audio API access."""
         return self.client
+
+    async def _extract_audio_from_video(self, video_path: str, output_path: str) -> None:
+        """
+        Extract audio from video file using FFmpeg.
+
+        Args:
+            video_path: Path to the video file
+            output_path: Path where audio file should be saved
+
+        Raises:
+            ProviderException: If audio extraction fails
+        """
+        try:
+            logger.info(f"Extracting audio from video: {video_path}")
+
+            # Run FFmpeg in a subprocess to extract audio
+            process = await asyncio.create_subprocess_exec(
+                "ffmpeg",
+                "-y",  # Overwrite output file if it exists
+                "-i",
+                video_path,
+                "-q:a",
+                "0",  # Best quality
+                "-map",
+                "a",  # Extract audio stream
+                output_path,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+
+            # Wait for the process to complete
+            returncode = await process.wait()
+
+            if returncode != 0:
+                raise ProviderException(f"FFmpeg failed with return code {returncode}")
+
+            logger.info(f"Successfully extracted audio to: {output_path}")
+
+        except Exception as e:
+            logger.error(f"Failed to extract audio from video: {e}")
+            raise ProviderException(f"Failed to extract audio from video: {e}")
+
+    @handle_exceptions(retries=3, exceptions=(Exception,))
+    @convert_exceptions({Exception: ProviderException})
+    async def transcribe_video(
+        self,
+        video_path: str,
+        hash_id: str,
+        output_dir: Optional[str] = None,
+        language: str = None,
+        **kwargs
+    ) -> Tuple[str, List[str]]:
+        """
+        Transcribe video file by extracting audio and transcribing it.
+
+        Args:
+            video_path: Path to the video file
+            hash_id: Unique identifier for the video
+            output_dir: Directory to save audio and transcript files (defaults to current working directory's media folder)
+            language: Language code for transcription
+            **kwargs: Additional parameters (e.g., response_format)
+
+        Returns:
+            Tuple of (transcript_content, list_of_local_file_paths)
+            - transcript_content: The transcribed text
+            - list_of_local_file_paths: List of paths to temporary files created (audio, transcript)
+
+        Raises:
+            ProviderException: If transcription fails
+        """
+        local_files = []
+
+        try:
+            # Determine output directory
+            if output_dir is None:
+                output_dir = os.path.join(os.getcwd(), "media")
+                os.makedirs(output_dir, exist_ok=True)
+
+            # Step 1: Extract audio from video
+            audio_path = os.path.join(output_dir, f"{hash_id}.mp3")
+            await self._extract_audio_from_video(video_path, audio_path)
+            local_files.append(audio_path)
+            logger.info(f"Audio extracted and saved to: {audio_path}")
+
+            # Step 2: Transcribe the audio file
+            response_format = kwargs.get("response_format", "srt")
+            logger.info(f"Starting transcription with format: {response_format}")
+
+            transcript = await self.transcribe_file(
+                audio_path=audio_path,
+                language=language,
+                response_format=response_format
+            )
+            logger.info("Successfully generated transcript")
+
+            # Step 3: Save transcript to file
+            transcript_path = os.path.join(output_dir, f"transcript_{hash_id}.srt")
+            async with aiofiles.open(transcript_path, "w", encoding="utf-8") as f:
+                await f.write(transcript)
+            local_files.append(transcript_path)
+            logger.info(f"Transcript saved to: {transcript_path}")
+
+            return transcript, local_files
+
+        except Exception as e:
+            # Clean up any files created before the error
+            for file_path in local_files:
+                try:
+                    if os.path.exists(file_path):
+                        os.remove(file_path)
+                        logger.debug(f"Cleaned up file after error: {file_path}")
+                except Exception as cleanup_error:
+                    logger.warning(f"Failed to cleanup file {file_path}: {cleanup_error}")
+
+            logger.error(f"Video transcription failed: {e}")
+            raise ProviderException(f"Video transcription failed: {e}")
 
     async def close(self):
         """Close the transcription client and cleanup resources."""

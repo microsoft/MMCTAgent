@@ -15,7 +15,6 @@ class GetContextTool:
     async def get_context(
         self,
         query: Annotated[str, "query for which chapter documents need to be fetched."],
-        index_name: Annotated[str, "vector index name"],
         video_id: Annotated[str, "video id if provided in the instruction"]=None,
         url: Annotated[str, "url if provided in the instruction to filter out the search results"] = None,
         start_time: Annotated[Optional[float], "start time in seconds to filter documents with overlapping time range"] = None,
@@ -105,7 +104,6 @@ if __name__ == "__main__":
 
     video_id = "hash-video-id"
     query = "user-query"
-    index_name = "index-name"
     url = "video-url"
 
     start_time = "start time in seconds"

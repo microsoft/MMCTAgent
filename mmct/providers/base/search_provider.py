@@ -4,6 +4,9 @@ from typing import Dict, List, Any, Optional
 class BaseSearchProvider(ABC):
     """Abstract base class for search providers."""
 
+    def __init__(self, index_name):
+        self.index_name = index_name
+
     @abstractmethod
     async def search(self, query: str, **kwargs) -> List[Dict]:
         """Search for documents."""
@@ -25,10 +28,7 @@ class BaseSearchProvider(ABC):
         Create a search index with the given schema.
 
         Args:
-            index_name: Name of the index to create
-            index_schema: Provider-specific index schema definition.
-                For simple cases, can be a string indicating index type: "chapter" or "keyframe"
-                For complex cases, can be provider-specific schema object
+            index_schema can take one of the predefined schema types like "chapter", "object_registry", "keyframes".
 
         Returns:
             bool: True if created, False if already exists

@@ -169,36 +169,6 @@ class ChapterIndexDocument(BaseModel):
         facetable=False,
         key=False
     )
-    blob_video_url: str = Field(
-        ...,
-        searchable=False,
-        filterable=False,
-        retrievable=True,
-        stored=True,
-        sortable=False,
-        facetable=False,
-        key=False
-    )
-    blob_audio_url: str = Field(
-        ...,
-        searchable=False,
-        filterable=False,
-        retrievable=True,
-        stored=True,
-        sortable=False,
-        facetable=False,
-        key=False
-    )
-    blob_transcript_file_url: str = Field(
-        ...,
-        searchable=False,
-        filterable=False,
-        retrievable=True,
-        stored=True,
-        sortable=False,
-        facetable=False,
-        key=False
-    )
     blob_frames_folder_path: str = Field(
         ...,
         searchable=False,

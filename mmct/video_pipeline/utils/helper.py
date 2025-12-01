@@ -14,8 +14,8 @@ from datetime import timedelta
 from typing import Dict
 from azure.storage.blob import BlobServiceClient
 from azure.storage.blob.aio import BlobServiceClient as AsyncBlobServiceClient
-from azure.identity import get_bearer_token_provider, DefaultAzureCredential
-from mmct.providers.factory import provider_factory
+from azure.identity import DefaultAzureCredential
+from mmct.providers.base import BaseSearchProvider
 from dotenv import load_dotenv, find_dotenv
 
 
@@ -721,7 +721,7 @@ async def remove_file(video_id):
         raise Exception(e)
 
 
-async def check_video_already_ingested(hash_id: str, index_name: str) -> bool:
+async def check_video_already_ingested(hash_id: str, search_provider: BaseSearchProvider) -> bool:
     """
     Check if a video with the given hash_id already exists in the search index.
 

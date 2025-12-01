@@ -99,7 +99,7 @@ class VideoQnA:
       3. get_context: Retrieves transcript chunks and visual summary chapter documents (requires video_id/url)
       4. get_relevant_frames: Gets specific frame names based on visual queries
       5. query_frame: Analyzes downloaded frames with vision models or fetch frames on filter criteria and then analyze them.
-    - **Critic Agent**: Validates or refines the planner's output.
+    - **Critic Agent**: Validates the planner's output.
 
     Workflow:
     1. If video_id/url NOT provided → Call get_video_summary first to discover relevant videos
@@ -109,53 +109,50 @@ class VideoQnA:
 
     Args:
         query (str): The natural language question to be answered based on the video content.
-        providers (VideoAgentProviderConfig): Provider configuration containing all required providers.
+        provider (VideoAgentProviderConfig): Provider configuration containing all required providers.
         video_id (Optional[str]): The unique identifier of the video.
         url (Optional[str]): URL of the video to filter search results.
         use_critic_agent (bool, optional): Whether to use the critic agent for answer refinement. Defaults to True.
-        index_name (str, optional): Vector index name for context retrieval.
         cache (bool, optional): Whether to enable caching for model responses. Defaults to True.
     """
 
     def __init__(
         self,
         query: str,
-        providers: VideoAgentProviderConfig,
+        provider: VideoAgentProviderConfig,
         video_id: Optional[str] = None,
         url: Optional[str] = None,
         use_critic_agent: bool = True,
-        index_name: str = None,
         cache: bool = True,
     ):
         self.query = query
         self.video_id = video_id
         self.use_critic_agent = use_critic_agent
-        self.index_name = index_name
         self.url = url
         self.cache = cache
-        self.providers = providers
-        self.model_client = self.providers.llm_provider.get_autogen_client()
+        self.provider = provider
+        self.model_client = self.provider.llm_provider.get_autogen_client()
 
         get_context_tool_object = GetContextTool(
-            embed_provider=self.providers.embedding_provider,
-            vectordb_chapter=self.providers.vectordb_chapter,
+            embed_provider=self.provider.embedding_provider,
+            vectordb_chapter=self.provider.vectordb_chapter,
         )
         get_video_summary_object = GetVideoSummaryTool(
-            vectordb_object_registry=self.providers.vectordb_object_registry,
-            embed_provider=self.providers.embedding_provider,
+            vectordb_object_registry=self.provider.vectordb_object_registry,
+            embed_provider=self.provider.embedding_provider,
         )
         get_object_collection_object = GetObjectCollection(
-            vectordb_object_registry=self.providers.vectordb_object_registry
+            vectordb_object_registry=self.provider.vectordb_object_registry
         )
         get_relevant_frames_object = GetRelevantFrames(
-            vectordb_keyframes=self.providers.vectordb_keyframes,
-            image_embedding_provider=self.providers.image_embedding_provider,
+            vectordb_keyframes=self.provider.vectordb_keyframes,
+            image_embedding_provider=self.provider.image_embedding_provider,
         )
         query_frame_object = QueryFrameTool(
-            llm_provider=self.providers.llm_provider,
-            storage_provider=self.providers.storage_provider,
-            vectordb_keyframes=self.providers.vectordb_keyframes,
-            image_embedding_provider=self.providers.image_embedding_provider,
+            llm_provider=self.provider.llm_provider,
+            storage_provider=self.provider.storage_provider,
+            vectordb_keyframes=self.provider.vectordb_keyframes,
+            image_embedding_provider=self.provider.image_embedding_provider,
         )
 
         # Only enable caching if cache parameter is True
@@ -192,7 +189,6 @@ class VideoQnA:
             f"query:{self.query}."
             + (f"\nInstruction:video id:{self.video_id}" if self.video_id is not None else "")
             + (f"\nurl:{self.url}" if self.url is not None else "")
-            + (f"\nUse the index name:{self.index_name} to retrieve context.")
         )
 
     async def _initialize_agents(self):
@@ -219,7 +215,7 @@ class VideoQnA:
         termination = text_mention_termination
 
         if self.use_critic_agent:
-            critic_tool_object = CriticTool(llm_provider = self.providers.llm_provider)
+            critic_tool_object = CriticTool(llm_provider = self.provider.llm_provider)
             self.critic = AssistantAgent(
                 name="critic",
                 model_client=self.model_client,
@@ -296,11 +292,8 @@ async def video_qna(
     use_critic_agent: Annotated[
         bool, "Set to True to enable a critic agent that validates the response."
     ] = True,
-    index_name: Annotated[
-        str, "Vector index name for context retrieval"
-    ] = "education-video-index-v2",
     stream: Annotated[bool, "Set to True to return the response as a stream."] = False,
-    providers: VideoAgentProviderConfig = None,
+    provider: VideoAgentProviderConfig = None,
     cache: Annotated[bool, "Set to True to enable cache for model responses."] = True,
 ):
     """
@@ -326,7 +319,6 @@ async def video_qna(
         video_id (Optional[str]): The unique identifier of the video.
         url (Optional[str]): The URL of the video to filter out the search results.
         use_critic_agent (bool): Set to True to enable a critic agent that validates the response. Defaults to True.
-        index_name (str): Vector index name for context retrieval. Defaults to "education-video-index-v2".
         stream (bool): Set to True to return the response as a stream. Defaults to False.
         providers (VideoAgentProviderConfig): Provider configuration containing all required providers.
         cache (bool): Set to True to enable cache for model responses. Defaults to True.
@@ -342,8 +334,7 @@ async def video_qna(
         url=url,
         query=query,
         use_critic_agent=use_critic_agent,
-        index_name=index_name,
-        providers=providers,
+        provider=provider,
         cache=cache,
     )
     if stream:
@@ -393,7 +384,6 @@ if __name__ == "__main__":
     # url = "<placeholder for url to filter out the results>" #Optional
     use_critic_agent = True
     stream = True
-    index_name = "<placeholder for index name>"
 
     result = asyncio.run(
         video_qna(
@@ -402,7 +392,6 @@ if __name__ == "__main__":
             # url=url, #Optional
             use_critic_agent=use_critic_agent,
             stream=stream,
-            index_name=index_name,
             cache=False,
         )
     )

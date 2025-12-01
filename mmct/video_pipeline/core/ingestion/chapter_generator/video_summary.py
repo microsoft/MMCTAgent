@@ -3,7 +3,6 @@ from typing import List, Optional
 from loguru import logger
 from pydantic import BaseModel, Field
 from mmct.config.settings import settings
-from mmct.providers.factory import provider_factory
 from mmct.video_pipeline.core.ingestion.models import ChapterCreationResponse
 
 
@@ -28,9 +27,14 @@ class VideoSummary:
     into a single comprehensive video-level summary.
     """
 
-    def __init__(self):
-        """Initialize the VideoSummary processor."""
-        self.llm_provider = provider_factory.create_llm_provider()
+    def __init__(self, llm_provider):
+        """
+        Initialize the VideoSummary processor.
+        
+        Args:
+            llm_provider: LLM provider instance
+        """
+        self.llm_provider = llm_provider
 
     async def create_video_summary(
         self,

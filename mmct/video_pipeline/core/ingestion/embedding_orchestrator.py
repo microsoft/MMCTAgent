@@ -11,8 +11,6 @@ import asyncio
 from typing import List
 from loguru import logger
 
-from mmct.video_pipeline.core.ingestion.key_frames_extractor.clip_embeddings import CLIPEmbeddingsGenerator
-from mmct.video_pipeline.core.ingestion.chapter_generator.utils import create_embedding
 from mmct.video_pipeline.core.ingestion.models import (
     KeyframeMetadataCollection,
     ChapterMetadataCollection,
@@ -31,8 +29,20 @@ class EmbeddingOrchestrator:
     and updates the JSON files with generated embeddings.
     """
 
-    def __init__(self):
-        """Initialize the embedding orchestrator."""
+    def __init__(
+        self,
+        embedding_provider,
+        image_embedding_provider
+    ):
+        """
+        Initialize the embedding orchestrator.
+        
+        Args:
+            embedding_provider: Provider for text embeddings
+            image_embedding_provider: Provider for image embeddings (CLIP)
+        """
+        self.embedding_provider = embedding_provider
+        self.image_embedding_provider = image_embedding_provider
         self.embedding_config = ImageEmbeddingConfig()
 
     async def generate_all_embeddings(self, video_id: str) -> None:
@@ -79,43 +89,35 @@ class EmbeddingOrchestrator:
             keyframe_collection = KeyframeMetadataCollection(**metadata_dict)
             logger.info(f"Generating CLIP embeddings for {len(keyframe_collection.keyframes)} keyframes...")
 
-            # Initialize CLIP embeddings generator
-            embeddings_generator = CLIPEmbeddingsGenerator(self.embedding_config)
+            # Collect all valid keyframe file paths
+            valid_keyframes = []
+            valid_file_paths = []
 
-            try:
-                # Collect all valid keyframe file paths
-                valid_keyframes = []
-                valid_file_paths = []
+            for keyframe in keyframe_collection.keyframes:
+                if not os.path.exists(keyframe.file_path):
+                    logger.warning(f"Keyframe file not found: {keyframe.file_path}")
+                    continue
+                valid_keyframes.append(keyframe)
+                valid_file_paths.append(keyframe.file_path)
 
-                for keyframe in keyframe_collection.keyframes:
-                    if not os.path.exists(keyframe.file_path):
-                        logger.warning(f"Keyframe file not found: {keyframe.file_path}")
-                        continue
-                    valid_keyframes.append(keyframe)
-                    valid_file_paths.append(keyframe.file_path)
+            if not valid_file_paths:
+                logger.warning("No valid keyframe files found")
+                return
 
-                if not valid_file_paths:
-                    logger.warning("No valid keyframe files found")
-                    return
+            # Generate embeddings in batches using the provider
+            batch_size = self.embedding_config.image_embedding_batch_size
+            for i in range(0, len(valid_file_paths), batch_size):
+                batch_paths = valid_file_paths[i:i + batch_size]
+                batch_keyframes = valid_keyframes[i:i + batch_size]
 
-                # Generate embeddings in batches using the provider
-                batch_size = self.embedding_config.image_embedding_batch_size
-                for i in range(0, len(valid_file_paths), batch_size):
-                    batch_paths = valid_file_paths[i:i + batch_size]
-                    batch_keyframes = valid_keyframes[i:i + batch_size]
+                # Generate embeddings for this batch
+                batch_embeddings = await self.image_embedding_provider.batch_image_embedding(batch_paths)
 
-                    # Generate embeddings for this batch
-                    batch_embeddings = await embeddings_generator.provider.batch_image_embedding(batch_paths)
+                # Update keyframe metadata with embeddings
+                for keyframe, embedding in zip(batch_keyframes, batch_embeddings):
+                    keyframe.embeddings = embedding
 
-                    # Update keyframe metadata with embeddings
-                    for keyframe, embedding in zip(batch_keyframes, batch_embeddings):
-                        keyframe.embeddings = embedding
-
-                logger.info(f"Successfully generated embeddings for {len(valid_keyframes)} keyframes")
-
-            finally:
-                # Clean up embeddings generator resources
-                await embeddings_generator.cleanup()
+            logger.info(f"Successfully generated embeddings for {len(valid_keyframes)} keyframes")
 
             # Save updated metadata back to JSON
             with open(json_file_path, "w", encoding="utf-8") as f:
@@ -158,7 +160,7 @@ class EmbeddingOrchestrator:
             for chapter in chapter_collection.chapters:
                 # Create chapter content string for embedding
                 chapter_content = self._create_chapter_content_string(chapter)
-                embedding_tasks.append(create_embedding(chapter_content))
+                embedding_tasks.append(self.embedding_provider.embedding(chapter_content))
 
             # Wait for all embeddings to complete
             embeddings = await asyncio.gather(*embedding_tasks)
@@ -211,7 +213,7 @@ class EmbeddingOrchestrator:
             logger.info("Generating text embedding for video summary...")
 
             # Generate embedding for video summary
-            embedding = await create_embedding(object_collection_metadata.video_summary)
+            embedding = await self.embedding_provider.embedding(object_collection_metadata.video_summary)
             object_collection_metadata.embeddings = embedding
 
             logger.info("Successfully generated embedding for video summary")

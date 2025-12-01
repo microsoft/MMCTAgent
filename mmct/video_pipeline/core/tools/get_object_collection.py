@@ -32,8 +32,6 @@ class GetObjectCollection:
         Output:
             List of dictionaries containing requested fields
         """
-        # Construct the full index name
-        full_index_name = self.vectordb_object_registry.config.get("index_name")
         
         try:
             # Build filter conditions

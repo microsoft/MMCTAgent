@@ -11,20 +11,27 @@ from mmct.video_pipeline.core.ingestion.transcription.base_transcription import 
 from mmct.video_pipeline.utils.helper import extract_wav_from_video
 from mmct.video_pipeline.core.ingestion.languages import Languages
 from mmct.video_pipeline.utils.helper import get_media_folder
-from mmct.providers.factory import provider_factory
+from mmct.providers.base import BaseLLMProvider, BaseTranscriptionProvider
 from dotenv import load_dotenv, find_dotenv
 
 load_dotenv(find_dotenv(), override=True)
 
 
 class CloudTranscription(Transcription):
-    def __init__(self, video_path: str, hash_id: str, language: str = None) -> None:
+    def __init__(
+        self,
+        video_path: str,
+        hash_id: str,
+        llm_provider: BaseLLMProvider,
+        transcription_provider: BaseTranscriptionProvider,
+        language: str = None
+    ) -> None:
         super().__init__(video_path=video_path, hash_id=hash_id, language=language)
         self.audio_container = os.getenv("AUDIO_CONTAINER_NAME")
         self.local_save = []
-        # Initialize providers
-        self.llm_provider = provider_factory.create_llm_provider()
-        self.speech_provider = provider_factory.create_transcription_provider('azure_speech')
+        # Store injected providers
+        self.llm_provider = llm_provider
+        self.speech_provider = transcription_provider
 
     async def _load_audio(self):
         try:

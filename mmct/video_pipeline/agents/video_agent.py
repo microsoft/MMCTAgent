@@ -19,7 +19,7 @@ load_dotenv(override=True)
 
 class VideoAgent:
     """
-    Video question answering agent using Swarm orchestration.
+    MMCT's Video question answering agent using Swarm orchestration.
     
     This agent uses VideoAgentProviderConfig for dependency injection to access:
     - llm_provider: For LLM-based reasoning and structured response generation
@@ -36,8 +36,7 @@ class VideoAgent:
 
     Args:
         query (str): The natural language question about video content.
-        index_name (str): Name of the search index for video retrieval.
-        providers (VideoAgentProviderConfig): Provider configuration containing all required providers.
+        provider (VideoAgentProviderConfig): Provider configuration containing all required providers.
         video_id (Optional[str]): Specific video ID to query. Defaults to None.
         url (Optional[str]): URL to filter the search results for that particular video. Defaults to None.
         use_critic_agent (bool): Whether to use the critic agent for validation. Defaults to True.
@@ -49,28 +48,29 @@ class VideoAgent:
         ```python
         from mmct.config.providers import VideoAgentProviderConfig
         from mmct.providers.azure import (
-            AzureOpenAILLMProvider,
-            AzureOpenAIEmbeddingProvider,
-            AzureAISearchProvider,
-            AzureBlobStorageProvider,
-            AzureSpeechTranscriptionProvider
+            AzureLLMProvider,
+            AzureEmbeddingProvider,
+            AzureSearchProvider,
+            AzureStorageProvider,
         )
-        
+        # Note: Image Embedding provider is also required which is clip based provider.
+        from mmct.providers.local import CustomImageEmbeddingProvider
+
+
         # Initialize all required providers
-        providers = VideoAgentProviderConfig(
-            llm_provider=AzureOpenAILLMProvider(...),
+        provider = VideoAgentProviderConfig(
+            llm_provider=AzureOpenAILLMProvider(endpoint = "<some-endpoint>",api_version="<api-version>",...),
             embedding_provider=AzureOpenAIEmbeddingProvider(...),
             vectordb_chapter=AzureAISearchProvider(...),
             vectordb_object_registry=AzureAISearchProvider(...),
             vectordb_keyframes=AzureAISearchProvider(...),
             storage_provider=AzureBlobStorageProvider(...),
-            transcription_provider=AzureSpeechTranscriptionProvider(...)
+            image_embedding_provider=CustomImageEmbeddingProvider(...)
         )
         
         video_agent = VideoAgent(
             query="What are the benefits of organic farming?",
-            index_name="farming-video-index",
-            providers=providers
+            provider=provider
         )
         result = await video_agent()
         print(result.response)
@@ -80,8 +80,7 @@ class VideoAgent:
         ```python
         video_agent = VideoAgent(
             query="Explain the farming technique shown",
-            index_name="farming-video-index",
-            providers=providers,
+            provider=provider,
             video_id="abc123def456"
         )
         result = await video_agent()
@@ -91,8 +90,7 @@ class VideoAgent:
         ```python
         video_agent = VideoAgent(
             query="Summarize this farming video",
-            index_name="farming-video-index",
-            providers=providers,
+            provider=provider,
             url="https://video-url.mp4",
             stream=True
         )
@@ -103,8 +101,7 @@ class VideoAgent:
     def __init__(
         self,
         query: str,
-        index_name: str,
-        providers: VideoAgentProviderConfig,
+        provider: VideoAgentProviderConfig,
         video_id: Optional[str] = None,
         url: Optional[str] = None,
         use_critic_agent: Optional[bool] = True,
@@ -113,13 +110,12 @@ class VideoAgent:
     ):
         # Store parameters
         self.query = query
-        self.index_name = index_name
         self.video_id = video_id
         self.url = url
         self.use_critic_agent = use_critic_agent
         self.stream = stream
         self.cache = cache
-        self.providers = providers
+        self.provider = provider
 
 
     async def __call__(self) -> VideoAgentResponse:
@@ -137,9 +133,8 @@ class VideoAgent:
                 video_id=self.video_id,
                 url=self.url,
                 use_critic_agent=self.use_critic_agent,
-                index_name=self.index_name,
                 stream=self.stream,
-                providers = self.providers,
+                provider = self.provider,
                 cache = self.cache
             )
 
@@ -168,7 +163,7 @@ class VideoAgent:
             messages = self._prepare_messages(context_text)
 
             # Get structured response from LLM
-            response = await self.providers.llm_provider.chat_completion(
+            response = await self.provider.llm_provider.chat_completion(
                 messages=messages,
                 temperature=0.0,  # Use default temperature
                 response_format=VideoAgentResponse
@@ -204,13 +199,11 @@ if __name__ == "__main__":
         """Example usage of VideoAgent with Swarm orchestration."""
         query = "<placeholder for query>"
         url = "<placeholder for url>" #Optional
-        index_name = "<placeholer for index name>"
         stream = False
         cache = False
         video_agent = VideoAgent(
             query=query,
             url=url,
-            index_name=index_name,
             use_critic_agent=True,
             stream=stream,
             cache = cache

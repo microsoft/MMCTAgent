@@ -6,7 +6,7 @@ from mmct.video_pipeline.core.ingestion.transcription.base_transcription import 
 )
 from mmct.video_pipeline.core.ingestion.languages import Languages
 from mmct.video_pipeline.utils.helper import extract_mp3_from_video, get_media_folder
-from mmct.providers.factory import provider_factory
+from mmct.providers.base import BaseTranscriptionProvider
 from dotenv import load_dotenv, find_dotenv
 from loguru import logger
 # Load environment variables
@@ -14,11 +14,11 @@ load_dotenv(find_dotenv(), override=True)
 
 
 class WhisperTranscription(Transcription):
-    def __init__(self, video_path: str, hash_id: str) -> None:
+    def __init__(self, video_path: str, hash_id: str, transcription_provider: BaseTranscriptionProvider) -> None:
         super().__init__(video_path=video_path, hash_id=hash_id)
         self.local_save = []
-        # Initialize transcription provider (Azure or OpenAI Whisper)
-        self.transcription_provider = provider_factory.create_transcription_provider()
+        # Store injected transcription provider
+        self.transcription_provider = transcription_provider
 
     async def load_audio(self):
         try:

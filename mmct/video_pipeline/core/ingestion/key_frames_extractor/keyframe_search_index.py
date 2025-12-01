@@ -4,8 +4,8 @@ import uuid
 from datetime import datetime, timezone
 import numpy as np
 
-from mmct.providers.factory import provider_factory
 from mmct.video_pipeline.core.ingestion.key_frames_extractor.clip_embeddings import FrameEmbedding
+from mmct.providers.base.search_provider import BaseSearchProvider
 
 logger = logging.getLogger(__name__)
 
@@ -65,35 +65,17 @@ def create_frame_documents_from_embeddings(
 class KeyframeSearchIndex:
     """Provider-agnostic keyframe storage and indexing helper."""
 
-    def __init__(self, search_endpoint: str = None, index_name: str = "video-keyframes-index", 
-                 provider_name: Optional[str] = None, provider_config: Optional[dict] = None):
+    def __init__(self, search_provider:BaseSearchProvider):
         """
         Initialize KeyframeSearchIndex with a search provider.
         
         Args:
-            search_endpoint: Optional search endpoint (deprecated, use provider_config)
+            search_provider: Search provider instance
             index_name: Name of the index to use
-            provider_name: Optional provider name (uses configured default if None)
-            provider_config: Optional provider configuration dict
         """
-        self.search_endpoint = search_endpoint
-        self.index_name = index_name
+        self.provider = search_provider
 
-        # Create provider via factory (uses configured default if provider_name is None)
-        self.provider = provider_factory.create_search_provider(provider_name)
-
-        # Apply additional configuration if provided
-        if provider_config or search_endpoint:
-            cfg = provider_config or {}
-            if search_endpoint:
-                cfg.setdefault("endpoint", search_endpoint)
-            cfg.setdefault("index_name", index_name)
-            
-            # Merge config into provider config
-            if hasattr(self.provider, 'config') and isinstance(self.provider.config, dict):
-                self.provider.config.update(cfg)
-
-    async def create_keyframe_index_if_not_exists(self) -> bool:
+    async def create_keyframe_index_if_not_exists(self, index_schema:str) -> bool:
         """
         Create the keyframe index with the proper schema if it doesn't exist.
 
@@ -102,12 +84,12 @@ class KeyframeSearchIndex:
         """
         try:
             # Check if index exists
-            if await self.provider.index_exists(self.index_name):
-                logger.info(f"Keyframe index '{self.index_name}' already exists")
+            if await self.provider.index_exists():
+                logger.info(f"Keyframe index '{self.provider.index_name}' already exists")
                 return False
 
             # Provider will handle schema creation based on type indicator
-            return await self.provider.create_index(self.index_name, "keyframe")
+            return await self.provider.create_index(index_schema = index_schema)
 
         except Exception as e:
             logger.error(f"Failed to create keyframe index: {e}")
@@ -155,7 +137,7 @@ class KeyframeSearchIndex:
                 batch = documents[i:i + batch_size]
                 
                 # Provider's upload_documents method will handle transformation
-                await self.provider.upload_documents(batch, index_name=self.index_name)
+                await self.provider.upload_documents(batch)
                 
                 logger.info(f"Uploaded batch {i // batch_size + 1} of {len(batch)} frame documents")
 
@@ -165,8 +147,3 @@ class KeyframeSearchIndex:
         except Exception as e:
             logger.error(f"Failed to upload frame embeddings: {e}")
             return False
-
-    async def close(self):
-        """Close the provider."""
-        if self.provider:
-            await self.provider.close()
