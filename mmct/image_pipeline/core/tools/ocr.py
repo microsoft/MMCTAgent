@@ -8,24 +8,27 @@ from mmct.image_pipeline.core.models.ocr.trocr_large import TROCRLarge
 from PIL import Image
 from typing_extensions import Annotated
 
+class OcrTool:
+    def __init__(self, img_path: Annotated[str, "path of image"]):
+        self.img_path = img_path
 
-async def ocr_tool(
-        img: Annotated[str, "Path to the input image file."],
+    async def ocr_tool(
+        self,
         priority: Annotated[
             str,
             "Select the OCR model to use: '1' for Small, '2' for Base, '3' for Large. Default is '3'.",
-        ],
-    ) -> Annotated[str,"OCR results"]:
-    """
-    OCR Tool
+        ] = "3",
+    ) -> Annotated[str, "OCR results"]:
+        """
+        OCR Tool
 
-    This function performs Optical Character Recognition (OCR) on the given image using a selected model size.
-    """
-    img = Image.open(img).convert("RGB")
-    model = (
-        TROCRSmall()
-        if priority == "1"
-        else TROCRBase() if priority == "2" else TROCRLarge()
-    )
-    resp = await model(img)
-    return resp
+        This function performs Optical Character Recognition (OCR) on the given image using a selected model size.
+        """
+        img = Image.open(self.img_path).convert("RGB")
+        model = (
+            TROCRSmall()
+            if priority == "1"
+            else TROCRBase() if priority == "2" else TROCRLarge()
+        )
+        resp = await model(img)
+        return resp
