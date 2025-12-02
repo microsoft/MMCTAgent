@@ -94,7 +94,7 @@ from mmct.providers.azure import (
     AzureStorageProvider,
     WhisperTranscriptionProvider
 )
-from mmct.providers.local import CustomImageEmbeddingProvider
+from mmct.providers.local import ClipImageEmbeddingProvider
 from azure.identity import DefaultAzureCredential, AzureCliCredential, ChainedTokenCredential
 
 # Configure credentials (or use api_key directly)
@@ -115,7 +115,7 @@ provider = IngestionProviderConfig(
         api_version="<your-api-version>",
         credentials=credentials,
     ),
-    image_embedding_provider=CustomImageEmbeddingProvider(),
+    image_embedding_provider=ClipImageEmbeddingProvider(),
     vectordb_chapter=AzureSearchProvider(
         endpoint="https://<your-search-service>.search.windows.net",
         index_name="<your-chapter-index-name>",
@@ -165,7 +165,7 @@ from mmct.providers.azure import (
     AzureSearchProvider,
     AzureStorageProvider
 )
-from mmct.providers.local import CustomImageEmbeddingProvider
+from mmct.providers.local import ClipImageEmbeddingProvider
 from azure.identity import DefaultAzureCredential, AzureCliCredential, ChainedTokenCredential
 
 # Configure credentials (or use api_key directly)
@@ -186,7 +186,7 @@ provider = VideoAgentProviderConfig(
         api_version="<your-api-version>",
         credentials=credentials,
     ),
-    image_embedding_provider=CustomImageEmbeddingProvider(),
+    image_embedding_provider=ClipImageEmbeddingProvider(),
     vectordb_chapter=AzureSearchProvider(
         endpoint="https://<your-search-service>.search.windows.net",
         index_name="<your-chapter-index-name>",
