@@ -25,7 +25,7 @@ class AzureSearchProvider(BaseSearchProvider):
         endpoint: str,
         credentials: Optional[Union[AzureKeyCredential, AsyncTokenCredential]] = None,
         api_key: Optional[str] = None,
-        dimensions: int = 1536,
+        dimensions: Optional[int] = None,
     ):
         if not endpoint:
                 raise ConfigurationException("Azure AI Search endpoint is required!")
