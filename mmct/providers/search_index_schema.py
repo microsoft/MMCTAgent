@@ -22,13 +22,14 @@ from azure.search.documents.indexes.models import (
 )
 
 
-def create_video_chapter_index_schema(index_name: str) -> SearchIndex:
+def create_video_chapter_index_schema(index_name: str, dimensions: int = 1536) -> SearchIndex:
     """
     Create the index schema definition for video chapter search.
     This schema is based on AISearchDocument model.
 
     Args:
         index_name: Name of the index to create
+        dimensions: Dimensionality of the embedding vectors (default: 1536)
 
     Returns:
         SearchIndex: The index schema definition
@@ -53,7 +54,7 @@ def create_video_chapter_index_schema(index_name: str) -> SearchIndex:
                     facetable=extra.get("facetable", False),
                     sortable=extra.get("sortable", False),
                     hidden=not extra.get("stored", True),
-                    vector_search_dimensions=1536,  # e.g. 1536 for text-embedding-ada-002
+                    vector_search_dimensions=dimensions,  # Configurable dimension from provider
                     vector_search_profile_name="embedding_profile"
                 )
             )
@@ -155,13 +156,14 @@ def create_video_chapter_index_schema(index_name: str) -> SearchIndex:
     return index
 
 
-def create_object_collection_index_schema(index_name: str) -> SearchIndex:
+def create_object_collection_index_schema(index_name: str, dimensions: int = 1536) -> SearchIndex:
     """
     Create the index schema definition for object collection search.
     This schema is based on ObjectCollectionDocument model.
 
     Args:
         index_name: Name of the index to create
+        dimensions: Dimensionality of the embedding vectors (default: 1536)
 
     Returns:
         SearchIndex: The index schema definition
@@ -185,7 +187,7 @@ def create_object_collection_index_schema(index_name: str) -> SearchIndex:
                     facetable=extra.get("facetable", False),
                     sortable=extra.get("sortable", False),
                     hidden=not extra.get("stored", True),
-                    vector_search_dimensions=1536,  # Standard dimension for text embeddings
+                    vector_search_dimensions=dimensions,  # Configurable dimension from provider
                     vector_search_profile_name="embedding_profile"
                 )
             )
@@ -273,6 +275,92 @@ def create_object_collection_index_schema(index_name: str) -> SearchIndex:
         fields=fields,
         vector_search=vector_search,
         semantic_search=semantic_config
-        
+
     )
+    return index
+
+
+def create_keyframe_index_schema(index_name: str, dimensions: int = 512) -> SearchIndex:
+    """
+    Create Azure AI Search index schema for keyframes.
+
+    Args:
+        index_name: Name of the index to create
+        dimensions: Dimensionality of the CLIP embedding vectors (default: 512)
+
+    Returns:
+        SearchIndex: Azure-specific index schema definition
+    """
+    fields = [
+        # identifier
+        SimpleField(name="id", type=SearchFieldDataType.String, key=True),
+        # metadata fields
+        SearchableField(
+            name="video_id", type=SearchFieldDataType.String, filterable=True, facetable=True
+        ),
+        SearchableField(
+            name="keyframe_filename",
+            type=SearchFieldDataType.String,
+            filterable=True,
+            facetable=True,
+        ),
+        # vector field for CLIP embeddings
+        SearchField(
+            name="embeddings",
+            type=SearchFieldDataType.Collection(SearchFieldDataType.Single),
+            searchable=True,
+            vector_search_dimensions=dimensions,  # Configurable dimension from provider
+            vector_search_profile_name="clip-profile",
+        ),
+        SimpleField(
+            name="created_at",
+            type=SearchFieldDataType.DateTimeOffset,
+            filterable=True,
+            sortable=True,
+        ),
+        SimpleField(
+            name="motion_score", type=SearchFieldDataType.Double, filterable=True, sortable=True
+        ),
+        SimpleField(
+            name="timestamp_seconds",
+            type=SearchFieldDataType.Double,
+            filterable=True,
+            sortable=True,
+        ),
+        SimpleField(name="blob_url", type=SearchFieldDataType.String),
+        SimpleField(name="parent_id", type=SearchFieldDataType.String, filterable=True),
+        SimpleField(
+            name="parent_duration",
+            type=SearchFieldDataType.Double,
+            filterable=True,
+            sortable=True,
+        ),
+        SimpleField(
+            name="video_duration",
+            type=SearchFieldDataType.Double,
+            filterable=True,
+            sortable=True,
+        ),
+    ]
+
+    vector_search = VectorSearch(
+        algorithms=[
+            HnswAlgorithmConfiguration(
+                name="hnsw-algorithm",
+                parameters={
+                    "m": 4,
+                    "efConstruction": 400,
+                    "efSearch": 500,
+                    "metric": "cosine",
+                },
+            )
+        ],
+        profiles=[
+            VectorSearchProfile(
+                name="clip-profile", algorithm_configuration_name="hnsw-algorithm"
+            )
+        ],
+    )
+
+    index = SearchIndex(name=index_name, fields=fields, vector_search=vector_search)
     return index

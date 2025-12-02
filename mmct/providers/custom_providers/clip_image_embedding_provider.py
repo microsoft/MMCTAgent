@@ -9,7 +9,7 @@ from mmct.utils.error_handler import handle_exceptions, convert_exceptions, Prov
 import asyncio
 
 
-class CustomImageEmbeddingProvider(BaseImageEmbeddingProvider):
+class ClipImageEmbeddingProvider(BaseImageEmbeddingProvider):
     """CLIP-based image and text embedding provider implementation."""
 
     def __init__(self, model_name:Optional[str] = "openai/clip-vit-base-patch32", device:Optional[str]='auto',batch_size:Optional[int] = 8, max_image_size:Optional[int]=224):

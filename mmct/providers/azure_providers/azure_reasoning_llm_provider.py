@@ -1,4 +1,4 @@
-from mmct.providers.base.llm_provider import LLMProvider
+from mmct.providers.base import BaseLLMProvider
 from loguru import logger
 from openai import AsyncAzureOpenAI
 from azure.identity import get_bearer_token_provider
@@ -9,7 +9,7 @@ from mmct.providers.credentials import AzureCredentials
 from autogen_ext.models.openai import AzureOpenAIChatCompletionClient
 
 
-class AzureReasoningLLMProvider(LLMProvider):
+class AzureReasoningLLMProvider(BaseLLMProvider):
     """Azure OpenAI LLM provider implementation for reasoning models.
     
     This provider is specifically designed for reasoning models (e.g., o1, o3-mini)

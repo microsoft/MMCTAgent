@@ -2,30 +2,18 @@ from mmct.utils.error_handler import handle_exceptions, convert_exceptions
 from mmct.utils.error_handler import ProviderException, ConfigurationException
 from loguru import logger
 from typing import Dict, Any, List, Optional, Union
-from datetime import datetime
 from azure.core.credentials import AzureKeyCredential
 from azure.core.credentials_async import AsyncTokenCredential
 from azure.search.documents.aio import SearchClient
 from azure.core.credentials import AzureKeyCredential
 from azure.search.documents.indexes.aio import SearchIndexClient
 from azure.search.documents.models import VectorizedQuery
-from azure.search.documents.indexes.models import (
-    SearchIndex,
-    SearchField,
-    SimpleField,
-    SearchableField,
-    SearchFieldDataType,
-    SemanticSearch,
-    SemanticConfiguration,
-    SemanticPrioritizedFields,
-    SemanticField,
-    VectorSearch,
-    HnswAlgorithmConfiguration,
-    ExhaustiveKnnAlgorithmConfiguration,
-    VectorSearchProfile,
-)
 from mmct.providers.base import BaseSearchProvider
-from mmct.providers.credentials import AzureCredentials
+from mmct.providers.search_index_schema import (
+    create_video_chapter_index_schema,
+    create_keyframe_index_schema,
+    create_object_collection_index_schema,
+)
 
 
 class AzureSearchProvider(BaseSearchProvider):
@@ -37,6 +25,7 @@ class AzureSearchProvider(BaseSearchProvider):
         endpoint: str,
         credentials: Optional[Union[AzureKeyCredential, AsyncTokenCredential]] = None,
         api_key: Optional[str] = None,
+        dimensions: int = 1536,
     ):
         if not endpoint:
                 raise ConfigurationException("Azure AI Search endpoint is required!")
@@ -54,6 +43,7 @@ class AzureSearchProvider(BaseSearchProvider):
         self.credentials = credentials
         self.index_name = index_name
         self.endpoint = endpoint
+        self.dimensions = dimensions
         self.index_client = self._initialize_index_client()
        
         # Cache for search client
@@ -93,203 +83,6 @@ class AzureSearchProvider(BaseSearchProvider):
         except Exception as e:
             raise ProviderException(f"Failed to initialize Azure AI Search Index client: {e}")
 
-    def _create_video_chapter_index_schema(self, dim: int = 1536) -> SearchIndex:
-        """
-        Create the index schema definition for video chapter search.
-        This schema is based on AISearchDocument model.
-
-        Returns:
-            SearchIndex: The index schema definition
-        """
-        from mmct.providers.search_document_models import ChapterIndexDocument
-
-        # Create index definition using AISearchDocument model fields
-        fields = []
-        searchable_fields_names = []
-
-        for name, model_field in ChapterIndexDocument.model_fields.items():
-            extra = model_field.json_schema_extra
-
-            # Special handling for embeddings vector
-            if name == "embeddings":
-                fields.append(
-                    SearchField(
-                        name=name,
-                        type=SearchFieldDataType.Collection(SearchFieldDataType.Single),
-                        searchable=True,
-                        filterable=extra.get("filterable", False),
-                        facetable=extra.get("facetable", False),
-                        sortable=extra.get("sortable", False),
-                        hidden=not extra.get("stored", True),
-                        vector_search_dimensions=dim,  # e.g. 1536 for text-embedding-ada-002
-                        vector_search_profile_name="embedding_profile",
-                    )
-                )
-                continue
-
-            # Choose data type based on annotation
-            if model_field.annotation is datetime:
-                data_type = SearchFieldDataType.DateTimeOffset
-            elif model_field.annotation is float:
-                data_type = SearchFieldDataType.Double
-            elif model_field.annotation is int:
-                data_type = SearchFieldDataType.Int32
-            else:
-                data_type = SearchFieldDataType.String
-
-            common_kwargs = dict(
-                name=name,
-                type=data_type,
-                key=extra.get("key", False),
-                filterable=extra.get("filterable", False),
-                facetable=extra.get("facetable", False),
-                sortable=extra.get("sortable", False),
-                retrievable=extra.get("retrievable", True),
-                hidden=not extra.get("stored", True),
-            )
-
-            if extra.get("searchable", False):
-                searchable_fields_names.append(name)
-                fields.append(
-                    SearchableField(
-                        **common_kwargs, analyzer_name="en.microsoft"  # or your preferred analyzer
-                    )
-                )
-            else:
-                fields.append(SimpleField(**common_kwargs))
-
-        # Configure semantic search
-        important_fields = [
-            SemanticField(field_name="chapter_transcript"),
-            SemanticField(field_name="text_from_scene"),
-            SemanticField(field_name="action_taken"),
-            SemanticField(field_name="detailed_summary"),
-        ]
-        semantic_config = SemanticSearch(
-            configurations=[
-                SemanticConfiguration(
-                    name="my-semantic-search-config",
-                    prioritized_fields=SemanticPrioritizedFields(
-                        content_fields=important_fields, keywords_fields=important_fields
-                    ),
-                )
-            ]
-        )
-
-        # Configure vector search algorithms
-        vector_search = VectorSearch(
-            algorithms=[
-                HnswAlgorithmConfiguration(
-                    name="hnsw_config",
-                    parameters={"m": 4, "efConstruction": 400, "efSearch": 500, "metric": "cosine"},
-                ),
-                ExhaustiveKnnAlgorithmConfiguration(
-                    name="myExhaustiveKnn", parameters={"metric": "cosine"}
-                ),
-            ],
-            profiles=[
-                VectorSearchProfile(
-                    name="embedding_profile", algorithm_configuration_name="hnsw_config"
-                ),
-                VectorSearchProfile(
-                    name="myExhaustiveKnnProfile", algorithm_configuration_name="myExhaustiveKnn"
-                ),
-            ],
-        )
-
-        # Create the index with all configurations
-        index = SearchIndex(
-            name=self.index_name,
-            fields=fields,
-            semantic_search=semantic_config,
-            vector_search=vector_search,
-        )
-
-        return index
-
-    def _create_keyframe_index_schema(self, dim: int = 512) -> SearchIndex:
-        """
-        Create Azure AI Search index schema for keyframes.
-
-        Args:
-            dim: Dimensionality of the CLIP embedding vectors (default: 512)
-
-        Returns:
-            SearchIndex: Azure-specific index schema definition
-        """
-        fields = [
-            # identifier
-            SimpleField(name="id", type=SearchFieldDataType.String, key=True),
-            # metadata fields
-            SearchableField(
-                name="video_id", type=SearchFieldDataType.String, filterable=True, facetable=True
-            ),
-            SearchableField(
-                name="keyframe_filename",
-                type=SearchFieldDataType.String,
-                filterable=True,
-                facetable=True,
-            ),
-            # vector field for CLIP embeddings
-            SearchField(
-                name="embeddings",
-                type=SearchFieldDataType.Collection(SearchFieldDataType.Single),
-                searchable=True,
-                vector_search_dimensions=dim,
-                vector_search_profile_name="clip-profile",
-            ),
-            SimpleField(
-                name="created_at",
-                type=SearchFieldDataType.DateTimeOffset,
-                filterable=True,
-                sortable=True,
-            ),
-            SimpleField(
-                name="motion_score", type=SearchFieldDataType.Double, filterable=True, sortable=True
-            ),
-            SimpleField(
-                name="timestamp_seconds",
-                type=SearchFieldDataType.Double,
-                filterable=True,
-                sortable=True,
-            ),
-            SimpleField(name="blob_url", type=SearchFieldDataType.String),
-            SimpleField(name="parent_id", type=SearchFieldDataType.String, filterable=True),
-            SimpleField(
-                name="parent_duration",
-                type=SearchFieldDataType.Double,
-                filterable=True,
-                sortable=True,
-            ),
-            SimpleField(
-                name="video_duration",
-                type=SearchFieldDataType.Double,
-                filterable=True,
-                sortable=True,
-            ),
-        ]
-
-        vector_search = VectorSearch(
-            algorithms=[
-                HnswAlgorithmConfiguration(
-                    name="hnsw-algorithm",
-                    parameters={
-                        "m": 4,
-                        "efConstruction": 400,
-                        "efSearch": 500,
-                        "metric": "cosine",
-                    },
-                )
-            ],
-            profiles=[
-                VectorSearchProfile(
-                    name="clip-profile", algorithm_configuration_name="hnsw-algorithm"
-                )
-            ],
-        )
-
-        index = SearchIndex(name=self.index_name, fields=fields, vector_search=vector_search)
-        return index
 
     @handle_exceptions(retries=3, exceptions=(Exception,))
     @convert_exceptions({Exception: ProviderException})
@@ -421,37 +214,13 @@ class AzureSearchProvider(BaseSearchProvider):
             if isinstance(index_schema, str):
                 # Simple string indicator
                 if index_schema == "keyframes":
-                    index_schema = self._create_keyframe_index_schema()
+                    index_schema = create_keyframe_index_schema(index_name = self.index_name,dimensions = self.dimensions)
                 elif index_schema == "chapter":
-                    index_schema = self._create_video_chapter_index_schema()
+                    index_schema = create_video_chapter_index_schema(index_name = self.index_name,dimensions = self.dimensions)
                 elif index_schema == "object_registry":
-                    from mmct.providers.search_index_schema import (
-                        create_object_collection_index_schema,
-                    )
-
-                    index_schema = create_object_collection_index_schema(self.index_name)
+                    index_schema = create_object_collection_index_schema(index_name = self.index_name,dimensions = self.dimensions)
                 else:
                     raise ProviderException(f"Unknown index schema type: {index_schema}")
-
-            elif isinstance(index_schema, dict):
-                # Dict with type indicator and optional params
-                schema_type = index_schema.get("type", "chapter")
-                if schema_type == "keyframe":
-                    dim = index_schema.get("dim", 512)
-                    index_schema = self._create_keyframe_index_schema(self.index_name, dim)
-                elif schema_type == "chapter":
-                    dim = index_schema.get("dim", 1536)
-                    index_schema = self._create_video_chapter_index_schema(self.index_name, dim)
-                elif schema_type == "object_collection":
-                    from mmct.providers.search_index_schema import (
-                        create_object_collection_index_schema,
-                    )
-
-                    index_schema = create_object_collection_index_schema(self.index_name)
-                else:
-                    raise ProviderException(f"Unknown index schema type: {schema_type}")
-
-            # Otherwise assume it's already a SearchIndex object
 
             await self.index_client.create_index(index_schema)
             logger.info(f"Successfully created index '{self.index_name}'")

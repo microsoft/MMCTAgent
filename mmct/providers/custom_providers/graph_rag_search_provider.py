@@ -6,7 +6,7 @@ from loguru import logger
 from mmct.providers.custom_providers.graph_rag.document_graph_handler import DocumentGraph
 
 
-class CustomSearchProvider(BaseSearchProvider):
+class GraphRagSearchProvider(BaseSearchProvider):
     """Custom Search provider implementation using GraphRAG."""
 
     def __init__(self):

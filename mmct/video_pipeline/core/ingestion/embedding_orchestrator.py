@@ -17,7 +17,6 @@ from mmct.video_pipeline.core.ingestion.models import (
     ObjectCollectionMetadata,
 )
 from mmct.video_pipeline.utils.helper import get_media_folder
-from mmct.config.settings import ImageEmbeddingConfig
 from mmct.utils.error_handler import handle_exceptions, convert_exceptions, ProviderException
 
 
@@ -36,14 +35,13 @@ class EmbeddingOrchestrator:
     ):
         """
         Initialize the embedding orchestrator.
-        
+
         Args:
             embedding_provider: Provider for text embeddings
             image_embedding_provider: Provider for image embeddings (CLIP)
         """
         self.embedding_provider = embedding_provider
         self.image_embedding_provider = image_embedding_provider
-        self.embedding_config = ImageEmbeddingConfig()
 
     async def generate_all_embeddings(self, video_id: str) -> None:
         """
@@ -105,7 +103,7 @@ class EmbeddingOrchestrator:
                 return
 
             # Generate embeddings in batches using the provider
-            batch_size = self.embedding_config.image_embedding_batch_size
+            batch_size = self.image_embedding_provider.batch_size
             for i in range(0, len(valid_file_paths), batch_size):
                 batch_paths = valid_file_paths[i:i + batch_size]
                 batch_keyframes = valid_keyframes[i:i + batch_size]

@@ -5,8 +5,7 @@ import numpy as np
 from dataclasses import dataclass
 from mmct.video_pipeline.core.ingestion.key_frames_extractor.keyframe_extractor import FrameMetadata
 from mmct.video_pipeline.utils.helper import get_media_folder
-from mmct.providers.custom_providers import CustomImageEmbeddingProvider
-from mmct.config.settings import ImageEmbeddingConfig
+from mmct.providers.custom_providers import ClipImageEmbeddingProvider
 
 logger = logging.getLogger(__name__)
 
@@ -21,17 +20,15 @@ class FrameEmbedding:
 class CLIPEmbeddingsGenerator:
     """Generate CLIP embeddings for video frames."""
 
-    def __init__(self, config: ImageEmbeddingConfig = None):
+    def __init__(self, image_embedding_provider: ClipImageEmbeddingProvider):
         """
         Initialize the embeddings generator.
 
         Args:
-            config: ImageEmbeddingConfig object for embedding parameters
+            image_embedding_provider: ClipImageEmbeddingProvider instance
         """
-        self.config = config or ImageEmbeddingConfig()
-
         # Initialize the image embedding provider
-        self.provider = CustomImageEmbeddingProvider(self.config)
+        self.provider = image_embedding_provider
 
     async def process_frames(self, frame_metadata_list: List[FrameMetadata],
                            video_id: str) -> List[FrameEmbedding]:
@@ -58,8 +55,8 @@ class CLIPEmbeddingsGenerator:
             frame_embeddings = []
 
             # Process frames in batches
-            for i in range(0, len(frame_metadata_list), self.config.image_embedding_batch_size):
-                batch_metadata = frame_metadata_list[i:i + self.config.image_embedding_batch_size]
+            for i in range(0, len(frame_metadata_list), self.provider.batch_size):
+                batch_metadata = frame_metadata_list[i:i + self.provider.batch_size]
                 batch_frame_paths = []
                 batch_valid_metadata = []
 
@@ -75,7 +72,7 @@ class CLIPEmbeddingsGenerator:
                         logger.warning(f"Frame file not found: {frame_path}")
 
                 if not batch_frame_paths:
-                    logger.warning(f"No valid images in batch {i // self.config.image_embedding_batch_size + 1}")
+                    logger.warning(f"No valid images in batch {i // self.provider.batch_size + 1}")
                     continue
 
                 # Generate embeddings for this batch using the provider
@@ -92,11 +89,11 @@ class CLIPEmbeddingsGenerator:
                         )
                         frame_embeddings.append(frame_embedding)
 
-                    logger.info(f"Generated embeddings for batch {i // self.config.image_embedding_batch_size + 1} "
+                    logger.info(f"Generated embeddings for batch {i // self.provider.batch_size + 1} "
                               f"({len(batch_embeddings)} embeddings)")
 
                 except Exception as e:
-                    logger.error(f"Failed to process batch {i // self.config.image_embedding_batch_size + 1}: {e}")
+                    logger.error(f"Failed to process batch {i // self.provider.batch_size + 1}: {e}")
                     continue
 
             logger.info(f"Successfully generated {len(frame_embeddings)} frame embeddings")

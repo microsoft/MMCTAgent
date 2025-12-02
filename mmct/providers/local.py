@@ -9,14 +9,14 @@ Example:
     >>> search = LocalFaissSearchProvider(config_dict)
 """
 
-from .custom_providers.search_provider import CustomSearchProvider
+from .custom_providers.graph_rag_search_provider import GraphRagSearchProvider
 from .custom_providers.local_faiss_search_provider import LocalFaissSearchProvider
-from .custom_providers.image_embedding_provider import CustomImageEmbeddingProvider
-from .custom_providers.storage_provider import LocalStorageProvider
+from .custom_providers.clip_image_embedding_provider import ClipImageEmbeddingProvider
+from .custom_providers.local_storage_provider import LocalStorageProvider
 
 __all__ = [
-    'CustomSearchProvider',
+    'GraphRagSearchProvider',
     'LocalFaissSearchProvider',
-    'CustomImageEmbeddingProvider',
+    'ClipImageEmbeddingProvider',
     'LocalStorageProvider',
 ]
