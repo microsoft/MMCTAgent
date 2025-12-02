@@ -63,6 +63,7 @@ class StepContext:
     transcript_path: str
     output_dir: Path
     video_duration_seconds: Optional[float]
+    video_id: Optional[str]
     metadata: Dict[str, Any]
     data_store: StepDataStore
     video_metadata: Optional[VideoMetadata] = None

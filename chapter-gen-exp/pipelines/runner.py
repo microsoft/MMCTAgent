@@ -60,6 +60,7 @@ class PipelineRunner:
             transcript_path=config.transcript_path,
             output_dir=self.output_dir,
             video_duration_seconds=video_duration,
+            video_id=config.video_id,
             metadata=config.metadata,
             data_store=self._data_store,
             video_metadata=self._video_metadata,

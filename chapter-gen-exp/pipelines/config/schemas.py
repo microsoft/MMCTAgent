@@ -33,6 +33,7 @@ class ExperimentConfig:
     video_uri: str
     transcript_path: str
     output_dir: str
+    video_id: Optional[str] = None
     video_duration_seconds: Optional[float] = None
     pipeline: PipelineConfig = field(default_factory=PipelineConfig)
     metadata: Dict[str, Any] = field(default_factory=dict)
@@ -73,6 +74,7 @@ def load_experiment_config(path: str | Path) -> ExperimentConfig:
         video_uri=str(raw_config["video_uri"]),
         transcript_path=str(raw_config["transcript_path"]),
         output_dir=str(raw_config.get("output_dir", "./outputs")),
+        video_id=str(raw_config["video_id"]) if "video_id" in raw_config and raw_config["video_id"] is not None else None,
         video_duration_seconds=raw_config.get("video_duration_seconds"),
         pipeline=pipeline,
         metadata=dict(raw_config.get("metadata", {})),

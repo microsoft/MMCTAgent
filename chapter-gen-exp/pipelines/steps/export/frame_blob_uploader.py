@@ -404,9 +404,12 @@ class FrameBlobUploadStep(PipelineStep):
     def _resolve_video_id(self, context: StepContext) -> str:
         if self.params.get("video_id"):
             return str(self.params["video_id"])
-        if context.metadata.get("video_id"):
-            return str(context.metadata["video_id"])
-        return Path(context.video_uri).stem
+        video_id = context.video_id
+        if video_id:
+            return str(video_id)
+        raise ValueError(
+            "'video_id' must be provided via params or experiment metadata before uploading frames."
+        )
 
     def _resolve_index_name(self, video_id: str, metadata: Dict[str, Any]) -> str:
         if self.params.get("index_name"):
