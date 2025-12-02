@@ -82,48 +82,176 @@ The tools work together in a coordinated pipeline to ensure comprehensive video 
 
 ## **Usage**
 
-> MMCT Video Ingestion
+### **Video Ingestion**
 
 ```python
-import asyncio
-from mmct.video_pipeline import IngestionPipeline, Languages, TranscriptionServices
-video_path = ""   # provide the video path
-index = ""        # provide the AI Search Index Name
-source_language = Languages.ENGLISH_INDIA   # select the valid language
-ingestion = IngestionPipeline(
-    video_path=video_path,
-    index_name=index,
-    transcription_service=TranscriptionServices.AZURE_STT, # select the transcription option
-    language=source_language,
+from mmct.video_pipeline import IngestionPipeline, Languages
+from mmct.config.providers import IngestionProviderConfig
+from mmct.providers.azure import (
+    AzureLLMProvider,
+    AzureEmbeddingProvider,
+    AzureSearchProvider,
+    AzureStorageProvider,
+    WhisperTranscriptionProvider
+)
+from mmct.providers.local import CustomImageEmbeddingProvider
+from azure.identity import DefaultAzureCredential, AzureCliCredential, ChainedTokenCredential
+
+# Configure credentials (or use api_key directly)
+credentials = ChainedTokenCredential(AzureCliCredential(), DefaultAzureCredential())
+
+# Initialize the provider
+provider = IngestionProviderConfig(
+    llm_provider=AzureLLMProvider(
+        endpoint="https://<your-openai-endpoint>.openai.azure.com/",
+        deployment_name="<your-llm-deployment-name>",
+        model_name="<your-llm-model-name>",
+        api_version="<your-api-version>",
+        credentials=credentials,
+    ),
+    embedding_provider=AzureEmbeddingProvider(
+        endpoint="https://<your-openai-endpoint>.openai.azure.com/",
+        deployment_name="<your-embedding-deployment-name>",
+        api_version="<your-api-version>",
+        credentials=credentials,
+    ),
+    image_embedding_provider=CustomImageEmbeddingProvider(),
+    vectordb_chapter=AzureSearchProvider(
+        endpoint="https://<your-search-service>.search.windows.net",
+        index_name="<your-chapter-index-name>",
+        credentials=credentials,
+    ),
+    vectordb_keyframes=AzureSearchProvider(
+        endpoint="https://<your-search-service>.search.windows.net",
+        index_name="<your-keyframe-index-name>",
+        credentials=credentials,
+    ),
+    vectordb_object_registry=AzureSearchProvider(
+        endpoint="https://<your-search-service>.search.windows.net",
+        index_name="<your-object-registry-index-name>",
+        credentials=credentials,
+    ),
+    storage_provider=AzureStorageProvider(
+        storage_account_name="<your-storage-account-name>",
+        keyframe_container_name="<your-keyframe-container-name>",
+        credentials=credentials,
+    ),
+    transcription_provider=WhisperTranscriptionProvider(
+        endpoint="https://<your-openai-endpoint>.openai.azure.com/",
+        api_version="<your-api-version>",
+        deployment_name="<your-whisper-deployment-name>",
+        credentials=credentials,
+    ),
 )
 
-asyncio.run(ingestion.run())
+ingestion = IngestionPipeline(
+    video_path="path/to/your/video.mp4",
+    language=Languages.ENGLISH_INDIA,
+    provider=provider
+)
+
+# Run the ingestion pipeline
+await ingestion.run()
 ```
 
-> MMCT Video Agent
+### **Video Agent**
 
 ```python
-import asyncio
 from mmct.video_pipeline import VideoAgent
+from mmct.config.providers import VideoAgentProviderConfig
+from mmct.providers.azure import (
+    AzureLLMProvider,
+    AzureEmbeddingProvider,
+    AzureSearchProvider,
+    AzureStorageProvider
+)
+from mmct.providers.local import CustomImageEmbeddingProvider
+from azure.identity import DefaultAzureCredential, AzureCliCredential, ChainedTokenCredential
 
-query = "Your question about the video"
-index_name = "your-azure-search-index"  # Azure AI Search index name
-video_id = None  # Optional: specify specific video ID
-url = None  # Optional: URL for analysis
-use_critic_agent = True  # Enable critical thinking framework
-stream = False  # Flag to stream the logs of the Agentic Flow
-cache = False  # Optional: enable caching
+# Configure credentials (or use api_key directly)
+credentials = ChainedTokenCredential(AzureCliCredential(), DefaultAzureCredential())
 
-video_agent = VideoAgent(
-    query=query,
-    index_name=index_name,
-    video_id=video_id,
-    url=url,
-    use_critic_agent=use_critic_agent,
-    stream=stream,
-    cache=cache
+# Initialize the provider
+provider = VideoAgentProviderConfig(
+    llm_provider=AzureLLMProvider(
+        endpoint="https://<your-openai-endpoint>.openai.azure.com/",
+        deployment_name="<your-llm-deployment-name>",
+        model_name="<your-llm-model-name>",
+        api_version="<your-api-version>",
+        credentials=credentials,
+    ),
+    embedding_provider=AzureEmbeddingProvider(
+        endpoint="https://<your-openai-endpoint>.openai.azure.com/",
+        deployment_name="<your-embedding-deployment>",
+        api_version="<your-api-version>",
+        credentials=credentials,
+    ),
+    image_embedding_provider=CustomImageEmbeddingProvider(),
+    vectordb_chapter=AzureSearchProvider(
+        endpoint="https://<your-search-service>.search.windows.net",
+        index_name="<your-chapter-index-name>",
+        credentials=credentials,
+    ),
+    vectordb_keyframes=AzureSearchProvider(
+        endpoint="https://<your-search-service>.search.windows.net",
+        index_name="<your-keyframe-index-name>",
+        credentials=credentials,
+    ),
+    vectordb_object_registry=AzureSearchProvider(
+        endpoint="https://<your-search-service>.search.windows.net",
+        index_name="<your-object-registry-index-name>",
+        credentials=credentials,
+    ),
+    storage_provider=AzureStorageProvider(
+        storage_account_name="<your-storage-account-name>",
+        keyframe_container_name="<your-keyframe-container-name>",
+        credentials=credentials,
+    )
 )
 
-response = asyncio.run(video_agent())
+# Configure the Video Agent
+video_agent = VideoAgent(
+    query="Your question about the video",
+    video_id=None,  # Optional: specify video ID
+    url=None,  # Optional: URL for filtering
+    use_critic_agent=True,  # Enable critical thinking framework
+    stream=False,  # Stream logs of the agentic flow
+    cache=False,  # Optional: enable caching
+    provider=provider
+)
+
+# Execute video analysis
+response = await video_agent()
 print(response.response)
 ```
+
+### **Using Custom LLM Providers**
+
+You can implement custom LLM providers for any vendor (Anthropic, Cohere, etc.) by inheriting from `BaseLLMProvider`:
+
+```python
+from mmct.providers.base import BaseLLMProvider
+from mmct.config.providers import VideoAgentProviderConfig, IngestionProviderConfig
+from mmct.video_pipeline import VideoAgent, IngestionPipeline
+
+# Your custom LLM provider implementation
+class CustomLLMProvider(BaseLLMProvider):
+    # Implement required methods: chat_completion() and get_autogen_client()
+    pass
+
+# Use your custom provider with VideoAgent
+custom_llm = CustomLLMProvider(api_key="your-api-key", model_name="your-model")
+provider = VideoAgentProviderConfig(
+    llm_provider=custom_llm,
+    # ... other required providers
+)
+
+video_agent = VideoAgent(query="Your query", provider=provider)
+response = await video_agent()
+```
+
+For a complete working example of a custom Anthropic provider, see [`examples/image_agent.ipynb`](../../examples/image_agent.ipynb).
+
+For detailed implementation instructions, refer to the [Providers Guide](../providers/README.md).
+
+---

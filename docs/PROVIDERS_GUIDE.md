@@ -44,6 +44,63 @@ Note: `SEARCH_INDEX_PATH` is not an enforced env var in code — when using `loc
 
 ---
 
+## Custom LLM Providers
+
+### Overview
+
+MMCTAgent supports custom LLM providers for any vendor (Anthropic, Cohere, Hugging Face, etc.). Implement custom providers in your own codebase by inheriting from `BaseLLMProvider`:
+
+```python
+from mmct.providers.base import BaseLLMProvider
+```
+
+### Example: Anthropic Provider
+
+See the complete working implementation in `examples/image_agent.ipynb` under the section "Example Implementation of LLMProvider from other vendor like Anthropic".
+
+Key features demonstrated:
+- Inheriting from `BaseLLMProvider`
+- Implementing required methods: `chat_completion()` and `get_autogen_client()`
+- Message format conversion (OpenAI-style → Anthropic format)
+- System message handling
+- Autogen client integration with graceful error handling
+- Proper async client usage
+
+### Using Custom LLM Providers
+
+Instantiate your custom provider and pass it directly to ImageAgent, VideoAgent, or IngestionPipeline:
+
+```python
+from mmct.config.providers import ImageAgentProviderConfig, VideoAgentProviderConfig, IngestionProviderConfig
+from mmct.image_pipeline import ImageAgent
+from mmct.video_pipeline import VideoAgent, IngestionPipeline
+from your_module import CustomLLMProvider
+
+# Create your custom provider
+custom_llm = CustomLLMProvider(
+    api_key="your-api-key",
+    model_name="your-model-name"
+)
+
+# Use with ImageAgent
+image_config = ImageAgentProviderConfig(llm_provider=custom_llm)
+image_agent = ImageAgent(..., provider=image_config)
+
+# Use with VideoAgent
+video_config = VideoAgentProviderConfig(llm_provider=custom_llm)
+video_agent = VideoAgent(..., provider=video_config)
+
+# Use with IngestionPipeline
+ingestion_config = IngestionProviderConfig(llm_provider=custom_llm)
+ingestion = IngestionPipeline(..., provider=ingestion_config)
+```
+
+For complete implementation details:
+- [`examples/image_agent.ipynb`](../examples/image_agent.ipynb) - Full Anthropic provider example
+- [`mmct/providers/README.md`](../mmct/providers/README.md) - Step-by-step implementation guide
+
+---
+
 ## Minimal code examples
 
 Create a provider instance (recommended):

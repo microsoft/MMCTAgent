@@ -1,6 +1,6 @@
 # **Providers Module**
 
-A flexible and extensible provider system for integrating multiple AI services including LLMs, embedding models, image generation, vision, and transcription services.
+A flexible and extensible provider system for integrating multiple services including LLMs, embedding models, image embedding, storage, and transcription services.
 
 ## 📁 Architecture
 
@@ -10,8 +10,7 @@ The providers module is organized into three main components:
 providers/
 ├── base/                  # Base provider classes (abstract interfaces)
 ├── azure_providers/       # Azure service implementations
-├── custom_providers/      # Your custom provider implementation should be added here
-└── factory.py             # provider availability
+├── custom_providers/      # local provider implementation
 ```
 
 ### Base Providers
@@ -21,7 +20,6 @@ The `base/` folder contains abstract base classes that define the interface for 
 - **`llm_provider.py`** - Base class for Language Model providers
 - **`embedding_provider.py`** - Base class for Embedding providers
 - **`search_provider.py`** - Base class for Search Index provider
-- **`vision_provider.py`** - Base class for Vision/Image Understanding providers
 - **`transcription_provider.py`** - Base class for Audio Transcription providers
 - **`image_embedding_provider`** - Base class for image embedding generation providers
 - **`storage_provider`** - Base class for the storage providers.
@@ -29,16 +27,170 @@ The `base/` folder contains abstract base classes that define the interface for 
 ### Azure Providers
 
 The `azure_providers/` module contains ready-to-use implementations of all base providers using Azure services. These serve as reference implementations and can be used directly in your projects.
+---
 
-By default, the provider usage is set for Azure Resources. Kindly go through the `.env` to fill out the required Azure Config.
+## 🔌 Implementing Custom Provider
+Here is the implementation plan for custom LLM Provider
 
-### Custom Providers
+MMCTAgent's provider system is fully extensible. You can implement custom LLM providers in your own codebase to support any LLM vendor (e.g., Anthropic, Cohere, Hugging Face, etc.).
 
-The `custom_providers/` module is where you add your own provider implementations for any custom services.
+### Required Methods
+
+All LLM providers must implement two abstract methods from `BaseLLMProvider`:
+
+1. **`async chat_completion(messages: List[Dict], **kwargs) -> Dict[str, Any]`**
+   - Generates chat completions using the LLM
+   - Must return a dict with: `content`, `usage`, `model`, `finish_reason`
+
+2. **`get_autogen_client(**kwargs)`**
+   - Returns an autogen-compatible client for the LLM
+   - Required for integration with autogen-based agents (ImageAgent, VideoAgent, IngestionPipeline)
+
+### Implementation Steps
+
+#### Step 1: Create Your Provider Class in Your Codebase
+
+```python
+# Example: your_project/providers/anthropic_provider.py
+from mmct.providers.base import BaseLLMProvider
+from typing import Dict, Any, List, Optional
+import anthropic
+
+class AnthropicLLMProvider(BaseLLMProvider):
+    """Anthropic LLM provider implementation for Claude models."""
+
+    def __init__(
+        self,
+        api_key: str,
+        model_name: str = "claude-3-5-sonnet-20241022",
+        timeout: Optional[int] = 600,
+        max_retries: Optional[int] = 2,
+    ):
+        if not api_key:
+            raise ValueError("Anthropic API key is required!")
+
+        self.api_key = api_key
+        self.model_name = model_name
+        self.timeout = timeout
+        self.max_retries = max_retries
+        self.client = anthropic.AsyncAnthropic(
+            api_key=self.api_key,
+            timeout=self.timeout,
+            max_retries=self.max_retries,
+        )
+
+    async def chat_completion(self, messages: List[Dict], **kwargs) -> Dict[str, Any]:
+        """Generate chat completion using Anthropic Claude API."""
+        # See examples/image_agent.ipynb for complete implementation
+        pass
+
+    def get_autogen_client(self, **kwargs):
+        """Get autogen-compatible client for Anthropic."""
+        try:
+            from autogen_ext.models.anthropic import AnthropicChatCompletionClient
+
+            temperature = kwargs.get("temperature", 1.0)
+            max_tokens = kwargs.get("max_tokens", 4096)
+
+            return AnthropicChatCompletionClient(
+                model=self.model_name,
+                api_key=self.api_key,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+        except ImportError:
+            raise Exception(
+                "autogen_ext.models.anthropic is not available. "
+                "Install with: pip install 'autogen-ext[anthropic]'"
+            )
+
+    async def close(self):
+        """Close the Anthropic client and cleanup resources."""
+        if self.client:
+            await self.client.close()
+```
+
+**📓 Complete Working Example**: See [`examples/image_agent.ipynb`](../../examples/image_agent.ipynb) for the full implementation with message conversion, error handling, and all required details.
+
+#### Step 2: Use Your Provider with Agents
+
+Simply instantiate your provider and pass it to ImageAgent, VideoAgent, or IngestionPipeline:
+
+```python
+from mmct.config.providers import ImageAgentProviderConfig, VideoAgentProviderConfig, IngestionProviderConfig
+from mmct.image_pipeline import ImageAgent, ImageQnaTools
+from mmct.video_pipeline import VideoAgent, IngestionPipeline
+from your_project.providers.anthropic_provider import AnthropicLLMProvider
+
+# Create your custom LLM provider instance
+custom_llm = AnthropicLLMProvider(
+    api_key="your-anthropic-api-key",
+    model_name="claude-3-5-sonnet-20241022",
+)
+
+# Use with ImageAgent
+image_provider = ImageAgentProviderConfig(llm_provider=custom_llm)
+image_agent = ImageAgent(
+    query="What objects are visible in this image?",
+    image_path="path/to/image.jpg",
+    tools=[ImageQnaTools.vit, ImageQnaTools.object_detection],
+    provider=image_provider
+)
+response = await image_agent()
+
+# Use with VideoAgent
+video_provider = VideoAgentProviderConfig(
+    llm_provider=custom_llm,
+    # You can also pass other providers like search_provider, embedding_provider, etc.
+)
+video_agent = VideoAgent(
+    query="What happens in the video?",
+    index_name="your-index",
+    provider=video_provider
+)
+response = await video_agent()
+
+# Use with IngestionPipeline
+ingestion_provider = IngestionProviderConfig(
+    llm_provider=custom_llm,
+    # You can also pass other providers like search_provider, embedding_provider, storage_provider, etc.
+)
+ingestion = IngestionPipeline(
+    video_path="path/to/video.mp4",
+    index_name="your-index",
+    provider=ingestion_provider
+)
+await ingestion.run()
+```
+
+### Key Implementation Notes
+
+1. **Message Format Conversion**: Different LLM APIs use different message formats:
+   - OpenAI: System messages are part of the messages array
+   - Anthropic: System messages are a separate parameter
+   - Your provider should handle these conversions internally
+
+2. **Error Handling**: Implement robust error handling, especially in `get_autogen_client()` for cases where autogen-ext doesn't support your vendor yet
+
+3. **Response Format**: Ensure `chat_completion()` returns a consistent format:
+   ```python
+   {
+       "content": str,           # The response text
+       "usage": {                # Token usage stats
+           "prompt_tokens": int,
+           "completion_tokens": int,
+           "total_tokens": int
+       },
+       "model": str,             # Model used
+       "finish_reason": str      # Why generation stopped
+   }
+   ```
+
+4. **Async Support**: Use async clients (e.g., `AsyncAnthropic`) for better performance
 
 ---
 
-## 🚀 Adding a Custom Provider
+## 🚀 Adding Other Custom Providers
 
 Follow these steps to add your own provider implementation (search provider example is given below):
 
@@ -70,213 +222,17 @@ class CustomSearchProvider(SearchProvider):
 
 _Add the relevant implementation for your search provider._
 
-### Step 2: Add to Custom Providers Module
+### Step 2: Use Your Provider
 
-Place your implementation file in the `custom_providers/` folder:
-
-```
-custom_providers/
-├── __init__.py
-└── search_provider.py
-```
-
-### Step 3: Update `__init__.py`
-
-Export your provider class in `custom_providers/__init__.py`:
-
-```python
-from .search_provider import CustomSearchProvider
-from .llm_provider import CustomLLMProvider
-
-__all__ = [
-    'CustomSearchProvider',
-    'CustomLLMProvider',
-]
-```
-
-### Step 4: Register the provider in the factory
-
-Add your provider to the available providers list in `mmct/providers/factory.py`:
-
-```python
-from .azure_providers import (
-    AzureSearchProvider
-)
-from .custom_providers import (
-    CustomSearchProvider
-)
-
-class ProviderFactory:
-    """Factory class for creating provider instances."""
-
-    _search_providers: Dict[str, Type[SearchProvider]] = {
-            'azure_ai_search': AzureSearchProvider,
-            'custom_search': CustomSearchProvider   # <-----      
-            # Add other search providers here
-        }
-```
-
-### Step 5: Add Environment Variables
-
-If your provider requires additional configuration, add the environment variables to your `.env` file and update the `mmct/config/settings.py`:
-
-```env
-# Custom Provider Configuration
-CUSTOM_API_KEY=your_api_key_here
-CUSTOM_ENDPOINT=https://api.example.com
-CUSTOM_MODEL_NAME=model-name
-```
-
-Then update the relevant Configs available in the config/settings.py
+Simply instantiate and use your provider directly in your code. Follow the same pattern as shown in the LLM provider example above - create an instance and pass it to the appropriate config.
 
 ---
 
-## 🔧 Using Providers
+## 🔧 Using Custom Providers
 
-There are three ways to use providers in your application:
-
-### Method 1: Environment Variables (Recommended)
-
-Set your preferred provider in the `.env` file:
-
-```env
-LLM_PROVIDER=azure
-EMBEDDING_PROVIDER=openai
-SEARCH_PROVIDER=custom_search
-```
-
-The application will automatically load the configured provider.
-
-### Method 2: Configuration File
-
-Update `mmct/config/settings.py` to set default providers:
-
-Under the respective config (example `LLMConfig`, `SearchConfig` etc) you can directly assign the by default provider name. Example:
-
-```python
-class LLMConfig(BaseSettings):
-    """LLM provider configuration."""
-    
-    provider: str = Field(default="azure", env="LLM_PROVIDER")
-```
-
-_You can add the relevant environment variables that you have to provider to your custom implementation, you can add those variables directly in the respective config itself_
-
-### Method 3: Direct instantiation (code examples)
-
-You can create provider instances directly with `provider_factory`. The factory reads defaults from `MMCTConfig` (which loads `.env`), but you can force a provider and override its runtime config after creation.
-
-Example — custom/local provider (GraphRAG or Local FAISS):
-
-```python
-from mmct.providers.factory import provider_factory
-
-# create the provider by name
-prov = provider_factory.create_search_provider('custom_search')
-
-# override config programmatically if needed
-prov.config['some_custom_key'] = 'value'
-
-# run a search (for custom providers, embedding may be required)
-results = await prov.search(query='find this', embedding=embedding_vector, top=5)
-```
-
-Example — Azure Cognitive Search provider:
-
-```python
-from mmct.providers.factory import provider_factory
-
-# create the Azure Search provider (reads endpoint/api key from MMCTConfig/.env by default)
-azure_search = provider_factory.create_search_provider('azure_ai_search')
-
-# if you need to target a different index at runtime, update the config
-azure_search.config['index_name'] = 'keyframes-local_search_index'
-
-# perform a vector/text search (Azure accepts vector_queries or search_text + filter)
-results = await azure_search.search(query='some text', top=10)
-```
-
-Notes:
-
-- Some providers (like `local_faiss`) expect an `embedding` kwarg when searching. Azure accepts `vector_queries` / `search_text` and `filter` strings.
-- If you need to override many config values programmatically, set `prov.config[...]` after creating the provider instance.
-
----
-
-## 🧠 Using Reasoning Models
-
-Reasoning models (such as OpenAI's o1, o3-mini series) require special handling as they do not support standard LLM parameters like `temperature`, `top_p`, `presence_penalty`, `frequency_penalty`, `logprobs`, `top_logprobs`, `logit_bias`, and `max_tokens`.
-
-### Azure Reasoning LLM Provider
-
-For Azure-hosted reasoning models, use the `AzureReasoningLLMProvider` which automatically filters out unsupported parameters.
-
-#### Configuration
-
-To use reasoning models, update your `.env` file:
-
-```env
-# For Reasoning Models (o1, o3-mini, etc.)
-LLM_PROVIDER=azure_reasoning
-
-# Azure OpenAI Configuration
-LLM_ENDPOINT=https://your-resource.openai.azure.com/
-LLM_DEPLOYMENT_NAME=o1-preview  # or o3-mini, etc.
-LLM_API_VERSION=2024-08-01-preview
-LLM_MODEL_NAME=o1-preview
-LLM_USE_MANAGED_IDENTITY=true
-# LLM_API_KEY=your-api-key  # Only if not using managed identity
-```
-
-> **IMPORTANT** <br>
-> When using `LLM_PROVIDER=azure_reasoning`, the following parameters will be automatically filtered out:
->
-> - `temperature`
-> - `top_p`
-> - `presence_penalty`
-> - `frequency_penalty`
-> - `logprobs`
-> - `top_logprobs`
-> - `logit_bias`
-> - `max_tokens`
-
-> **NOTE** <br>
-> For non-reasoning models (GPT-4o, GPT-4-turbo, etc.), continue using `LLM_PROVIDER=azure` which supports all standard parameters.
-
-#### Programmatic Usage
-
-```python
-from mmct.providers.factory import provider_factory
-
-# Create reasoning model provider
-reasoning_llm = provider_factory.create_llm_provider('azure_reasoning')
-
-# Use it like any other LLM provider
-response = await reasoning_llm.chat_completion(
-    messages=[
-        {"role": "system", "content": "You are a helpful assistant."},
-        {"role": "user", "content": "Explain quantum computing."}
-    ]
-    # Note: temperature, max_tokens, etc. will be automatically filtered
-)
-```
-
-### Switching Between Reasoning and Non-Reasoning Models
-
-To switch between reasoning and non-reasoning models, simply update the `LLM_PROVIDER` in your `.env`:
-
-| Model Type | Provider Value | Supported Parameters |
-|------------|----------------|---------------------|
-| **Non-Reasoning** (GPT-4o, GPT-4-turbo) | `azure` | All standard parameters including temperature, max_tokens, etc. |
-| **Reasoning** (o1, o3-mini) | `azure_reasoning` | Limited parameters only (no temperature, max_tokens, etc.) |
-
-```env
-# For GPT-4o or other non-reasoning models
-LLM_PROVIDER=azure
-
-# For o1, o3-mini or other reasoning models
-LLM_PROVIDER=azure_reasoning
-```
+Custom providers are used via direct instantiation. See the usage examples in the sections above:
+- For LLM providers: See [Implementing Custom LLM Providers](#-implementing-custom-llm-providers)
+- For other providers: Follow the same pattern - instantiate your provider and pass it to the appropriate agent config
 
 ---
 

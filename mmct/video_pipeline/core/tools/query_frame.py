@@ -31,7 +31,6 @@ class QueryFrameTool:
             str,
             "user query according to which video content has to be analyzed. If options are available and relevant with the query, they should also be passed. e.g. 'What materials are required to prepare the chilly nursery bed, and what are their uses?','count the person doing exercise in the video?'",
         ],
-        index_name: Annotated[str, "search index name"],
         frame_ids: Annotated[
             Optional[list],
             "List of frame filenames to analyze (e.g., ['video_123.jpg', 'video_456.jpg'])",
@@ -53,7 +52,6 @@ class QueryFrameTool:
         Input Parameters:
             - query (str): Detailed description of what to look for in frames
                         (e.g., "Count people doing exercises", "What color shirt is the person wearing?")
-            - index_name (str): Search index name for keyframe retrieval
             - frame_ids (Optional[list]): List of specific frame filenames to analyze (from get_relevant_frames)
             - video_id (Optional[str]): Video identifier (required if using start_time/end_time)
             - start_time (Optional[float]): Start time in seconds (use from get_context or object's first_seen in get_object_collection output.)

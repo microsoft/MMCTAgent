@@ -61,32 +61,78 @@ Users can pass a list of tools via the `tools` parameter to override the default
 
 ## **Usage**
 
-Below is the script to get started with the MMCT Image Agent. 
+Below is the script to get started with the MMCT Image Agent.
 
 > MMCT Image Agent
 
 ```python
 from mmct.image_pipeline import ImageAgent, ImageQnaTools
+from mmct.providers.azure import AzureLLMProvider
+from mmct.config.providers import ImageAgentProviderConfig
+from azure.identity import DefaultAzureCredential, AzureCliCredential, ChainedTokenCredential
 import asyncio
-import ast
 
-# user query
-query = ""
-# define the tools, you can refer to the Enum definition of Tools to get the idea for available tools
-tools = [ImageQnaTools.object_detection, ImageQnaTools.vit]
-# flag variable whether you want to initialize Critic Agent or not.
-use_critic_agent = True
-# flag variable whether you have to stream or not.
-stream = False
-# initialize the Image Agent.
-mmct_agent = ImageAgent(
-    query=query,
-    image_path=image_path,
-    tools=tools,
-    use_critic_agent=use_critic_agent,
-    stream=stream,
+# Configure credentials (or use api_key directly)
+credentials = ChainedTokenCredential(AzureCliCredential(), DefaultAzureCredential())
+
+# Initialize the provider
+provider = ImageAgentProviderConfig(
+    llm_provider=AzureLLMProvider(
+        endpoint="<your_endpoint>",
+        deployment_name="<deployment_name>",
+        model_name="<model_name>",
+        api_version="<api_version>",
+        credentials=credentials,  # Or use api_key="your-api-key"
+    )
 )
+
+# Define the tools - refer to ImageQnaTools enum for available tools
+tools = [ImageQnaTools.object_detection, ImageQnaTools.vit]
+
+# Initialize the Image Agent
+mmct_agent = ImageAgent(
+    query="What objects are visible in this image?",
+    image_path="path/to/your/image.jpg",
+    tools=tools,
+    use_critic_agent=True,  # Enable critic agent for improved accuracy
+    stream=False,
+    provider=provider
+)
+
+# Run the agent
 response = asyncio.run(mmct_agent())
 print(response.response)
 ```
+
+### **Using Custom LLM Providers**
+
+You can implement custom LLM providers for any vendor (Anthropic, Cohere, etc.) by inheriting from `BaseLLMProvider`:
+
+```python
+from mmct.providers.base import BaseLLMProvider
+from mmct.config.providers import ImageAgentProviderConfig
+from mmct.image_pipeline import ImageAgent, ImageQnaTools
+
+# Your custom LLM provider implementation
+class CustomLLMProvider(BaseLLMProvider):
+    # Implement required methods: chat_completion() and get_autogen_client()
+    pass
+
+# Use your custom provider
+custom_llm = CustomLLMProvider(api_key="your-api-key", model_name="your-model")
+provider = ImageAgentProviderConfig(llm_provider=custom_llm)
+
+mmct_agent = ImageAgent(
+    query="Your query here",
+    image_path="path/to/image.jpg",
+    tools=[ImageQnaTools.vit],
+    provider=provider
+)
+response = asyncio.run(mmct_agent())
+```
+
+For a complete working example of a custom Anthropic provider, see [`examples/image_agent.ipynb`](../../examples/image_agent.ipynb).
+
+For detailed implementation instructions, refer to the [Providers Guide](../providers/README.md).
+
 ---

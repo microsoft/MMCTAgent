@@ -56,16 +56,21 @@ class ImageAgent:
     Example Usage:
     --------------
     >>> from mmct.image_pipeline import ImageAgent, ImageQnaTools
+    >>> from mmct.config.providers import ImageAgentProviderConfig
+    >>> from mmct.providers.azure import AzureLLMProvider
+    >>> provider_config = ImageAgentProviderConfig(
+    >>> llm_provider = AzureLLMProvider(endpoint = "<endpoint>", api_version = "<api-version>", 
+    >>> deployment_name = "<deployment-name>", model_name = "<model-name>", api_key = "api-key"
+    >>> ))
     >>> async def run_example():
     >>>     image_qna = ImageAgent(
     >>>         image_path="path/to/image.jpg",
     >>>         query="What dishes are listed under House Special?",
     >>>         provider=provider_config,
     >>>         tools=[ImageQnaTools.ocr, ImageQnaTools.vit],
-    >>>         use_critic_agent=True,
-    >>>         stream=False
+    >>>         use_critic_agent=True
     >>>     )
-    >>>     result = await image_qna.run()
+    >>>     result = await image_qna()
     >>>     print(result)
     >>> asyncio.run(run_example())
     """
