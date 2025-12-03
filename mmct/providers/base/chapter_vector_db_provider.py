@@ -1,15 +1,48 @@
 from abc import ABC, abstractmethod
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Tuple, Type
+from mmct.providers.search_document_models import ChapterIndexDocument
 
-class BaseSearchProvider(ABC):
-    """Abstract base class for search providers."""
+class BaseChapterVectorDBProvider(ABC):
+    """Abstract base class for Chapter - Vector DB providers."""
 
     def __init__(self, index_name):
         self.index_name = index_name
 
     @abstractmethod
-    async def search(self, query: str, **kwargs) -> List[Dict]:
-        """Search for documents."""
+    def get_index_schema(self) -> Any:
+        """
+        Creates provider-specific schema based on ChapterIndexDocument type.
+
+        Returns:
+            Provider-specific index schema object
+        """
+        pass
+
+    @abstractmethod
+    def parse_response(self, vector_db_document: Any) -> ChapterIndexDocument:
+        """
+        Parses the retrieved vector DB document into ChapterIndexDocument object.
+
+        Args:
+            vector_db_document: Provider-specific document response
+
+        Returns:
+            ChapterIndexDocument: Parsed document
+        """
+        pass
+
+    @abstractmethod
+    async def search(self, query: str, **kwargs) -> List[Tuple[ChapterIndexDocument, float]]:
+        """
+        Search for documents.
+
+        Args:
+            query: Search query string
+            **kwargs: Additional provider-specific search parameters
+
+        Returns:
+            List of tuples containing (ChapterIndexDocument, similarity_score)
+        """
         pass
 
     @abstractmethod
@@ -23,12 +56,9 @@ class BaseSearchProvider(ABC):
         pass
 
     @abstractmethod
-    async def create_index(self, index_schema: Any) -> bool:
+    async def create_index(self) -> bool:
         """
-        Create a search index with the given schema.
-
-        Args:
-            index_schema can take one of the predefined schema types like "chapter", "object_registry", "keyframes".
+        Create a index with the given schema.
 
         Returns:
             bool: True if created, False if already exists
@@ -40,9 +70,6 @@ class BaseSearchProvider(ABC):
         """
         Check if an index exists.
 
-        Args:
-            index_name: Name of the index to check
-
         Returns:
             bool: True if index exists, False otherwise
         """
@@ -51,10 +78,7 @@ class BaseSearchProvider(ABC):
     @abstractmethod
     async def delete_index(self) -> bool:
         """
-        Delete a search index.
-
-        Args:
-            index_name: Name of the index to delete
+        Delete a index.
 
         Returns:
             bool: True if successful
@@ -64,11 +88,10 @@ class BaseSearchProvider(ABC):
     @abstractmethod
     async def upload_documents(self, documents: List[Dict]) -> Dict[str, Any]:
         """
-        Upload multiple documents to the search index.
+        Upload multiple documents to the index.
 
         Args:
             documents: List of document dictionaries to upload
-            index_name: Optional index name (uses default if not provided)
 
         Returns:
             Dict with upload results
@@ -82,7 +105,6 @@ class BaseSearchProvider(ABC):
 
         Args:
             hash_id: Hash ID of the document to check
-            index_name: Optional index name (uses default if not provided)
 
         Returns:
             bool: True if document exists, False otherwise
@@ -90,5 +112,5 @@ class BaseSearchProvider(ABC):
         pass
 
     async def close(self):
-        """Close the search client and cleanup resources. Optional to implement."""
+        """Close the client and cleanup resources. Optional to implement."""
         pass

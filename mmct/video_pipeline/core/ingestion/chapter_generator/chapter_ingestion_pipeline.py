@@ -6,14 +6,9 @@ It coordinates semantic chunking, chapter generation, and saving to JSON files.
 """
 
 import os
-import uuid
-import asyncio
 import json
-from datetime import datetime
 from typing import List, Optional, Tuple
 from loguru import logger
-
-from mmct.providers.search_document_models import ChapterIndexDocument
 from mmct.video_pipeline.core.ingestion.semantic_chunking.semantic_chunker import SemanticChunker
 from mmct.video_pipeline.core.ingestion.chapter_generator.chapter_generator import ChapterGenerator
 from mmct.video_pipeline.core.ingestion.chapter_generator.object_collection_processor import ObjectCollectionProcessor
@@ -21,8 +16,6 @@ from mmct.video_pipeline.core.ingestion.models import ChapterMetadata, ChapterMe
 from mmct.video_pipeline.utils.helper import get_media_folder
 from mmct.providers.base import (
     BaseLLMProvider,
-    BaseSearchProvider,
-    BaseStorageProvider,
     BaseEmbeddingProvider
 )
 

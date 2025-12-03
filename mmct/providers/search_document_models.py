@@ -217,7 +217,7 @@ class ChapterIndexDocument(BaseModel):
         key=False
     )
     embeddings: List[float] = Field(
-        ...,
+        default_factory=list,
         description="Vector embedding for semantic search",
         searchable=True,
         filterable=False,
@@ -348,7 +348,7 @@ class KeyframeDocument(BaseModel):
 
     # — Vector embedding field —
     embeddings: List[float] = Field(
-        ...,
+        default_factory=list,
         description="CLIP embedding vector for frame",
         searchable=True,
         filterable=False,

@@ -99,11 +99,30 @@ class IngestionPipeline:
     >>> from mmct.video_pipeline.ingestion import IngestionPipeline
     >>> from mmct.video_pipeline.language import Languages
     >>> from mmct.config.providers import IngestionProviderConfig
+    >>> from mmct.providers.azure import (
+    >>>     AzureLLMProvider,
+    >>>     AzureEmbeddingProvider,
+    >>>     AISearchChapterProvider,
+    >>>     AISearchKeyframesProvider,
+    >>>     AISearchObjectCollectionProvider,
+    >>>     AzureStorageProvider,
+    >>>     WhisperTranscriptionProvider
+    >>>    )     # Note: Image Embedding provider is also required which is clip based provider.
+    >>>    from mmct.providers.local import ClipImageEmbeddingProvider
     >>> import asyncio
-    >>>
+
     >>> async def run_ingestion():
     >>>     # Configure providers (transcription, LLM, embedding, search, storage, etc.)
-    >>>     provider = IngestionProviderConfig(...)  # Configure your providers
+    >>>     provider = IngestionProviderConfig(
+    >>>        llm_provider=AzureOpenAILLMProvider(endpoint = "<some-endpoint>",api_version="<api-version>",...),
+    >>>        embedding_provider=AzureOpenAIEmbeddingProvider(...),
+    >>>        vectordb_chapter=AISearchChapterProvider(...),
+    >>>        vectordb_object_registry=AISearchObjectCollectionProvider(...),
+    >>>        vectordb_keyframes=AISearchKeyframesProvider(...),
+    >>>        storage_provider=AzureBlobStorageProvider(...),
+    >>>        image_embedding_provider=ClipImageEmbeddingProvider(...),
+    >>>        transcription_provider=WhisperTranscriptionProvider(...)
+    >>>     )  # Configure your providers
     >>>
     >>>     ingestion = IngestionPipeline(
     >>>         video_path="<valid-video-path>",

@@ -1,12 +1,12 @@
 from typing import Annotated, List, Dict, Any, Optional
 import os
-from mmct.providers.base import BaseSearchProvider
+from mmct.providers.base import BaseObjectCollectionVectorDBProvider
 from dotenv import load_dotenv, find_dotenv
 
 load_dotenv(find_dotenv())
 
 class GetObjectCollection:
-    def __init__(self, vectordb_object_registry:BaseSearchProvider):
+    def __init__(self, vectordb_object_registry:BaseObjectCollectionVectorDBProvider):
         self.vectordb_object_registry = vectordb_object_registry
         
     async def get_object_collection(
@@ -47,10 +47,22 @@ class GetObjectCollection:
                 search_text = "*",
                 filter = filter_conditions,
                 top = 1,
-                select = ['object_collection','object_count','video_id'],
             )
-            print(results)
-            return list(results)
+            fields_to_retrieve = ['object_collection','object_count','video_id']
+            # Convert new return type List[Tuple[ObjectCollectionDocument, float]] to list of dicts
+            results_with_scores = []
+            for document, score in results:
+                doc_dict = document.model_dump()
+
+                # Only include fields specified by the user
+                filtered_dict = {
+                    field: doc_dict.get(field) for field in fields_to_retrieve
+                    if field in doc_dict
+                }
+                filtered_dict['@search.score'] = score
+                results_with_scores.append(filtered_dict)
+
+            return results_with_scores
 
         except Exception as e:
             print(f"Error fetching object collection for video_id={video_id} or url={url}: {e}")

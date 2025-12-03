@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import numpy as np
 
 from mmct.video_pipeline.core.ingestion.key_frames_extractor.clip_embeddings import FrameEmbedding
-from mmct.providers.base.search_provider import BaseSearchProvider
+from mmct.providers.base import BaseKeyframesVectorDBProvider
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +65,7 @@ def create_frame_documents_from_embeddings(
 class KeyframeSearchIndex:
     """Provider-agnostic keyframe storage and indexing helper."""
 
-    def __init__(self, search_provider:BaseSearchProvider):
+    def __init__(self, search_provider:BaseKeyframesVectorDBProvider):
         """
         Initialize KeyframeSearchIndex with a search provider.
         
@@ -75,7 +75,7 @@ class KeyframeSearchIndex:
         """
         self.provider = search_provider
 
-    async def create_keyframe_index_if_not_exists(self, index_schema:str) -> bool:
+    async def create_keyframe_index_if_not_exists(self) -> bool:
         """
         Create the keyframe index with the proper schema if it doesn't exist.
 
@@ -88,8 +88,7 @@ class KeyframeSearchIndex:
                 logger.info(f"Keyframe index '{self.provider.index_name}' already exists")
                 return False
 
-            # Provider will handle schema creation based on type indicator
-            return await self.provider.create_index(index_schema = index_schema)
+            return await self.provider.create_index()
 
         except Exception as e:
             logger.error(f"Failed to create keyframe index: {e}")

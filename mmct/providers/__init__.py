@@ -12,7 +12,9 @@ Import concrete providers directly from convenience modules:
 from .base import (
     BaseLLMProvider,
     BaseEmbeddingProvider,
-    BaseSearchProvider,
+    BaseChapterVectorDBProvider,
+    BaseKeyframesVectorDBProvider,
+    BaseObjectCollectionVectorDBProvider,
     BaseVisionProvider,
     BaseTranscriptionProvider,
     BaseStorageProvider,
@@ -22,7 +24,9 @@ from .base import (
 __all__ = [
     'BaseLLMProvider',
     'BaseEmbeddingProvider',
-    'BaseSearchProvider',
+    'BaseChapterVectorDBProvider',
+    'BaseKeyframesVectorDBProvider',
+    'BaseObjectCollectionVectorDBProvider',
     'BaseVisionProvider',
     'BaseTranscriptionProvider',
     'BaseStorageProvider',

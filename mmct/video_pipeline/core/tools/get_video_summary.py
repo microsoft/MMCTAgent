@@ -1,13 +1,11 @@
 from typing import Annotated, List, Dict, Any, Optional
-import os
-from mmct.config.providers import VideoAgentProviderConfig
-from mmct.providers.base import BaseSearchProvider, BaseEmbeddingProvider
+from mmct.providers.base import BaseObjectCollectionVectorDBProvider, BaseEmbeddingProvider
 from dotenv import load_dotenv, find_dotenv
 
 load_dotenv(find_dotenv())
 
 class GetVideoSummaryTool:
-    def __init__(self, vectordb_object_registry:BaseSearchProvider, embed_provider:BaseEmbeddingProvider):
+    def __init__(self, vectordb_object_registry:BaseObjectCollectionVectorDBProvider, embed_provider:BaseEmbeddingProvider):
         self.vectordb_object_registry = vectordb_object_registry
         self.embed_provider = embed_provider
         
@@ -60,11 +58,23 @@ class GetVideoSummaryTool:
                 filter=filter_conditions,
                 query_type="semantic",
                 top=top,
-                select=['video_summary','video_id','url'],
                 embedding=embedding
             )
 
-            return list(results)
+            fields_to_retrieve=['video_summary','video_id','url']
+            results_with_scores = []
+            for document, score in results:
+                doc_dict = document.model_dump()
+
+                # Only include fields specified by the user
+                filtered_dict = {
+                    field: doc_dict.get(field) for field in fields_to_retrieve
+                    if field in doc_dict
+                }
+                filtered_dict['@search.score'] = score
+                results_with_scores.append(filtered_dict)
+
+            return results_with_scores
 
         except Exception as e:
             print(f"Error fetching video summary for video_id={video_id} or url={url}: {e}")

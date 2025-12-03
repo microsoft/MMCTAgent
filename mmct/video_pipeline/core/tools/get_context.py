@@ -4,22 +4,22 @@ This is a retreive documents tool which provide the summary with the transcript 
 
 # Importing Libraries
 from typing_extensions import Annotated, Optional
-from mmct.providers.base import BaseEmbeddingProvider, BaseSearchProvider
+from mmct.providers.base import BaseEmbeddingProvider, BaseChapterVectorDBProvider
 
 
 class GetContextTool:
-    def __init__(self, embed_provider:BaseEmbeddingProvider, vectordb_chapter:BaseSearchProvider):
+    def __init__(self, embed_provider:BaseEmbeddingProvider, vectordb_chapter:BaseChapterVectorDBProvider):
         self.embed_provider = embed_provider
         self.vectordb_chapter = vectordb_chapter
 
     async def get_context(
         self,
         query: Annotated[str, "query for which chapter documents need to be fetched."],
+        fields_to_retrieve: Annotated[list, "list of fields to retrieve from the chapter index"],
         video_id: Annotated[str, "video id if provided in the instruction"]=None,
         url: Annotated[str, "url if provided in the instruction to filter out the search results"] = None,
         start_time: Annotated[Optional[float], "start time in seconds to filter documents with overlapping time range"] = None,
         end_time: Annotated[Optional[float], "end time in seconds to filter documents with overlapping time range"] = None,
-        fields_to_retrieve: Annotated[Optional[list], "list of fields to retrieve from the chapter index"] = None,
         top: Annotated[Optional[int], "number of top results to retrieve"] = 3,
     ) -> str:
         """
@@ -39,7 +39,6 @@ class GetContextTool:
                 * detailed_summary: Visual summary of what happens in the chapter
                 * action_taken: Specific actions performed or demonstrated
                 * text_from_scene: Text visible in video (signs, captions, etc.)
-                * object_collection: JSON string of objects in this chapter
                 * start_time: Chapter start time in seconds
                 * end_time: Chapter end time in seconds
                 * hash_video_id: Video identifier
@@ -52,15 +51,11 @@ class GetContextTool:
             - detailed_summary (str): Visual summary of what happens in the chapter
             - action_taken (str): Specific actions performed or demonstrated
             - text_from_scene (str): Text visible in video (signs, captions, etc.)
-            - object_collection (str): JSON string of objects in this chapter
             - start_time (float): Chapter start time in seconds
             - end_time (float): Chapter end time in seconds
             - hash_video_id (str): Video identifier
             - url (str): Video URL
         """
-        #global search_provider, embed_provider
-
-        
 
         # embedding the query
         embedding = await self.embed_provider.embedding(query)
@@ -93,10 +88,23 @@ class GetContextTool:
             query_type="semantic",
             top=top,
             filter=filter_conditions,
-            select=fields_to_retrieve,
             embedding=embedding
         )
-        return search_results
+
+        # Convert new return type List[Tuple[ChapterIndexDocument, float]] to list of dicts
+        results_with_scores = []
+        for document, score in search_results:
+            doc_dict = document.model_dump()
+
+            # Only include fields specified by the user
+            filtered_dict = {
+                field: doc_dict.get(field) for field in fields_to_retrieve
+                if field in doc_dict
+            }
+            filtered_dict['@search.score'] = score
+            results_with_scores.append(filtered_dict)
+
+        return results_with_scores
 
 
 if __name__ == "__main__":
@@ -115,7 +123,6 @@ if __name__ == "__main__":
     results = asyncio.run(context_tool_object.get_context(
         video_id=video_id, 
         query=query,
-        index_name=index_name,
         start_time=start_time,
         end_time=end_time,
         url=url

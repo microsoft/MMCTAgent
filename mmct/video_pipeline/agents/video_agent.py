@@ -2,7 +2,6 @@
 import asyncio
 from typing import Optional
 from dotenv import load_dotenv
-from loguru import logger
 
 # Local Imports
 from mmct.video_pipeline.core.tools.video_qna import video_qna
@@ -50,22 +49,24 @@ class VideoAgent:
         from mmct.providers.azure import (
             AzureLLMProvider,
             AzureEmbeddingProvider,
-            AzureSearchProvider,
+            AISearchChapterProvider,
+            AISearchKeyframesProvider,
+            AISearchObjectCollectionProvider
             AzureStorageProvider,
         )
         # Note: Image Embedding provider is also required which is clip based provider.
-        from mmct.providers.local import CustomImageEmbeddingProvider
+        from mmct.providers.local import ClipImageEmbeddingProvider
 
 
         # Initialize all required providers
         provider = VideoAgentProviderConfig(
             llm_provider=AzureOpenAILLMProvider(endpoint = "<some-endpoint>",api_version="<api-version>",...),
             embedding_provider=AzureOpenAIEmbeddingProvider(...),
-            vectordb_chapter=AzureAISearchProvider(...),
-            vectordb_object_registry=AzureAISearchProvider(...),
-            vectordb_keyframes=AzureAISearchProvider(...),
+            vectordb_chapter=AISearchChapterProvider(...),
+            vectordb_object_registry=AISearchObjectCollectionProvider(...),
+            vectordb_keyframes=AISearchKeyframesProvider(...),
             storage_provider=AzureBlobStorageProvider(...),
-            image_embedding_provider=CustomImageEmbeddingProvider(...)
+            image_embedding_provider=ClipImageEmbeddingProvider(...)
         )
         
         video_agent = VideoAgent(

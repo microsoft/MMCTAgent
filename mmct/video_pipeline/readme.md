@@ -90,7 +90,9 @@ from mmct.config.providers import IngestionProviderConfig
 from mmct.providers.azure import (
     AzureLLMProvider,
     AzureEmbeddingProvider,
-    AzureSearchProvider,
+    AISearchChapterProvider,
+    AISearchKeyframesProvider,
+    AISearchObjectCollectionProvider,
     AzureStorageProvider,
     WhisperTranscriptionProvider
 )
@@ -116,17 +118,17 @@ provider = IngestionProviderConfig(
         credentials=credentials,
     ),
     image_embedding_provider=ClipImageEmbeddingProvider(),
-    vectordb_chapter=AzureSearchProvider(
+    vectordb_chapter=AISearchChapterProvider(
         endpoint="https://<your-search-service>.search.windows.net",
         index_name="<your-chapter-index-name>",
         credentials=credentials,
     ),
-    vectordb_keyframes=AzureSearchProvider(
+    vectordb_keyframes=AISearchKeyframesProvider(
         endpoint="https://<your-search-service>.search.windows.net",
         index_name="<your-keyframe-index-name>",
         credentials=credentials,
     ),
-    vectordb_object_registry=AzureSearchProvider(
+    vectordb_object_registry=AISearchObjectCollectionProvider(
         endpoint="https://<your-search-service>.search.windows.net",
         index_name="<your-object-registry-index-name>",
         credentials=credentials,
@@ -162,7 +164,9 @@ from mmct.config.providers import VideoAgentProviderConfig
 from mmct.providers.azure import (
     AzureLLMProvider,
     AzureEmbeddingProvider,
-    AzureSearchProvider,
+    AISearchChapterProvider,
+    AISearchKeyframesProvider,
+    AISearchObjectCollectionProvider,
     AzureStorageProvider
 )
 from mmct.providers.local import ClipImageEmbeddingProvider
@@ -187,17 +191,17 @@ provider = VideoAgentProviderConfig(
         credentials=credentials,
     ),
     image_embedding_provider=ClipImageEmbeddingProvider(),
-    vectordb_chapter=AzureSearchProvider(
+    vectordb_chapter=AISearchChapterProvider(
         endpoint="https://<your-search-service>.search.windows.net",
         index_name="<your-chapter-index-name>",
         credentials=credentials,
     ),
-    vectordb_keyframes=AzureSearchProvider(
+    vectordb_keyframes=AISearchKeyframesProvider(
         endpoint="https://<your-search-service>.search.windows.net",
         index_name="<your-keyframe-index-name>",
         credentials=credentials,
     ),
-    vectordb_object_registry=AzureSearchProvider(
+    vectordb_object_registry=AISearchObjectCollectionProvider(
         endpoint="https://<your-search-service>.search.windows.net",
         index_name="<your-object-registry-index-name>",
         credentials=credentials,
@@ -236,7 +240,7 @@ from mmct.video_pipeline import VideoAgent, IngestionPipeline
 
 # Your custom LLM provider implementation
 class CustomLLMProvider(BaseLLMProvider):
-    # Implement required methods: chat_completion() and get_autogen_client()
+    # Implement required abstract methods: chat_completion() and get_autogen_client()
     pass
 
 # Use your custom provider with VideoAgent

@@ -6,21 +6,25 @@ from typing import Dict, Type
 from mmct.providers.base import (
     BaseLLMProvider,
     BaseEmbeddingProvider,
-    BaseSearchProvider,
     BaseStorageProvider,
     BaseTranscriptionProvider,
     BaseImageEmbeddingProvider,
 )
+from mmct.providers.base.chapter_vector_db_provider import BaseChapterVectorDBProvider
+from mmct.providers.base.keyframes_vector_db_provider import BaseKeyframesVectorDBProvider
+from mmct.providers.base.object_collection_vector_db_provider import BaseObjectCollectionVectorDBProvider
 
 
 # All valid provider base classes
 PROVIDER_TYPES: Dict[str, Type] = {
     "BaseLLMProvider": BaseLLMProvider,
     "BaseEmbeddingProvider": BaseEmbeddingProvider,
-    "BaseSearchProvider": BaseSearchProvider,
     "BaseStorageProvider": BaseStorageProvider,
     "BaseTranscriptionProvider": BaseTranscriptionProvider,
     "BaseImageEmbeddingProvider": BaseImageEmbeddingProvider,
+    "BaseChapterVectorDBProvider": BaseChapterVectorDBProvider,
+    "BaseKeyframesVectorDBProvider": BaseKeyframesVectorDBProvider,
+    "BaseObjectCollectionVectorDBProvider": BaseObjectCollectionVectorDBProvider,
 }
 
 
@@ -72,9 +76,9 @@ class VideoAgentProviderConfig(ProviderConfigBase):
     llm_provider: BaseLLMProvider = Field(...)
     embedding_provider: BaseEmbeddingProvider = Field(...)
     image_embedding_provider: BaseImageEmbeddingProvider = Field(...)
-    vectordb_chapter: BaseSearchProvider = Field(...)
-    vectordb_object_registry: BaseSearchProvider = Field(...)
-    vectordb_keyframes: BaseSearchProvider = Field(...)
+    vectordb_chapter: BaseChapterVectorDBProvider = Field(...)
+    vectordb_object_registry: BaseObjectCollectionVectorDBProvider = Field(...)
+    vectordb_keyframes: BaseKeyframesVectorDBProvider = Field(...)
     storage_provider: BaseStorageProvider = Field(...)
 
 
@@ -83,9 +87,9 @@ class IngestionProviderConfig(ProviderConfigBase):
     llm_provider: BaseLLMProvider = Field(...)
     embedding_provider: BaseEmbeddingProvider = Field(...)
     image_embedding_provider: BaseImageEmbeddingProvider = Field(...)
-    vectordb_chapter: BaseSearchProvider = Field(...)
-    vectordb_object_registry: BaseSearchProvider = Field(...)
-    vectordb_keyframes: BaseSearchProvider = Field(...)
+    vectordb_chapter: BaseChapterVectorDBProvider = Field(...)
+    vectordb_object_registry: BaseObjectCollectionVectorDBProvider = Field(...)
+    vectordb_keyframes: BaseKeyframesVectorDBProvider = Field(...)
     storage_provider: BaseStorageProvider = Field(...)
     transcription_provider: BaseTranscriptionProvider = Field(...)
    

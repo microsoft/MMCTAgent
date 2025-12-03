@@ -9,7 +9,6 @@ import re
 import warnings
 import asyncio
 import numpy as np
-import os
 from typing import List
 from loguru import logger
 from pydantic import BaseModel

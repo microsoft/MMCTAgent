@@ -14,21 +14,21 @@ import numpy as np
 from azure.search.documents.models import VectorizedQuery
 from loguru import logger
 
-from mmct.providers.base import BaseSearchProvider, BaseImageEmbeddingProvider
+from mmct.providers.base import BaseKeyframesVectorDBProvider, BaseImageEmbeddingProvider
 
 
 class KeyframeSearcher:
     """Search for keyframes using text queries with injected providers."""
 
     def __init__(self,
-                 search_provider: BaseSearchProvider,
+                 search_provider: BaseKeyframesVectorDBProvider,
                  image_embedding_provider: BaseImageEmbeddingProvider,
                  provider_config: Optional[dict] = None):
         """
         Initialize the keyframe searcher with injected providers.
 
         Args:
-            search_provider: BaseSearchProvider instance for vector search
+            search_provider: BaseKeyframesVectorDBProvider instance for vector search
             image_embedding_provider: BaseImageEmbeddingProvider for generating query embeddings
             provider_config: Optional provider configuration overrides
         """
@@ -82,11 +82,23 @@ class KeyframeSearcher:
                 embedding=query_embedding,
                 filter=video_filter,
                 top=top_k,
-                select=["keyframe_filename", "video_id", "timestamp_seconds", "motion_score"],
                 query_type="vector",
             )
+            fields_to_retrieve=["keyframe_filename", "video_id", "timestamp_seconds", "motion_score"]
 
-            return results
+            results_with_scores = []
+            for document, score in results:
+                doc_dict = document.model_dump()
+
+                # Only include fields specified by the user
+                filtered_dict = {
+                    field: doc_dict.get(field) for field in fields_to_retrieve
+                    if field in doc_dict
+                }
+                filtered_dict['@search.score'] = score
+                results_with_scores.append(filtered_dict)
+
+            return results_with_scores
 
         except Exception as e:
             raise Exception(f"An error occurred while fetching keyframe from index: {str(e)}") from e

@@ -151,7 +151,7 @@ class UploadOrchestrator:
                 )
 
                 # Ensure index exists
-                await keyframe_search_index.create_keyframe_index_if_not_exists(index_schema = "keyframes")
+                await keyframe_search_index.create_keyframe_index_if_not_exists()
 
                 # Upload in batches
                 batch_size = 100
@@ -236,7 +236,7 @@ class UploadOrchestrator:
             index_exists = await self.search_provider_chapter.index_exists()
             if not index_exists:
                 logger.info(f"Creating chapter index '{self.search_provider_chapter.index_name}'...")
-                await self.search_provider_chapter.create_index(index_schema = "chapter")
+                await self.search_provider_chapter.create_index()
 
             # Upload to search index
             if documents:
@@ -296,7 +296,7 @@ class UploadOrchestrator:
             index_exists = await self.search_provider_object_collection.index_exists()
             if not index_exists:
                 logger.info(f"Creating object collection index '{self.search_provider_object_collection.index_name}'...")
-                await self.search_provider_object_collection.create_index(index_schema = "object_registry")
+                await self.search_provider_object_collection.create_index()
 
             # Upload to search index
             await self.search_provider_object_collection.upload_documents(

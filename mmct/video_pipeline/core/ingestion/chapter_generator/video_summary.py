@@ -2,7 +2,6 @@ import json
 from typing import List, Optional
 from loguru import logger
 from pydantic import BaseModel, Field
-from mmct.config.settings import settings
 from mmct.video_pipeline.core.ingestion.models import ChapterCreationResponse
 
 

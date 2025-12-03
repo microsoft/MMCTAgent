@@ -6,15 +6,14 @@ This tool analyzes video frames.
 import os
 import asyncio
 import base64
-from datetime import time
 from typing import Annotated, Optional
 from loguru import logger
-from mmct.providers.base import BaseLLMProvider, BaseStorageProvider, BaseSearchProvider, BaseImageEmbeddingProvider
+from mmct.providers.base import BaseLLMProvider, BaseStorageProvider, BaseKeyframesVectorDBProvider, BaseImageEmbeddingProvider
 from mmct.video_pipeline.core.tools.utils.search_keyframes import KeyframeSearcher
 
 
 class QueryFrameTool:
-    def __init__(self, llm_provider:BaseLLMProvider, storage_provider:BaseStorageProvider, vectordb_keyframes: BaseSearchProvider, image_embedding_provider:BaseImageEmbeddingProvider):
+    def __init__(self, llm_provider:BaseLLMProvider, storage_provider:BaseStorageProvider, vectordb_keyframes: BaseKeyframesVectorDBProvider, image_embedding_provider:BaseImageEmbeddingProvider):
         """Initialize QueryFrameTool with provider configuration.
         
         Args:

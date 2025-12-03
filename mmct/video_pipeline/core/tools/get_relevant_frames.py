@@ -6,11 +6,11 @@ import shutil
 from typing_extensions import Annotated
 from typing import List, Dict, Any, Optional
 from mmct.video_pipeline.core.tools.utils.search_keyframes import KeyframeSearcher
-from mmct.providers.base import BaseSearchProvider, BaseImageEmbeddingProvider
+from mmct.providers.base import BaseKeyframesVectorDBProvider, BaseImageEmbeddingProvider
 
 
 class GetRelevantFrames:
-    def __init__(self, vectordb_keyframes:BaseSearchProvider, image_embedding_provider:BaseImageEmbeddingProvider):
+    def __init__(self, vectordb_keyframes:BaseKeyframesVectorDBProvider, image_embedding_provider:BaseImageEmbeddingProvider):
         self.vectordb_keyframes = vectordb_keyframes
         self.image_embedding_provider = image_embedding_provider  # For CLIP embeddings
         

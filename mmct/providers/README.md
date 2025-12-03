@@ -201,22 +201,53 @@ Choose the appropriate base provider class from the `base/` folder and perform r
 **Example structure of custom search provider:**
 
 ```python
-# providers/custom_providers/search_provider.py
-from mmct.providers.base import SearchProvider
+from mmct.providers.base import AISearchObjectCollectionProvider
 
-class CustomSearchProvider(SearchProvider):
+class CustomSearchProvider(AISearchObjectCollectionProvider):
     """Custom class for search providers."""
-    
-    async def search(self, query: str, index_name: str, **kwargs) -> List[Dict]:
+
+    def get_index_schema(self) -> Any:
+        """Creates provider-specific schema based on ObjectCollectionDocument type."""
+        pass
+
+    def parse_response(self, vector_db_document: Any) -> ObjectCollectionDocument:
+        """Parses the retrieved vector DB document into ObjectCollectionDocument object."""
+        pass
+
+    async def search(self, query: str, **kwargs) -> List[Tuple[ObjectCollectionDocument, float]]:
         """Search for documents."""
         pass
-    
-    async def index_document(self, document: Dict, index_name: str) -> bool:
+
+    async def index_document(self, document: Dict) -> bool:
         """Index a document."""
         pass
-    
-    async def delete_document(self, doc_id: str, index_name: str) -> bool:
+
+    async def delete_document(self, doc_id: str) -> bool:
         """Delete a document."""
+        pass
+
+    async def create_index(self) -> bool:
+        """Create a index with the given schema."""
+        pass
+
+    async def index_exists(self) -> bool:
+        """Check if an index exists."""
+        pass
+
+    async def delete_index(self) -> bool:
+        """Delete a index."""
+        pass
+
+    async def upload_documents(self, documents: List[Dict]) -> Dict[str, Any]:
+        """Upload multiple documents to the index."""
+        pass
+
+    async def check_is_document_exist(self, hash_id: str) -> bool:
+        """Check if a document with the given hash_id exists in the index."""
+        pass
+
+    async def close(self):
+        """Close the client and cleanup resources. Optional to implement."""
         pass
 ```
 
