@@ -126,12 +126,21 @@ class AzureStorageProvider(BaseStorageProvider):
 
     @handle_exceptions(retries=3, exceptions=(Exception,))
     @convert_exceptions({Exception: ProviderException})
-    async def save_file(self, file_name: str, src_file_path: str, **kwargs) -> str:
+    async def upload_file(self, file_name: str, src_file_path: str, **kwargs) -> str:
         """Upload a local file to blob storage."""
         client = None
+        container_client = None
         try:
             logger.debug(f"Uploading file: {src_file_path}")
             folder_name = kwargs.pop("folder_name")
+
+            # Check if container exists, create if it doesn't
+            container_client = self.service_client.get_container_client(folder_name)
+            if not await container_client.exists():
+                logger.info(f"Container {folder_name} does not exist. Creating it...")
+                await container_client.create_container()
+                logger.info(f"Successfully created container: {folder_name}")
+
             client = self.service_client.get_blob_client(container=folder_name, blob=file_name)
             async with aiofiles.open(src_file_path, "rb") as f:
                 data = await f.read()
@@ -146,92 +155,8 @@ class AzureStorageProvider(BaseStorageProvider):
         finally:
             if client:
                 await client.close()
-
-    @handle_exceptions(retries=3, exceptions=(Exception,))
-    @convert_exceptions({Exception: ProviderException})
-    async def save_base64(self, file_name: str, b64_str: str, **kwargs) -> str:
-        """Upload base64-encoded data to blob storage."""
-
-        client = None
-        try:
-            folder_name = kwargs.pop("folder_name")
-            logger.info(f"Uploading base64 data to Container: {folder_name}, File: {file_name}")
-            client = self.service_client.get_blob_client(container=folder_name, blob=file_name)
-            data = base64.b64decode(b64_str)
-            await client.upload_blob(data, overwrite=True)
-
-            url = f"{self.storage_account_url}/{folder_name}/{file_name}"
-            return url
-        except Exception as e:
-            logger.exception(f"Error uploading base64 data: {e}")
-            raise ProviderException(f"Error uploading base64 data: {e}")
-        finally:
-            if client:
-                await client.close()
-
-    @handle_exceptions(retries=3, exceptions=(Exception,))
-    @convert_exceptions({Exception: ProviderException})
-    async def save_string(self, file_name: str, content: str, **kwargs) -> str:
-        """Upload a string directly to blob storage."""
-        client = None
-        try:
-            folder_name = kwargs.pop("folder_name")
-            logger.info(f"Uploading string content to Container: {folder_name}, Blob: {file_name}")
-            client = self.service_client.get_blob_client(container=folder_name, blob=file_name)
-            await client.upload_blob(content, overwrite=True)
-
-            logger.info(f"Successfully uploaded content to file: {file_name}")
-            url = f"{self.storage_account_url}/{folder_name}/{file_name}"
-            return url
-        except Exception as e:
-            logger.exception(f"Error uploading string content: {e}")
-            raise ProviderException(f"Error uploading string content: {e}")
-        finally:
-            if client:
-                await client.close()
-
-    @handle_exceptions(retries=3, exceptions=(Exception,))
-    @convert_exceptions({Exception: ProviderException})
-    async def save_to_file(self, file_name: str, download_path: str, **kwargs) -> str:
-        """Download a file to a local file path."""
-
-        client = None
-        try:
-            folder_name = kwargs.pop("folder_name")
-            logger.info(f"Downloading file {file_name} to {download_path}")
-            Path(download_path).parent.mkdir(parents=True, exist_ok=True)
-
-            client = self.service_client.get_blob_client(container=folder_name, blob=file_name)
-            stream = await client.download_blob()
-            data = await stream.readall()
-
-            async with aiofiles.open(download_path, "wb") as f:
-                await f.write(data)
-
-            logger.info(f"Successfully downloaded file to {download_path}")
-            return download_path
-        except Exception as e:
-            logger.exception(f"Error downloading file: {e}")
-            raise ProviderException(f"Error downloading file: {e}")
-        finally:
-            if client:
-                await client.close()
-
-    @handle_exceptions(retries=3, exceptions=(Exception,))
-    @convert_exceptions({Exception: ProviderException})
-    async def download_from_url(self, file_url: str, save_folder: str) -> str:
-        """Download a file from its URL to a local folder."""
-        try:
-            logger.info(f"Downloading file from URL: {file_url}")
-            parsed = urlparse(file_url)
-            folder_name, blob_name = parsed.path.lstrip("/").split("/", 1)
-            local_path = os.path.join(save_folder, blob_name)
-            return await self.save_to_file(
-                folder_name=folder_name, file_name=blob_name, download_path=local_path
-            )
-        except Exception as e:
-            logger.exception(f"Error downloading file from URL: {e}")
-            raise ProviderException(f"Error downloading file from URL: {e}")
+            if container_client:
+                await container_client.close()
 
     async def close(self):
         """Close the underlying service client and cleanup."""

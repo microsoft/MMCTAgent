@@ -193,8 +193,7 @@ class IngestionPipeline:
 
     async def _get_blob_manager(self):
         """
-        Create and return a new blob manager instance for each caller.
-        Each video part gets its own blob manager to avoid race conditions.
+        Return the storage provider instance.
         """
         return self.provider.storage_provider
 
@@ -439,8 +438,6 @@ class IngestionPipeline:
             cleanup_manager = CleanupManager(keep_keyframes=False)
             await cleanup_manager.cleanup(part_hash_id)
             self.logger.info(f"[PHASE 4] Cleanup completed successfully")
-
-            await blob_manager.close()
 
             self.logger.info(f"Successfully processed video part: {part_hash_id}")
 

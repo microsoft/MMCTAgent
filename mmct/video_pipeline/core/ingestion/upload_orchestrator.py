@@ -108,10 +108,10 @@ class UploadOrchestrator:
                         continue
 
                     # Upload to blob storage
-                    blob_url = await self.blob_manager.save_file(
+                    blob_url = await self.blob_manager.upload_file(
                         file_name=f"{video_id}/{keyframe.keyframe_filename}",
                         src_file_path=keyframe.file_path,
-                        folder_name="keyframes",
+                        folder_name=self.blob_manager.keyframe_container_name,
                     )
 
                     # Update blob_url in metadata
