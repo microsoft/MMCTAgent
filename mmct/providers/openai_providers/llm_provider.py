@@ -1,33 +1,35 @@
-from mmct.providers.base import LLMProvider
+from mmct.providers.base import BaseLLMProvider
 from loguru import logger
 from mmct.utils.error_handler import ProviderException, ConfigurationException
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from mmct.utils.error_handler import handle_exceptions, convert_exceptions
 from openai import AsyncOpenAI, OpenAI
 from autogen_ext.models.openai import OpenAIChatCompletionClient
 
 
-class OpenAILLMProvider(LLMProvider):
+class OpenAILLMProvider(BaseLLMProvider):
     """OpenAI LLM provider implementation."""
     
-    def __init__(self, config: Dict[str, Any]):
-        self.config = config
+    def __init__(self,  api_key:str, model_name:str, timeout:Optional[int] = 200, max_retries:Optional[int] = 2):
+        if not api_key:
+                raise ConfigurationException("OpenAI API key is required!")
+        
+        if not model_name:
+            raise ConfigurationException("OpenAI model name is required!")
+
+        self.api_key = api_key
+        self.timeout = timeout
+        self.max_retries = max_retries
+        self.model_name = model_name
         self.client = self._initialize_client()
     
     def _initialize_client(self):
         """Initialize OpenAI client."""
         try:
-            api_key = self.config.get("llm_api_key")
-            if not api_key:
-                raise ConfigurationException("OpenAI API key is required")
-
-            timeout = self.config.get("llm_timeout", 200)
-            max_retries = self.config.get("llm_max_retries", 2)
-
             return AsyncOpenAI(
-                api_key=api_key,
-                timeout=timeout,
-                max_retries=max_retries
+                api_key=self.api_key,
+                timeout=self.timeout,
+                max_retries=self.max_retries
             )
         except Exception as e:
             raise ProviderException(f"Failed to initialize OpenAI client: {e}")
@@ -37,7 +39,6 @@ class OpenAILLMProvider(LLMProvider):
     async def chat_completion(self, messages: List[Dict], **kwargs) -> Dict[str, Any]:
         """Generate chat completion using OpenAI."""
         try:
-            model = self.config.get("llm_model_name", "gpt-4o")
             temperature = kwargs.get("temperature", self.config.get("llm_temperature", 0.0))
             max_tokens = kwargs.get("max_tokens", 4000)
             response_format = kwargs.get("response_format")
@@ -49,7 +50,7 @@ class OpenAILLMProvider(LLMProvider):
             from pydantic import BaseModel
             if response_format and isinstance(response_format, type) and issubclass(response_format, BaseModel):
                 response = await self.client.chat.completions.parse(
-                    model=model,
+                    model=self.model_name,
                     messages=messages,
                     temperature=temperature,
                     max_tokens=max_tokens,
@@ -66,7 +67,7 @@ class OpenAILLMProvider(LLMProvider):
             else:
                 # Standard completion without structured output
                 completion_kwargs = {
-                    "model": model,
+                    "model": self.model_name,
                     "messages": messages,
                     "temperature": temperature,
                     "max_tokens": max_tokens,
@@ -88,21 +89,14 @@ class OpenAILLMProvider(LLMProvider):
             logger.error(f"OpenAI chat completion failed: {e}")
             raise ProviderException(f"OpenAI chat completion failed: {e}")
 
-    def get_autogen_client(self):
+    def get_autogen_client(self, **kwargs):
         """Get autogen-compatible client for OpenAI."""
         try:
-            api_key = self.config.get("llm_api_key")
-            if not api_key:
-                raise ConfigurationException("OpenAI API key is required for autogen client")
-
-            model = self.config.get("llm_model_name", "gpt-4o")
-            timeout = self.config.get("llm_timeout", 200)
-            temperature = self.config.get("llm_temperature", 0)
-
+            temperature = kwargs.get("temperature",0)
             return OpenAIChatCompletionClient(
-                api_key=api_key,
-                timeout=timeout,
-                model=model,
+                api_key=self.api_key,
+                timeout=self.timeout,
+                model=self.model_name,
                 temperature=temperature
             )
         except Exception as e:

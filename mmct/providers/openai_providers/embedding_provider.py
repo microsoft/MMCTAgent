@@ -1,33 +1,36 @@
 
-from mmct.providers.base import EmbeddingProvider
-from typing import Dict, Any, List
+from mmct.providers.base import BaseEmbeddingProvider
+from typing import Dict, Any, List, Optional
 from loguru import logger
 from mmct.utils.error_handler import handle_exceptions, convert_exceptions, ProviderException, ConfigurationException
 from openai import AsyncOpenAI, OpenAI
 
 
 
-class OpenAIEmbeddingProvider(EmbeddingProvider):
+class OpenAIEmbeddingProvider(BaseEmbeddingProvider):
     """OpenAI embedding provider implementation."""
     
-    def __init__(self, config: Dict[str, Any]):
-        self.config = config
+    def __init__(self, api_key:str, model_name:str, timeout:Optional[int] = 200, max_retries:Optional[int] = 2):
+        
+        if not api_key:
+                raise ConfigurationException("OpenAI API key is required!")
+        
+        if not model_name:
+            raise ConfigurationException("OpenAI model name is required!")
+
+        self.api_key = api_key
+        self.timeout = timeout
+        self.max_retries = max_retries
+        self.model_name = model_name
         self.client = self._initialize_client()
     
     def _initialize_client(self):
         """Initialize OpenAI client."""
         try:
-            api_key = self.config.get("embedding_service_api_key")
-            if not api_key:
-                raise ConfigurationException("OpenAI API key is required")
-
-            timeout = self.config.get("embedding_timeout", 200)
-            max_retries = self.config.get("embedding_max_retries", 2)
-
             return AsyncOpenAI(
-                api_key=api_key,
-                timeout=timeout,
-                max_retries=max_retries
+                api_key=self.api_key,
+                timeout=self.timeout,
+                max_retries=self.max_retries
             )
         except Exception as e:
             raise ProviderException(f"Failed to initialize OpenAI client: {e}")
@@ -37,10 +40,8 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
     async def embedding(self, text: str, **kwargs) -> List[float]:
         """Generate embedding using OpenAI."""
         try:
-            model = self.config.get("embedding_service_model_name", "text-embedding-3-small")
-
             response = await self.client.embeddings.create(
-                model=model,
+                model=self.model_name,
                 input=text,
                 **kwargs
             )
@@ -55,10 +56,8 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
     async def batch_embedding(self, texts: List[str], **kwargs) -> List[List[float]]:
         """Generate embeddings for multiple texts using OpenAI."""
         try:
-            model = self.config.get("embedding_service_model_name", "text-embedding-3-small")
-            
             response = await self.client.embeddings.create(
-                model=model,
+                model=self.model_name,
                 input=texts,
                 **kwargs
             )

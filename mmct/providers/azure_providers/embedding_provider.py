@@ -1,55 +1,92 @@
 
-from mmct.providers.base import EmbeddingProvider
-from typing import Dict, Any, List
+from mmct.providers.base import BaseEmbeddingProvider
+from typing import List, Union, Optional
 from azure.identity import get_bearer_token_provider
 from loguru import logger
 from mmct.utils.error_handler import ProviderException, ConfigurationException
+from azure.core.credentials import AzureKeyCredential
+from azure.core.credentials_async import AsyncTokenCredential
 from openai import AsyncAzureOpenAI
 from mmct.utils.error_handler import handle_exceptions, convert_exceptions
-from mmct.providers.credentials import AzureCredentials
 
 
-class AzureEmbeddingProvider(EmbeddingProvider):
+class AzureEmbeddingProvider(BaseEmbeddingProvider):
     """Azure OpenAI embedding provider implementation."""
 
-    def __init__(self, config: Dict[str, Any]):
-        self.config = config
-        self.credential = AzureCredentials.get_credentials()
+    def __init__(
+        self,
+        endpoint: str,
+        deployment_name: str,
+        api_version: str = "2024-08-01-preview",
+        credentials: Optional[Union[AzureKeyCredential, AsyncTokenCredential]] = None,
+        api_key: Optional[str] = None,
+        timeout: int = 200,
+        max_retries: int = 2
+    ):
+        """Initialize AzureEmbeddingProvider.
+
+        Args:
+            endpoint: Azure OpenAI endpoint URL
+            deployment_name: Name of the embedding deployment
+            api_version: Azure OpenAI API version (default: 2024-08-01-preview)
+            credentials: Azure credentials for token-based authentication (mutually exclusive with api_key)
+            api_key: API key for key-based authentication (mutually exclusive with credentials)
+            timeout: Request timeout in seconds (default: 200)
+            max_retries: Maximum number of retry attempts (default: 2)
+
+        Raises:
+            ConfigurationException: If neither credentials nor api_key is provided,
+                                   or if both are provided, or if required fields are missing
+        """
+        if not endpoint:
+            raise ConfigurationException("Azure OpenAI endpoint is required for Embedding Provider!")
+
+        if not deployment_name:
+            raise ConfigurationException("Azure OpenAI deployment name is required for Embedding Provider!")
+        
+        if not api_version:
+            raise ConfigurationException("Azure OpenAI api version is required for Whisper Transcription Provider!")
+
+        # Validate that exactly one of credentials or api_key is provided
+        if credentials is None and api_key is None:
+            raise ConfigurationException("Either credentials or api_key must be provided!")
+
+        if credentials is not None and api_key is not None:
+            raise ConfigurationException("Only one of credentials or api_key should be provided, not both!")
+
+        self.endpoint = endpoint
+        self.deployment_name = deployment_name
+        self.api_version = api_version
+        self.credentials = credentials
+        self.api_key = api_key
+        self.timeout = timeout
+        self.max_retries = max_retries
         self.client = self._initialize_client()
     
     def _initialize_client(self):
-        """Initialize Azure OpenAI client."""
+        """Initialize Azure OpenAI client with either credentials or API key."""
         try:
-            endpoint = self.config.get("embedding_service_endpoint")
-            api_version = self.config.get("embedding_service_api_version", "2024-08-01-preview")
-            use_managed_identity = self.config.get("embedding_use_managed_identity", True)
-            timeout = self.config.get("embedding_timeout", 200)
-            max_retries = self.config.get("llm_max_retries", 2)
-
-            if not endpoint:
-                raise ConfigurationException("Azure OpenAI endpoint is required")
-
-            if use_managed_identity:
-                scope = self.config.get("token_scope", "https://cognitiveservices.azure.com/.default")
-                token_provider = get_bearer_token_provider(self.credential, scope)
+            if self.credentials is not None:
+                # Use credentials with token-based authentication
+                token_provider = get_bearer_token_provider(
+                    self.credentials,
+                    "https://cognitiveservices.azure.com/.default"
+                )
                 return AsyncAzureOpenAI(
-                    api_version=api_version,
-                    azure_endpoint=endpoint,
+                    api_version=self.api_version,
+                    azure_endpoint=self.endpoint,
                     azure_ad_token_provider=token_provider,
-                    max_retries=max_retries,
-                    timeout=timeout
+                    max_retries=self.max_retries,
+                    timeout=self.timeout
                 )
             else:
-                api_key = self.config.get("embedding_service_api_key")
-                if not api_key:
-                    raise ConfigurationException("Azure OpenAI API key is required when managed identity is disabled")
-
+                # Use API key authentication
                 return AsyncAzureOpenAI(
-                    api_version=api_version,
-                    azure_endpoint=endpoint,
-                    api_key=api_key,
-                    max_retries=max_retries,
-                    timeout=timeout
+                    api_version=self.api_version,
+                    azure_endpoint=self.endpoint,
+                    api_key=self.api_key,
+                    max_retries=self.max_retries,
+                    timeout=self.timeout
                 )
         except Exception as e:
             raise ProviderException(f"Failed to initialize Azure OpenAI client: {e}")
@@ -59,19 +96,12 @@ class AzureEmbeddingProvider(EmbeddingProvider):
     async def embedding(self, text: str, **kwargs) -> List[float]:
         """Generate embedding using Azure OpenAI."""
         try:
-            deployment_name = self.config.get("embedding_service_deployment_name") or self.config.get("embedding_deployment_name")
-            if not deployment_name:
-                raise ConfigurationException(
-                    "Azure OpenAI embedding deployment name is required. "
-                    "Set EMBEDDING_SERVICE_DEPLOYMENT_NAME environment variable."
-                )
-            
             response = await self.client.embeddings.create(
-                model=deployment_name,
+                model=self.deployment_name,
                 input=text,
                 **kwargs
             )
-            
+
             return response.data[0].embedding
         except Exception as e:
             logger.error(f"Azure OpenAI embedding failed: {e}")
@@ -82,19 +112,12 @@ class AzureEmbeddingProvider(EmbeddingProvider):
     async def batch_embedding(self, texts: List[str], **kwargs) -> List[List[float]]:
         """Generate embeddings for multiple texts using Azure OpenAI."""
         try:
-            deployment_name = self.config.get("embedding_service_deployment_name") or self.config.get("embedding_deployment_name")
-            if not deployment_name:
-                raise ConfigurationException(
-                    "Azure OpenAI embedding deployment name is required. "
-                    "Set EMBEDDING_SERVICE_DEPLOYMENT_NAME environment variable."
-                )
-            
             response = await self.client.embeddings.create(
-                model=deployment_name,
+                model=self.deployment_name,
                 input=texts,
                 **kwargs
             )
-            
+
             return [item.embedding for item in response.data]
         except Exception as e:
             logger.error(f"Azure OpenAI batch embedding failed: {e}")

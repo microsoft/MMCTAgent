@@ -10,7 +10,7 @@ import numpy as np
 from PIL import Image
 from loguru import logger
 
-from mmct.providers.custom_providers.image_embedding_provider import CustomImageEmbeddingProvider
+from mmct.providers.custom_providers.clip_image_embedding_provider import CustomImageEmbeddingProvider
 
 
 async def main():

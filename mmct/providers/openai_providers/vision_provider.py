@@ -1,31 +1,33 @@
 from mmct.utils.error_handler import handle_exceptions, convert_exceptions
-from mmct.providers.base import VisionProvider
+from mmct.providers.base import BaseVisionProvider
 from openai import AsyncOpenAI, OpenAI
 from mmct.utils.error_handler import ProviderException, ConfigurationException
 from loguru import logger
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
-class OpenAIVisionProvider(VisionProvider):
+class OpenAIVisionProvider(BaseVisionProvider):
     """OpenAI Vision provider implementation."""
     
-    def __init__(self, config: Dict[str, Any]):
-        self.config = config
+    def __init__(self, api_key:str, model_name:str, timeout:Optional[int] = 200, max_retries:Optional[int] = 2):
+        if not api_key:
+                raise ConfigurationException("OpenAI API key is required!")
+        
+        if not model_name:
+            raise ConfigurationException("OpenAI model name is required!")
+
+        self.api_key = api_key
+        self.timeout = timeout
+        self.max_retries = max_retries
+        self.model_name = model_name
         self.client = self._initialize_client()
     
     def _initialize_client(self):
         """Initialize OpenAI client."""
         try:
-            api_key = self.config.get("api_key")
-            if not api_key:
-                raise ConfigurationException("OpenAI API key is required")
-            
-            timeout = self.config.get("timeout", 200)
-            max_retries = self.config.get("max_retries", 2)
-            
             return AsyncOpenAI(
-                api_key=api_key,
-                timeout=timeout,
-                max_retries=max_retries
+                api_key=self.api_key,
+                timeout=self.timeout,
+                max_retries=self.max_retries
             )
         except Exception as e:
             raise ProviderException(f"Failed to initialize OpenAI client: {e}")
@@ -35,7 +37,6 @@ class OpenAIVisionProvider(VisionProvider):
     async def analyze_image(self, image_data: bytes, **kwargs) -> Dict[str, Any]:
         """Analyze image using OpenAI Vision."""
         try:
-            model = self.config.get("model", "gpt-4o")
             prompt = kwargs.get("prompt", "Analyze this image and describe what you see.")
             
             import base64
@@ -57,7 +58,7 @@ class OpenAIVisionProvider(VisionProvider):
             ]
             
             response = await self.client.chat.completions.create(
-                model=model,
+                model=self.model_name,
                 messages=messages,
                 max_tokens=kwargs.get("max_tokens", 1000),
                 temperature=kwargs.get("temperature", 0.0)

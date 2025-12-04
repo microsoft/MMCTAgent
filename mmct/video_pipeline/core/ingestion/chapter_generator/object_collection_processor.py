@@ -1,11 +1,8 @@
 import os
 import json
-import uuid
 from typing import List, Optional, Tuple
 from loguru import logger
 from pydantic import BaseModel, Field
-from mmct.config.settings import settings
-from mmct.providers.factory import provider_factory
 from mmct.video_pipeline.core.ingestion.models import ChapterCreationResponse, ObjectResponse, ObjectCollectionMetadata
 from mmct.video_pipeline.core.ingestion.chapter_generator.video_summary import VideoSummary
 from mmct.video_pipeline.utils.helper import get_media_folder
@@ -31,16 +28,15 @@ class ObjectCollectionProcessor:
     merges duplicate objects, and saves them to local JSON.
     """
 
-    def __init__(self, index_name: str):
+    def __init__(self, llm_provider):
         """
         Initialize the ObjectCollectionProcessor.
 
         Args:
-            index_name: Name of the index (used for consistency, actual indexing happens in Phase 3)
+            llm_provider: LLM provider instance
         """
-        self.llm_provider = provider_factory.create_llm_provider()
-        self.index_name = index_name
-        self.video_summary_processor = VideoSummary()
+        self.llm_provider = llm_provider
+        self.video_summary_processor = VideoSummary(llm_provider=llm_provider)
 
     async def run(
         self,

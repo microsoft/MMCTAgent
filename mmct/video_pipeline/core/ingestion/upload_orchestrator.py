@@ -20,7 +20,6 @@ from mmct.video_pipeline.core.ingestion.models import (
 )
 from mmct.video_pipeline.core.ingestion.key_frames_extractor.keyframe_search_index import KeyframeSearchIndex
 from mmct.video_pipeline.utils.helper import get_media_folder
-from mmct.providers.factory import provider_factory
 from mmct.providers.search_document_models import ChapterIndexDocument
 from mmct.utils.error_handler import handle_exceptions, convert_exceptions, ProviderException
 
@@ -36,17 +35,19 @@ class UploadOrchestrator:
     - Object collection documents to search index
     """
 
-    def __init__(self, index_name: str, blob_manager=None):
+    def __init__(self, search_provider:dict, blob_manager=None):
         """
         Initialize the upload orchestrator.
 
         Args:
             index_name: Base index name for search indexes
+            search_provider: Search provider instance
             blob_manager: Optional blob storage manager
         """
-        self.index_name = index_name
         self.blob_manager = blob_manager
-        self.search_provider = provider_factory.create_search_provider()
+        self.search_provider_chapter = search_provider.get("chapter")
+        self.search_provider_object_collection = search_provider.get("object_collection")
+        self.search_provider_keyframe = search_provider.get("keyframe")
 
     async def upload_all(
         self,
@@ -72,9 +73,6 @@ class UploadOrchestrator:
         )
 
         logger.info(f"All uploads completed successfully for video {video_id}")
-
-        # Cleanup search provider
-        await self.search_provider.close()
 
     @handle_exceptions(retries=3, exceptions=(Exception,))
     @convert_exceptions({Exception: ProviderException})
@@ -110,10 +108,10 @@ class UploadOrchestrator:
                         continue
 
                     # Upload to blob storage
-                    blob_url = await self.blob_manager.save_file(
+                    blob_url = await self.blob_manager.upload_file(
                         file_name=f"{video_id}/{keyframe.keyframe_filename}",
                         src_file_path=keyframe.file_path,
-                        folder_name="keyframes",
+                        folder_name=self.blob_manager.keyframe_container_name,
                     )
 
                     # Update blob_url in metadata
@@ -148,8 +146,9 @@ class UploadOrchestrator:
 
             # Upload to keyframe search index
             if documents:
-                keyframe_index_name = f"keyframes-{self.index_name}"
-                keyframe_search_index = KeyframeSearchIndex(index_name=keyframe_index_name)
+                keyframe_search_index = KeyframeSearchIndex(
+                    search_provider=self.search_provider_keyframe,
+                )
 
                 # Ensure index exists
                 await keyframe_search_index.create_keyframe_index_if_not_exists()
@@ -158,12 +157,10 @@ class UploadOrchestrator:
                 batch_size = 100
                 for i in range(0, len(documents), batch_size):
                     batch = documents[i:i + batch_size]
-                    await self.search_provider.upload_documents(batch, index_name=keyframe_index_name)
+                    await self.search_provider_keyframe.upload_documents(batch)
                     logger.info(f"Uploaded batch {i // batch_size + 1} of {len(batch)} keyframe documents")
 
                 logger.info(f"Successfully uploaded {len(documents)} keyframe documents to search index")
-
-                await keyframe_search_index.close()
 
         except Exception as e:
             logger.error(f"Failed to upload keyframes: {e}")
@@ -230,25 +227,21 @@ class UploadOrchestrator:
                     video_duration=chapter_collection.video_duration,
                     start_time=chapter.start_time,
                     end_time=chapter.end_time,
-                    blob_audio_url="None",
-                    blob_video_url="None",
-                    blob_transcript_file_url="None",
                     blob_frames_folder_path=keyframe_blob_url or chapter.blob_frames_folder_path,
                     embeddings=chapter.embeddings,
                 )
                 documents.append(doc.model_dump())
 
             # Ensure chapter index exists
-            index_exists = await self.search_provider.index_exists(self.index_name)
+            index_exists = await self.search_provider_chapter.index_exists()
             if not index_exists:
-                logger.info(f"Creating chapter index '{self.index_name}'...")
-                await self.search_provider.create_index(self.index_name, "chapter")
+                logger.info(f"Creating chapter index '{self.search_provider_chapter.index_name}'...")
+                await self.search_provider_chapter.create_index()
 
             # Upload to search index
             if documents:
-                await self.search_provider.upload_documents(
+                await self.search_provider_chapter.upload_documents(
                     documents=documents,
-                    index_name=self.index_name
                 )
                 logger.info(f"Successfully uploaded {len(documents)} chapter documents to search index")
 
@@ -300,16 +293,14 @@ class UploadOrchestrator:
             }
 
             # Ensure object collection index exists
-            object_index_name = f"object-collection-{self.index_name}"
-            index_exists = await self.search_provider.index_exists(object_index_name)
+            index_exists = await self.search_provider_object_collection.index_exists()
             if not index_exists:
-                logger.info(f"Creating object collection index '{object_index_name}'...")
-                await self.search_provider.create_index(object_index_name, "object_collection")
+                logger.info(f"Creating object collection index '{self.search_provider_object_collection.index_name}'...")
+                await self.search_provider_object_collection.create_index()
 
             # Upload to search index
-            await self.search_provider.upload_documents(
-                documents=[doc],
-                index_name=object_index_name
+            await self.search_provider_object_collection.upload_documents(
+                documents=[doc]
             )
             logger.info("Successfully uploaded object collection document to search index")
 

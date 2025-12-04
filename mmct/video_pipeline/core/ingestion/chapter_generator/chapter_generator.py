@@ -6,7 +6,6 @@ import asyncio
 from datetime import time
 from typing import List, Dict, Tuple
 from mmct.config.settings import settings
-from mmct.providers.factory import provider_factory
 from mmct.video_pipeline.core.ingestion.models import (
     ChapterCreationResponse,
     SubjectVarietyResponse,
@@ -21,10 +20,15 @@ load_dotenv(find_dotenv(), override=True)
 
 
 class ChapterGenerator:
-    def __init__(self, keyframe_index, frame_stacking_grid_size=4, max_concurrent_requests=3):
-        self.llm_provider = provider_factory.create_llm_provider()
+    def __init__(
+        self,
+        keyframe_index: str,
+        llm_provider,
+        frame_stacking_grid_size: int = 4,
+        max_concurrent_requests: int = 3
+    ):
+        self.llm_provider = llm_provider
         self.frame_stacking_grid_size = frame_stacking_grid_size
-        self.search_provider = provider_factory.create_search_provider()
         self.index_name = keyframe_index
         self.max_concurrent_requests = max_concurrent_requests
       

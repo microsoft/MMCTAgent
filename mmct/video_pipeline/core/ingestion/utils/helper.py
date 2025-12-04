@@ -6,7 +6,7 @@ import os
 import subprocess
 import aiofiles
 from loguru import logger
-from mmct.providers.factory import provider_factory
+from mmct.providers.base import BaseChapterVectorDBProvider
 
 
 async def get_video_duration(video_path: str) -> float:
@@ -294,7 +294,7 @@ def split_transcript_by_time(srt_content: str, split_time_seconds: float) -> tup
     return part_a_srt.strip(), part_b_srt.strip()
 
 
-async def check_video_already_ingested(hash_id: str, index_name: str) -> bool:
+async def check_video_already_ingested(hash_id: str, search_provider:BaseChapterVectorDBProvider) -> bool:
     """
     Check if a video with the given hash_id already exists in the search index.
 
@@ -306,25 +306,17 @@ async def check_video_already_ingested(hash_id: str, index_name: str) -> bool:
         bool: True if video already exists, False otherwise
     """
     try:
-        # Create search provider using factory
-        search_provider = provider_factory.create_search_provider()
-
-        # Update to use the specified index_name
-        search_provider.config["index_name"] = index_name
-
+        
         # First check if index exists
-        index_exists = await search_provider.index_exists(index_name)
+        index_exists = await search_provider.index_exists()
         if not index_exists:
-            logger.info(f"Index '{index_name}' does not exist yet, skipping duplicate check")
-            await search_provider.close()
+            logger.info(f"Index '{search_provider.index_name}' does not exist yet, skipping duplicate check")
             return False
 
         # Check if document exists
         exists = await search_provider.check_is_document_exist(
             hash_id=hash_id,
-            index_name=index_name
         )
-        await search_provider.close()
 
         return exists
 

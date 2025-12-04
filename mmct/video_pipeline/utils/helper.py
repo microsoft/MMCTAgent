@@ -14,8 +14,7 @@ from datetime import timedelta
 from typing import Dict
 from azure.storage.blob import BlobServiceClient
 from azure.storage.blob.aio import BlobServiceClient as AsyncBlobServiceClient
-from azure.identity import get_bearer_token_provider, DefaultAzureCredential
-from mmct.providers.factory import provider_factory
+from azure.identity import DefaultAzureCredential
 from dotenv import load_dotenv, find_dotenv
 
 
@@ -720,46 +719,6 @@ async def remove_file(video_id):
     except Exception as e:
         raise Exception(e)
 
-
-async def check_video_already_ingested(hash_id: str, index_name: str) -> bool:
-    """
-    Check if a video with the given hash_id already exists in the search index.
-
-    Args:
-        hash_id (str): The hash ID of the video to check
-        index_name (str): The name of the search index to check
-
-    Returns:
-        bool: True if video already exists, False otherwise
-    """
-    try:
-        # Create search provider using factory
-        search_provider = provider_factory.create_search_provider()
-
-        # Update to use the specified index_name
-        search_provider.config["index_name"] = index_name
-        search_provider.client = search_provider._initialize_client()
-
-        # First check if index exists
-        index_exists = await search_provider.index_exists(index_name)
-        if not index_exists:
-            logger.info(f"Index '{index_name}' does not exist yet, skipping duplicate check")
-            await search_provider.close()
-            return False
-
-        # Check if document exists
-        exists = await search_provider.check_is_document_exist(
-            hash_id=hash_id,
-            index_name=index_name
-        )
-        await search_provider.close()
-
-        return exists
-
-    except Exception as e:
-        logger.warning(f"Error checking if video already ingested: {e}")
-        # In case of error, return False to proceed with ingestion
-        return False
 
 async def load_srt(path: str) -> str:
     """

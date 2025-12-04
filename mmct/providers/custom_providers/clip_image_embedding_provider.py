@@ -1,5 +1,4 @@
-from mmct.providers.base import ImageEmbeddingProvider
-from mmct.config.settings import ImageEmbeddingConfig
+from mmct.providers.base import BaseImageEmbeddingProvider
 from typing import Dict, Any, List, Union, Optional
 from PIL import Image
 import numpy as np
@@ -10,32 +9,27 @@ from mmct.utils.error_handler import handle_exceptions, convert_exceptions, Prov
 import asyncio
 
 
-class CustomImageEmbeddingProvider(ImageEmbeddingProvider):
+class ClipImageEmbeddingProvider(BaseImageEmbeddingProvider):
     """CLIP-based image and text embedding provider implementation."""
 
-    def __init__(self, config: Union[Dict[str, Any], ImageEmbeddingConfig]):
+    def __init__(self, model_name:Optional[str] = "openai/clip-vit-base-patch32", device:Optional[str]='auto',batch_size:Optional[int] = 8, max_image_size:Optional[int]=224):
         """
         Initialize CLIP image embedding provider.
 
         Args:
-            config: ImageEmbeddingConfig object or dict with following keys:
-                - model_name: CLIP model name (default: "openai/clip-vit-base-patch32")
-                - device: Device to use - "auto", "cpu", or "cuda" (default: "auto")
-                - max_image_size: Maximum image dimension (default: 224)
-                - batch_size: Batch size for processing (default: 8)
+            model_name: CLIP model name (default: "openai/clip-vit-base-patch32")
+            device: Device to use - "auto", "cpu", or "cuda" (default: "auto")
+            max_image_size: Maximum image dimension (default: 224)
+            batch_size: Batch size for processing (default: 8)
                 
         Note:
             Embeddings are always L2 normalized for optimal CLIP performance.
         """
-        # Convert ImageEmbeddingConfig to dict if needed
-        if isinstance(config, ImageEmbeddingConfig):
-            config = config.to_provider_config()
-
-        self.config = config
-        self.model_name = config.get("model_name", "openai/clip-vit-base-patch32")
+        self.model_name = model_name
+        self.device =device
         self.device = self._get_device()
-        self.max_image_size = config.get("max_image_size", 224)
-        self.batch_size = config.get("batch_size", 8)
+        self.max_image_size = max_image_size
+        self.batch_size = batch_size
 
         self.model: Optional[CLIPModel] = None
         self.processor: Optional[CLIPProcessor] = None
@@ -43,7 +37,7 @@ class CustomImageEmbeddingProvider(ImageEmbeddingProvider):
 
     def _get_device(self) -> str:
         """Determine the best device to use."""
-        device_config = self.config.get("device", "auto")
+        device_config = self.device
 
         if device_config == "auto":
             return "cuda" if torch.cuda.is_available() else "cpu"

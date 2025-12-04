@@ -169,36 +169,6 @@ class ChapterIndexDocument(BaseModel):
         facetable=False,
         key=False
     )
-    blob_video_url: str = Field(
-        ...,
-        searchable=False,
-        filterable=False,
-        retrievable=True,
-        stored=True,
-        sortable=False,
-        facetable=False,
-        key=False
-    )
-    blob_audio_url: str = Field(
-        ...,
-        searchable=False,
-        filterable=False,
-        retrievable=True,
-        stored=True,
-        sortable=False,
-        facetable=False,
-        key=False
-    )
-    blob_transcript_file_url: str = Field(
-        ...,
-        searchable=False,
-        filterable=False,
-        retrievable=True,
-        stored=True,
-        sortable=False,
-        facetable=False,
-        key=False
-    )
     blob_frames_folder_path: str = Field(
         ...,
         searchable=False,
@@ -247,7 +217,7 @@ class ChapterIndexDocument(BaseModel):
         key=False
     )
     embeddings: List[float] = Field(
-        ...,
+        default_factory=list,
         description="Vector embedding for semantic search",
         searchable=True,
         filterable=False,
@@ -378,7 +348,7 @@ class KeyframeDocument(BaseModel):
 
     # — Vector embedding field —
     embeddings: List[float] = Field(
-        ...,
+        default_factory=list,
         description="CLIP embedding vector for frame",
         searchable=True,
         filterable=False,

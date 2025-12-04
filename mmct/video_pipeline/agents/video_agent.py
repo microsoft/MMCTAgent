@@ -2,7 +2,6 @@
 import asyncio
 from typing import Optional
 from dotenv import load_dotenv
-from loguru import logger
 
 # Local Imports
 from mmct.video_pipeline.core.tools.video_qna import video_qna
@@ -11,8 +10,7 @@ from mmct.video_pipeline.prompts_and_description import (
     VideoAgentResponse,
 )
 from autogen_agentchat.ui import Console
-from mmct.config.settings import settings
-from mmct.providers.factory import provider_factory
+from mmct.config.providers import VideoAgentProviderConfig
 
 # Load environment variables
 load_dotenv(override=True)
@@ -20,28 +18,60 @@ load_dotenv(override=True)
 
 class VideoAgent:
     """
-    Simplified agent for video question answering using the updated video_qna function with Swarm orchestration.
+    MMCT's Video question answering agent using Swarm orchestration.
+    
+    This agent uses VideoAgentProviderConfig for dependency injection to access:
+    - llm_provider: For LLM-based reasoning and structured response generation
+    - vectordb_chapter: For retrieving video context and transcripts
+    - vectordb_object_registry: For retrieving video summaries and object collections
+    - vectordb_keyframes: For searching relevant video frames
+    - embedding_provider: For generating embeddings for semantic search
+    - storage_provider: For accessing stored video frames
 
     This agent provides a clean interface that:
-    1. Calls video_qna (v2 with Swarm) with the provided parameters
+    1. Calls video_qna (with Swarm orchestration) with the provided parameters
     2. Formats the response using LLM with structured output
     3. Returns a properly structured VideoAgentResponse
 
     Args:
         query (str): The natural language question about video content.
-        index_name (str): Name of the Azure Cognitive Search index for video retrieval.
+        provider (VideoAgentProviderConfig): Provider configuration containing all required providers.
         video_id (Optional[str]): Specific video ID to query. Defaults to None.
         url (Optional[str]): URL to filter the search results for that particular video. Defaults to None.
         use_critic_agent (bool): Whether to use the critic agent for validation. Defaults to True.
         stream (bool): Whether to stream the response output. Defaults to False.
-        llm_provider (Optional[object]): LLM provider instance. Defaults to None (uses config).
+        cache (bool): Whether to enable caching for model responses. Defaults to False.
 
     Example:
         Basic usage with query and index:
         ```python
+        from mmct.config.providers import VideoAgentProviderConfig
+        from mmct.providers.azure import (
+            AzureLLMProvider,
+            AzureEmbeddingProvider,
+            AISearchChapterProvider,
+            AISearchKeyframesProvider,
+            AISearchObjectCollectionProvider
+            AzureStorageProvider,
+        )
+        # Note: Image Embedding provider is also required which is clip based provider.
+        from mmct.providers.local import ClipImageEmbeddingProvider
+
+
+        # Initialize all required providers
+        provider = VideoAgentProviderConfig(
+            llm_provider=AzureOpenAILLMProvider(endpoint = "<some-endpoint>",api_version="<api-version>",...),
+            embedding_provider=AzureOpenAIEmbeddingProvider(...),
+            vectordb_chapter=AISearchChapterProvider(...),
+            vectordb_object_registry=AISearchObjectCollectionProvider(...),
+            vectordb_keyframes=AISearchKeyframesProvider(...),
+            storage_provider=AzureBlobStorageProvider(...),
+            image_embedding_provider=ClipImageEmbeddingProvider(...)
+        )
+        
         video_agent = VideoAgent(
             query="What are the benefits of organic farming?",
-            index_name="farming-video-index"
+            provider=provider
         )
         result = await video_agent()
         print(result.response)
@@ -51,7 +81,7 @@ class VideoAgent:
         ```python
         video_agent = VideoAgent(
             query="Explain the farming technique shown",
-            index_name="farming-video-index",
+            provider=provider,
             video_id="abc123def456"
         )
         result = await video_agent()
@@ -61,7 +91,7 @@ class VideoAgent:
         ```python
         video_agent = VideoAgent(
             query="Summarize this farming video",
-            index_name="farming-video-index",
+            provider=provider,
             url="https://video-url.mp4",
             stream=True
         )
@@ -72,29 +102,22 @@ class VideoAgent:
     def __init__(
         self,
         query: str,
-        index_name: str,
+        provider: VideoAgentProviderConfig,
         video_id: Optional[str] = None,
         url: Optional[str] = None,
         use_critic_agent: Optional[bool] = True,
         stream: bool = False,
-        llm_provider: Optional[object] = None,
         cache: Optional[bool] = False
     ):
         # Store parameters
         self.query = query
-        self.index_name = index_name
         self.video_id = video_id
         self.url = url
         self.use_critic_agent = use_critic_agent
         self.stream = stream
         self.cache = cache
+        self.provider = provider
 
-        # Initialize LLM provider
-        self.llm_provider = llm_provider or self._create_llm_provider()
-
-    def _create_llm_provider(self) -> object:
-        """Create LLM provider from configuration."""
-        return provider_factory.create_llm_provider()
 
     async def __call__(self) -> VideoAgentResponse:
         """
@@ -104,16 +127,15 @@ class VideoAgent:
             VideoAgentResponse: Structured response containing the answer to the query.
         """
         try:
-            # Call the video_qna function (v2 with Swarm) with simplified parameters
+            # Call the video_qna function
             # Get response from video_qna with Swarm orchestration
             video_qna_response = await video_qna(
                 query=self.query,
                 video_id=self.video_id,
                 url=self.url,
                 use_critic_agent=self.use_critic_agent,
-                index_name=self.index_name,
                 stream=self.stream,
-                llm_provider=self.llm_provider,
+                provider = self.provider,
                 cache = self.cache
             )
 
@@ -124,8 +146,7 @@ class VideoAgent:
         except Exception as e:
             return self._create_error_response(f"VideoAgent execution failed: {str(e)}")
         finally:
-            # Clean up resources
-            await self.cleanup()
+            pass
 
     async def _generate_final_answer(self, video_qna_response: dict) -> VideoAgentResponse:
         """
@@ -143,9 +164,9 @@ class VideoAgent:
             messages = self._prepare_messages(context_text)
 
             # Get structured response from LLM
-            response = await self.llm_provider.chat_completion(
+            response = await self.provider.llm_provider.chat_completion(
                 messages=messages,
-                temperature=settings.llm.llm_temperature,
+                temperature=0.0,  # Use default temperature
                 response_format=VideoAgentResponse
             )
             return response
@@ -172,14 +193,6 @@ class VideoAgent:
             tokens={"input_token": 0, "output_token": 0}
         )
 
-    async def cleanup(self):
-        """Clean up resources and close connections."""
-        try:
-            if self.llm_provider and hasattr(self.llm_provider, 'close'):
-                await self.llm_provider.close()
-        except Exception as e:
-            logger.error(f"Error during VideoAgent cleanup: {e}")
-
 
 if __name__ == "__main__":
 
@@ -187,13 +200,11 @@ if __name__ == "__main__":
         """Example usage of VideoAgent with Swarm orchestration."""
         query = "<placeholder for query>"
         url = "<placeholder for url>" #Optional
-        index_name = "<placeholer for index name>"
         stream = False
         cache = False
         video_agent = VideoAgent(
             query=query,
             url=url,
-            index_name=index_name,
             use_critic_agent=True,
             stream=stream,
             cache = cache

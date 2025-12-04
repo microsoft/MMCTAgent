@@ -1,48 +1,34 @@
-"""Provider system for MMCTAgent."""
+"""Provider system for MMCTAgent.
+
+Import base classes for custom providers:
+    from mmct.providers.base import BaseLLMProvider, BaseEmbeddingProvider
+
+Import concrete providers directly from convenience modules:
+    from mmct.providers.azure import AzureLLMProvider
+    from mmct.providers.openai import OpenAILLMProvider
+    from mmct.providers.local import LocalFaissSearchProvider
+"""
 
 from .base import (
-    LLMProvider,
-    EmbeddingProvider,
-    SearchProvider,
-    VisionProvider,
-    TranscriptionProvider
-)
-from .factory import ProviderFactory, provider_factory
-from .azure_providers import (
-    AzureLLMProvider,
-    AzureReasoningLLMProvider,
-    AzureEmbeddingProvider,
-    AzureSearchProvider,
-    AzureVisionProvider,
-    WhisperTranscriptionProvider
-)
-from .openai_providers import (
-    OpenAILLMProvider,
-    OpenAIEmbeddingProvider,
-    OpenAIVisionProvider,
-    OpenAITranscriptionProvider
+    BaseLLMProvider,
+    BaseEmbeddingProvider,
+    BaseChapterVectorDBProvider,
+    BaseKeyframesVectorDBProvider,
+    BaseObjectCollectionVectorDBProvider,
+    BaseVisionProvider,
+    BaseTranscriptionProvider,
+    BaseStorageProvider,
+    BaseImageEmbeddingProvider
 )
 
 __all__ = [
-    # Base classes
-    'LLMProvider',
-    'EmbeddingProvider',
-    'SearchProvider',
-    'VisionProvider',
-    'TranscriptionProvider',
-    # Factory
-    'ProviderFactory',
-    'provider_factory',
-    # Azure providers
-    'AzureLLMProvider',
-    'AzureReasoningLLMProvider',
-    'AzureEmbeddingProvider',
-    'AzureSearchProvider',
-    'AzureVisionProvider',
-    'WhisperTranscriptionProvider',
-    # OpenAI providers
-    'OpenAILLMProvider',
-    'OpenAIEmbeddingProvider',
-    'OpenAIVisionProvider',
-    'OpenAITranscriptionProvider',
+    'BaseLLMProvider',
+    'BaseEmbeddingProvider',
+    'BaseChapterVectorDBProvider',
+    'BaseKeyframesVectorDBProvider',
+    'BaseObjectCollectionVectorDBProvider',
+    'BaseVisionProvider',
+    'BaseTranscriptionProvider',
+    'BaseStorageProvider',
+    'BaseImageEmbeddingProvider',
 ]

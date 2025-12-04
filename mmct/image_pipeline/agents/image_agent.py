@@ -7,40 +7,34 @@ from autogen_agentchat.teams import SelectorGroupChat, RoundRobinGroupChat
 from autogen_agentchat.conditions import MaxMessageTermination, TextMentionTermination
 from autogen_agentchat.base import TaskResult
 from autogen_agentchat.ui import Console
-from mmct.image_pipeline.core.tools.vit import vit_tool
-from mmct.image_pipeline.core.tools.recog import recog_tool
-from mmct.image_pipeline.core.tools.object_detect import object_detect_tool
-from mmct.image_pipeline.core.tools.ocr import ocr_tool
-from mmct.image_pipeline.core.tools.critic import critic_tool
+from mmct.image_pipeline.core.tools.vit import VitTool
+from mmct.image_pipeline.core.tools.recog import RecogTool
+from mmct.image_pipeline.core.tools.object_detect import ObjectDetectTool
+from mmct.image_pipeline.core.tools.ocr import OcrTool
+from mmct.image_pipeline.core.tools.critic import CriticTool
 from mmct.image_pipeline.prompts import (
     get_planner_system_prompt,
     get_critic_system_prompt,
 )
-from mmct.providers.factory import provider_factory
 from mmct.utils.error_handler import ProviderException, ConfigurationException
 from mmct.utils.error_handler import handle_exceptions
 from mmct.image_pipeline.prompts import IMAGE_AGENT_SYSTEM_PROMPT, ImageAgentResponse
+from mmct.config.providers import ImageAgentProviderConfig
 from loguru import logger
 from dotenv import load_dotenv, find_dotenv
 load_dotenv(find_dotenv(),override=True)
 
 class ImageQnaTools(Enum):
-    vit = (vit_tool,)
-    recog = (recog_tool,)
-    object_detection = (object_detect_tool,)
-    ocr = (ocr_tool,)
+    vit = VitTool
+    recog = RecogTool
+    object_detection = ObjectDetectTool
+    ocr = OcrTool
 
 
 class ImageAgent:
     """
-    ImageAgent handles image-based queries using MMCT's modular architecture that integrates a planner agent,
-    an optional critic agent, and a configurable set of image-processing tools (e.g., ocr, object detection, vit, etc.).    
-
-    Key Features:
-    -------------
-    - Dynamically utilizes image analysis tools selected via an Enum (`ImageQnaTools`) to answer image-related queries.     
-    - Supports both standard and streaming response modes.
-    - Offers an optional critic agent for reflective feedback and improved accuracy of responses.
+    ImageAgent handles image-based queries using MMCT's modular architecture with a planner agent,
+    optional critic agent, and configurable image-processing tools.
 
     Parameters:
     -----------
@@ -48,51 +42,44 @@ class ImageAgent:
         Local path to the image file.
     query (str):
         Question or instruction related to the image.
+    provider (ImageAgentProviderConfig):
+        Provider configuration.
     use_critic_agent (bool):
-        Flag to enable or disable the use of a critic agent.
+        Enable critic agent for reflective feedback.
     stream (bool, optional):
-        Enable or disable streaming response mode. Defaults to False.
-    tools (List[ImageQnaTools]):
-        List of tools to use, defined via the ImageQnaTools Enum. Defaults to all tools (ocr, vit, object detection, recog).
-    disable_console_log (bool):
-        Boolean flag to disable console logs. Default set to False.
+        Enable streaming response mode. Defaults to False.
+    tools (List[ImageQnaTools], optional):
+        List of tools to use. Defaults to all available tools.
+    disable_console_log (bool, optional):
+        Disable console logs. Defaults to False.
+
     Example Usage:
     --------------
-
-    Non-Streaming Response:
     >>> from mmct.image_pipeline import ImageAgent, ImageQnaTools
-    >>> async def run_non_stream():
+    >>> from mmct.config.providers import ImageAgentProviderConfig
+    >>> from mmct.providers.azure import AzureLLMProvider
+    >>> provider_config = ImageAgentProviderConfig(
+    >>> llm_provider = AzureLLMProvider(endpoint = "<endpoint>", api_version = "<api-version>", 
+    >>> deployment_name = "<deployment-name>", model_name = "<model-name>", api_key = "api-key"
+    >>> ))
+    >>> async def run_example():
     >>>     image_qna = ImageAgent(
     >>>         image_path="path/to/image.jpg",
     >>>         query="What dishes are listed under House Special?",
+    >>>         provider=provider_config,
     >>>         tools=[ImageQnaTools.ocr, ImageQnaTools.vit],
-    >>>         use_critic_agent=True,
-    >>>         stream=False
+    >>>         use_critic_agent=True
     >>>     )
-    >>>     result = await image_qna.run()
+    >>>     result = await image_qna()
     >>>     print(result)
-    >>> asyncio.run(run_non_stream())
-
-    Streaming Response:
-    >>> from mmct.image_pipeline import ImageAgent, ImageQnaTools
-    >>> async def run_stream():
-    >>>     image_qna = ImageAgent(
-    >>>         image_path="path/to/image.jpg",
-    >>>         query="What is the total price for House Special and Crab Curry?",
-    >>>         tools=[ImageQnaTools.vit, ImageQnaTools.object_detection],
-    >>>         use_critic_agent=True,
-    >>>         stream=True
-    >>>     )
-    >>>     async for response in image_qna.run_stream():
-    >>>         if not isinstance(response, TaskResult):
-    >>>             print("\\n", response, flush=True)
-    >>> asyncio.run(run_stream())
+    >>> asyncio.run(run_example())
     """
 
     def __init__(
         self,
         image_path: Annotated[str, "local image path"],
         query: Annotated[str, "query related to image"],
+        provider: Annotated[ImageAgentProviderConfig, "Provider configuration for Image Agent"],
         use_critic_agent: Annotated[bool, "Include critic agent"],
         stream: Annotated[bool, "Enable streaming response (True/False)"] = False,
         tools: Annotated[List[ImageQnaTools], "Enum name and value as Enum value"] = [
@@ -108,7 +95,7 @@ class ImageAgent:
             self.logger = logger
             
             # Initialize providers
-            self.llm_provider = provider_factory.create_llm_provider()
+            self.llm_provider = provider.llm_provider
             
             # Set instance attributes
             self.image_path = image_path
@@ -128,7 +115,7 @@ class ImageAgent:
             self.model_client = self.llm_provider.get_autogen_client()
 
             logger.info("Initialized ImageAgent with provider system")
-            
+
             self.tools_list = []
             self.planner_agent = None
             self.critic_agent = None
@@ -142,14 +129,33 @@ class ImageAgent:
     async def _initialize_tools(self):
         """
         Initialize the tools for Image Agent.
-        
+
         Raises:
             ProviderException: If tool initialization fails
         """
         try:
             logger.info("Initializing the tools for Image Agent")
-            self.tools = [tool.value[0] for tool in self.tools_enum]
+            self.tools = []
             self.tools_str = [tool.name for tool in self.tools_enum]
+
+            # Instantiate each tool class and get the method reference
+            for tool in self.tools_enum:
+                tool_class = tool.value
+
+                # Instantiate based on tool type
+                if tool_class == VitTool:
+                    tool_instance = tool_class(llm_provider=self.llm_provider, img_path=self.image_path)
+                    self.tools.append(tool_instance.vit_tool)
+                elif tool_class == RecogTool:
+                    tool_instance = tool_class(img_path=self.image_path)
+                    self.tools.append(tool_instance.recog_tool)
+                elif tool_class == ObjectDetectTool:
+                    tool_instance = tool_class(img_path=self.image_path)
+                    self.tools.append(tool_instance.object_detect_tool)
+                elif tool_class == OcrTool:
+                    tool_instance = tool_class(img_path=self.image_path)
+                    self.tools.append(tool_instance.ocr_tool)
+
             logger.info("Successfully initialized tools for Image Agent")
         except Exception as e:
             logger.exception(f"Exception occurred while initializing the tools for Image Agent: {e}")
@@ -188,12 +194,14 @@ class ImageAgent:
                 logger.info("Retrieving the Critic Agent's System Prompt")
                 critic_prompt = await get_critic_system_prompt(includeMetaGuidelines=True)
 
+                critic_tool_object = CriticTool(llm_provider = self.llm_provider, query=self.query, img_path=self.image_path)
+
                 self.critic_agent = AssistantAgent(
                     name="ImageAgent_critic",
                     model_client=self.model_client,
                     model_client_stream=False,
                     system_message=critic_prompt,
-                    tools=[critic_tool],
+                    tools=[critic_tool_object.critic_tool],
                     reflect_on_tool_use=False,
                 )
                 logger.info("Initialized the Critic Agent")

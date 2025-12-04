@@ -1,19 +1,16 @@
-import torch
 from PIL import Image
-import requests
-from mmct.providers.factory import provider_factory
-from mmct.config.settings import settings
 import io
 import base64
+from mmct.providers.base import BaseLLMProvider
 from dotenv import load_dotenv, find_dotenv
 
 load_dotenv(find_dotenv(), override=True)
 
 
 class VisualLLM:
-    def __init__(self):
+    def __init__(self, llm_provider:BaseLLMProvider):
         # Initialize vision provider
-        self.llm_provider = provider_factory.create_llm_provider()
+        self.llm_provider = llm_provider
 
     def convert_image(self, img_pil):
         # Convert the image to base64

@@ -187,7 +187,23 @@ Published on **arXiv** – [arxiv.org/abs/2405.18358](https://arxiv.org/abs/2405
 
 ```python
 from mmct.image_pipeline import ImageAgent, ImageQnaTools
+from mmct.providers.azure import AzureLLMProvider
+from mmct.config.providers import ImageAgentProviderConfig
+from azure.identity import DefaultAzureCredential, AzureCliCredential, ChainedTokenCredential
 import asyncio
+
+
+credentials = ChainedTokenCredential(AzureCliCredential(),DefaultAzureCredential()) # Or directly use api_key
+# Initializing the provider
+provider = ImageAgentProviderConfig(
+    llm_provider=AzureLLMProvider(
+        endpoint = "<your_endpoint>",
+        deployment_name="<deployment_name>",
+        model_name="<model_name>",
+        api_version="api_version",
+        credentials=credentials,
+    )
+)
 
 # Initialize the Image Agent with desired tools
 image_agent = ImageAgent(
@@ -195,7 +211,8 @@ image_agent = ImageAgent(
     image_path="path/to/your/image.jpg",
     tools=[ImageQnaTools.object_detection, ImageQnaTools.ocr, ImageQnaTools.vit],
     use_critic_agent=True,  # Enable critical thinking
-    stream=False
+    stream=False,
+    provider = provider
 )
 
 # Run the analysis
@@ -208,13 +225,71 @@ print(f"Analysis Result: {response.response}")
 Ingest a video through MMCT Video Ingestion Pipeline.
 
 ```python
-from mmct.video_pipeline import IngestionPipeline, Languages, TranscriptionServices
+from mmct.video_pipeline import IngestionPipeline, Languages
+from mmct.config.providers import IngestionProviderConfig
+from mmct.providers.azure import (
+    AzureLLMProvider,
+    AzureEmbeddingProvider,
+    AISearchChapterProvider,
+    AISearchKeyframesProvider,
+    AISearchObjectCollectionProvider,
+    AzureStorageProvider,
+    WhisperTranscriptionProvider
+)
+from mmct.providers.local import ClipImageEmbeddingProvider
+from azure.identity import DefaultAzureCredential, AzureCliCredential, ChainedTokenCredential
+
+credentials = ChainedTokenCredential(AzureCliCredential(), DefaultAzureCredential())
+
+# Initializing the provider
+provider = IngestionProviderConfig(
+    llm_provider=AzureLLMProvider(
+        endpoint="https://<your-openai-endpoint>.openai.azure.com/",
+        deployment_name="<your-llm-deployment-name>",
+        model_name="<your-llm-model-name>",
+        api_version="<your-api-version>",
+        credentials=credentials,
+    ),
+    embedding_provider=AzureEmbeddingProvider(
+        endpoint="https://<your-openai-endpoint>.openai.azure.com/",
+        deployment_name="<your-embedding-deployment-name>",
+        api_version="<your-api-version>",
+        credentials=credentials,
+    ),
+    image_embedding_provider=ClipImageEmbeddingProvider(),
+    vectordb_chapter=AISearchChapterProvider(
+        endpoint="https://<your-search-service>.search.windows.net",
+        index_name="<your-chapter-index-name>",
+        credentials=credentials,
+    ),
+    vectordb_keyframes=AISearchKeyframesProvider(
+        endpoint="https://<your-search-service>.search.windows.net",
+        index_name="<your-keyframe-index-name>",
+        credentials=credentials,
+    ),
+    vectordb_object_registry=AISearchObjectCollectionProvider(
+        endpoint="https://<your-search-service>.search.windows.net",
+        index_name="<your-object-registry-index-name>",
+        credentials=credentials,
+    ),
+    storage_provider=AzureStorageProvider(
+        storage_account_name="<your-storage-account-name>",
+        keyframe_container_name="<your-keyframe-container-name>",
+        credentials=credentials,
+    ),
+    transcription_provider=WhisperTranscriptionProvider(
+        endpoint="https://<your-openai-endpoint>.openai.azure.com/",
+        api_version="<your-api-version>",
+        deployment_name="<your-whisper-deployment-name>",
+        credentials=credentials,
+    ),
+)
+
 
 ingestion = IngestionPipeline(
     video_path="path-of-your-video",
-    index_name="index-name",
-    transcription_service=TranscriptionServices.WHISPER, #TranscriptionServices.AZURE_STT
     language=Languages.ENGLISH_INDIA,
+    provider = provider
 )
 
 # Run the ingestion pipeline
@@ -224,17 +299,75 @@ await ingestion.run()
 Perform Q&A through MMCT's Video Agent.
 ```python
 from mmct.video_pipeline import VideoAgent
+from mmct.config.providers import VideoAgentProviderConfig
+from mmct.providers.azure import (
+    AzureLLMProvider,
+    AzureEmbeddingProvider,
+    AISearchChapterProvider,
+    AISearchKeyframesProvider,
+    AISearchObjectCollectionProvider,
+    AzureStorageProvider
+)
+from mmct.providers.local import ClipImageEmbeddingProvider
+from azure.identity import DefaultAzureCredential, AzureCliCredential, ChainedTokenCredential
 import asyncio
+
+credentials = ChainedTokenCredential(AzureCliCredential(), DefaultAzureCredential())
+
+# Initializing the provider
+provider = VideoAgentProviderConfig(
+    llm_provider=AzureLLMProvider(
+        endpoint="https://<your-openai-endpoint>.openai.azure.com/",
+        deployment_name="<your-llm-deployment-name>",
+        model_name="<your-llm-model-name>",
+        api_version="<your-api-version>",
+        credentials=credentials,
+    ),
+
+    embedding_provider=AzureEmbeddingProvider(
+        endpoint="https://<your-openai-endpoint>.openai.azure.com/",
+        deployment_name="<your-embedding-deployment>",
+        api_version="<your-api-version>",
+        credentials=credentials,
+    ),
+
+    image_embedding_provider=ClipImageEmbeddingProvider(),
+
+    vectordb_chapter=AISearchChapterProvider(
+        endpoint="https://<your-search-service>.search.windows.net",
+        index_name="<your-chapter-index-name>",
+        credentials=credentials,
+    ),
+
+    vectordb_keyframes=AISearchKeyframesProvider(
+        endpoint="https://<your-search-service>.search.windows.net",
+        index_name="<your-keyframe-index-name>",
+        credentials=credentials,
+    ),
+
+    vectordb_object_registry=AISearchObjectCollectionProvider(
+        endpoint="https://<your-search-service>.search.windows.net",
+        index_name="<your-object-registry-index-name>",
+        credentials=credentials,
+    ),
+
+    storage_provider=AzureStorageProvider(
+        storage_account_name="<your-storage-account-name>",
+        keyframe_container_name="<your-keyframe-container-name>",
+        credentials=credentials,
+    )
+)
+
 
 # Configure the Video Agent
 video_agent = VideoAgent(
     query="input-query",
-    index_name="your-index-name",
     video_id=None,  # Optional: specify video ID
     url=None,  # Optional: URL to filter out the search results for given url
     use_critic_agent=True,  # Enable critic agent
     stream=False,  # Stream response
-    cache=False  # Optional: enable caching
+    cache=False,  # Optional: enable caching
+    provider = provider
 )
 
 # Execute video analysis
@@ -254,10 +387,12 @@ MMCTAgent now features a **modular provider system** that allows you to seamless
 
 | Service Type | Supported Providers | Use Cases |
 |--------------|--------------------|-----------|
-| **LLM** | Azure OpenAI, OpenAI | Text generation, chat completion |
+| **LLM** | Azure OpenAI, OpenAI, **+ Custom** | Text generation, chat completion |
 | **Search** | Azure AI Search, FAISS | Document search and retrieval |
 | **Transcription** | Azure Speech Services, OpenAI Whisper | Audio-to-text conversion |
 | **Storage** | Azure Blob Storage, Local Storage | File storage and management |
+
+> **Note**: All provider types support custom implementations. See the [Custom LLM Provider Example](examples/image_agent.ipynb) (Anthropic Claude) or read the [Providers Guide](mmct/providers/README.md) for implementation details.
 
 For detailed configuration instructions, see our [Provider Configuration Guide](mmct/providers/README.md).
 
@@ -283,38 +418,7 @@ High-throughput (fast, large batches):
 - GPU: 8-16 GB+ VRAM, fast memory bandwidth (e.g. RTX 3090, A100)
 - Use float16 / bfloat16, efficient batching, parallel preprocessing
 
-### Environment Setup
-
-MMCTAgent uses a flexible configuration system that supports multiple cloud providers. Choose your configuration method:
-
-#### Quick Start
-
-Rename the `.env.example` to `.env` and fill the specific values.
-
-#### Provider Configuration Examples
-
-**Azure-First Setup:**
-```bash
-# LLM Configuration
-LLM_PROVIDER=azure
-LLM_ENDPOINT=https://your-resource.openai.azure.com/
-LLM_DEPLOYMENT_NAME=gpt-4o
-LLM_MODEL_NAME=gpt-4o
-LLM_USE_MANAGED_IDENTITY=true
-
-# Search Configuration
-SEARCH_PROVIDER=azure_ai_search # use `local_faiss` to enable faiss index as vector db
-SEARCH_ENDPOINT=https://your-search.search.windows.net
-SEARCH_USE_MANAGED_IDENTITY=true
-SEARCH_INDEX_NAME=your-index-name
-
-# Storage Configuration
-STORAGE_PROVIDER=azure # use `local` to store items to local storage
-STORAGE_ACCOUNT_NAME=your-storage-account
-STORAGE_USE_MANAGED_IDENTITY=true
-```
-
-📖 **For comprehensive configuration options, see our [Provider Configuration Guide](docs/PROVIDERS_GUIDE.md)**
+---
 
 ## **Project Structure**
 

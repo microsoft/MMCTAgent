@@ -6,20 +6,18 @@ It coordinates semantic chunking, chapter generation, and saving to JSON files.
 """
 
 import os
-import uuid
-import asyncio
 import json
-from datetime import datetime
 from typing import List, Optional, Tuple
 from loguru import logger
-
-from mmct.providers.search_document_models import ChapterIndexDocument
 from mmct.video_pipeline.core.ingestion.semantic_chunking.semantic_chunker import SemanticChunker
 from mmct.video_pipeline.core.ingestion.chapter_generator.chapter_generator import ChapterGenerator
 from mmct.video_pipeline.core.ingestion.chapter_generator.object_collection_processor import ObjectCollectionProcessor
 from mmct.video_pipeline.core.ingestion.models import ChapterMetadata, ChapterMetadataCollection
 from mmct.video_pipeline.utils.helper import get_media_folder
-from mmct.providers.factory import provider_factory
+from mmct.providers.base import (
+    BaseLLMProvider,
+    BaseEmbeddingProvider
+)
 
 from dotenv import load_dotenv, find_dotenv
 
@@ -39,9 +37,11 @@ class ChapterIngestionPipeline:
     def __init__(
         self,
         hash_id: str,
-        index_name: str,
         transcript: str,
         keyframe_blob_url: str,
+        llm_provider: BaseLLMProvider,
+        keyframe_index_name: str,
+        embedding_provider: BaseEmbeddingProvider,
         frame_stacking_grid_size: int = 4,
         parent_id: Optional[str] = None,
         parent_duration: Optional[float] = None,
@@ -55,6 +55,8 @@ class ChapterIngestionPipeline:
             index_name: Azure AI Search index name
             transcript: Raw SRT transcript text
             keyframe_blob_url: URL to keyframe blob storage folder
+            llm_provider: LLM provider instance (handles both text and vision tasks)
+            embedding_provider: Embedding provider instance (required)
             frame_stacking_grid_size: Grid size for frame stacking (default: 4)
             parent_id: ID of parent video if this is a part
             parent_duration: Duration of parent video
@@ -63,50 +65,38 @@ class ChapterIngestionPipeline:
         # Core attributes
         self.transcript = transcript
         self.hash_id = hash_id
-        self.index_name = index_name
         self.frame_stacking_grid_size = frame_stacking_grid_size
         self.parent_id = parent_id
         self.parent_duration = parent_duration
         self.video_duration = video_duration
         self.keyframe_blob_url = keyframe_blob_url
+        self.keyframe_index_name = keyframe_index_name
 
-        # Initialize components
-        self.semantic_chunker = SemanticChunker(transcript=transcript)
+        # Store providers
+        self.llm_provider = llm_provider
+        self.embedding_provider = embedding_provider
+
+        # Initialize components with providers
+        self.semantic_chunker = SemanticChunker(
+            transcript=transcript,
+            embedding_provider=self.embedding_provider
+        )
         self.chapter_generator = ChapterGenerator(
             frame_stacking_grid_size=frame_stacking_grid_size,
-            keyframe_index=f"keyframes-{index_name}",
+            keyframe_index=self.keyframe_index_name,
+            llm_provider=self.llm_provider,
         )
 
         # Initialize object collection processor
         self.object_collection_processor = ObjectCollectionProcessor(
-            index_name=f"object-collection-{index_name}"
+            llm_provider=self.llm_provider,
         )
-
-        # Create search provider with custom index_name for this pipeline
-        self.search_provider = provider_factory.create_search_provider()
 
         # Pipeline state
         self.chunked_segments = []
         self.chapter_responses = []
         self.chapter_transcripts = []
         self.chapter_timestamps = []
-
-    async def _create_search_index(self):
-        """Create search index if it doesn't exist."""
-        # Check if index exists
-        exists = await self.search_provider.index_exists(self.index_name)
-        if exists:
-            logger.info(f"Index {self.index_name} already exists.")
-            return
-
-        # Index doesn't exist, create it
-        # Provider will handle schema creation based on type indicator
-        logger.info(f"Creating index '{self.index_name}'...")
-        
-        created = await self.search_provider.create_index(self.index_name, "chapter")
-        if created:
-            logger.info(f"Index {self.index_name} created successfully.")
-
 
 
     async def _create_chapters(self):
@@ -237,22 +227,3 @@ class ChapterIngestionPipeline:
 
         logger.info("Chapter pipeline completed successfully!")
         return self.chapter_responses, self.chapter_transcripts, chapters_json_path
-
-
-if __name__ == "__main__":
-    # Example usage
-    sample_transcript = """1
-00:00:00,000 --> 00:00:05,000
-This is a sample video transcript.
-
-2
-00:00:05,000 --> 00:00:10,000
-It demonstrates the chapter ingestion pipeline."""
-
-    pipeline = ChapterIngestionPipeline(
-        hash_id="test-hash-123",
-        index_name="test-index",
-        transcript=sample_transcript,
-        keyframe_blob_url="https://example.com/keyframes",
-    )
-    asyncio.run(pipeline.run())

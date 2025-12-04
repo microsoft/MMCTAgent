@@ -6,15 +6,10 @@ import shutil
 from loguru import logger
 import gc
 
-from mmct.providers.factory import provider_factory
-from mmct.config.settings import settings
-from mmct.video_pipeline.core.ingestion.transcription.cloud_transcription import CloudTranscription
-from mmct.video_pipeline.core.ingestion.transcription.whisper_transcription import (
-    WhisperTranscription,
-)
+from mmct.config.providers import IngestionProviderConfig
+from mmct.providers.base import  BaseTranscriptionProvider
 from mmct.video_pipeline.utils.helper import (
     get_file_hash,
-    remove_file,
     get_media_folder,
 )
 from mmct.video_pipeline.core.ingestion.utils.helper import (
@@ -86,19 +81,12 @@ class IngestionPipeline:
     """
     IngestionPipeline handles the ingestion to prepare it for use with the VideoAgent system.
 
-    This pipeline supports transcription using Speech-to-Text ("azure-stt") or OpenAI Whisper,
-    and it stores the resulting transcripts, keyframes, and metadata.
-
-    It also uploads all required video-related files (e.g., original video, transcripts, metadata)
-    to an Storage account as part of the ingestion process.
-
     Attributes:
         video_path (str): Path to the video file to be ingested.
-        index_name (str): Name of the Azure AI Search index where video data will be stored.
+        provider (IngestionProviderConfig): Configuration object containing all service providers
+            (LLM, embedding ,Image embedding, vector database (for chapters, keyframes, object registry), storage, transcription, etc.) required for the ingestion pipeline.
         language (Languages, optional): Language of the video (only Languages Enum), used for transcription.
-            Required only when transcript_path is not provided. Defaults to None.
-        transcription_service (str, optional): Transcription service to use ("azure-stt" or "whisper"). Defaults to "azure-stt" from the TranscriptionServices.
-            Only used when transcript_path is not provided.
+            Required when transcript_path is not provided. Defaults to None.
         url (str, optional): Optional URL associated with the video for video metadata.
         transcript_path (str, optional): Path to an existing transcript file (.srt format).
             When provided, transcription is skipped and language parameter is not required.
@@ -110,17 +98,36 @@ class IngestionPipeline:
     ---------------
     >>> from mmct.video_pipeline.ingestion import IngestionPipeline
     >>> from mmct.video_pipeline.language import Languages
-    >>> from mmct.video_pipeline.core.ingestion.transcription.transcription_services import
-    TranscriptionServices
+    >>> from mmct.config.providers import IngestionProviderConfig
+    >>> from mmct.providers.azure import (
+    >>>     AzureLLMProvider,
+    >>>     AzureEmbeddingProvider,
+    >>>     AISearchChapterProvider,
+    >>>     AISearchKeyframesProvider,
+    >>>     AISearchObjectCollectionProvider,
+    >>>     AzureStorageProvider,
+    >>>     WhisperTranscriptionProvider
+    >>>    )     # Note: Image Embedding provider is also required which is clip based provider.
+    >>>    from mmct.providers.local import ClipImageEmbeddingProvider
     >>> import asyncio
-    >>>
+
     >>> async def run_ingestion():
+    >>>     # Configure providers (transcription, LLM, embedding, search, storage, etc.)
+    >>>     provider = IngestionProviderConfig(
+    >>>        llm_provider=AzureOpenAILLMProvider(endpoint = "<some-endpoint>",api_version="<api-version>",...),
+    >>>        embedding_provider=AzureOpenAIEmbeddingProvider(...),
+    >>>        vectordb_chapter=AISearchChapterProvider(...),
+    >>>        vectordb_object_registry=AISearchObjectCollectionProvider(...),
+    >>>        vectordb_keyframes=AISearchKeyframesProvider(...),
+    >>>        storage_provider=AzureBlobStorageProvider(...),
+    >>>        image_embedding_provider=ClipImageEmbeddingProvider(...),
+    >>>        transcription_provider=WhisperTranscriptionProvider(...)
+    >>>     )  # Configure your providers
+    >>>
     >>>     ingestion = IngestionPipeline(
     >>>         video_path="<valid-video-path>",
-    >>>         index_name="<ai-search-index-name>",
-    >>>         language=Languages.TELUGU_INDIA,
-    >>>         transcription_service=TranscriptionServices.AZURE_STT",
-    >>>         url=None
+    >>>         provider=provider,
+    >>>         language=Languages.TELUGU_INDIA
     >>>     )
     >>>     await ingestion.run()
     >>>
@@ -131,17 +138,14 @@ class IngestionPipeline:
     def __init__(
         self,
         video_path: Annotated[str, "Local path to the video file to be ingested"],
-        index_name: Annotated[
-            str, "Name of the Azure AI Search index where video chapters & metadata will be stored"
+        provider: Annotated[
+            IngestionProviderConfig,
+            "Configuration object containing all service providers (LLM, embedding, image embedding, search, storage, transcription, and vector database - chapters, object collection, keyframes) required for the ingestion pipeline",
         ],
         language: Annotated[
             Optional[Languages],
             "Language of the video (Languages Enum), required only when transcript_path is not provided",
         ] = None,
-        transcription_service: Annotated[
-            Optional[str],
-            "Transcription service to use (values from TranscriptionServices: 'azure-stt' or 'whisper')",
-        ] = TranscriptionServices.AZURE_STT,
         url: Annotated[
             Optional[str], "Optional URL associated with the video for metadata enrichment"
         ] = None,
@@ -152,11 +156,8 @@ class IngestionPipeline:
         disable_console_log: Annotated[
             bool, "Boolean flag to disable console logs during ingestion"
         ] = False,
-        hash_video_id: Annotated[
-            Optional[str], "Unique hash ID for the video, used for deduplication and indexing"
-        ] = None,
         frame_stacking_grid_size: Annotated[
-            int, "Grid size for frame stacking (>1 enables stacking, 1 disables)"
+            int, "Grid size for frame horizontal stacking (>1 enables stacking, 1 disables)"
         ] = 4,
         keyframe_config: Annotated[
             Optional[Dict[str, float]],
@@ -179,32 +180,22 @@ class IngestionPipeline:
         if not transcript_path and not language:
             raise ValueError("language parameter is required when transcript_path is not provided")
 
-        self.hash_video_id = hash_video_id
-        self.video_container = os.getenv("VIDEO_CONTAINER_NAME")
-        self.audio_container = os.getenv("AUDIO_CONTAINER_NAME")
-        self.transcript_container = os.getenv("TRANSCRIPT_CONTAINER_NAME")
-        self.keyframe_container = os.getenv(
-            "KEYFRAME_CONTAINER_NAME", "keyframes"
-        )  # Default to "keyframes" if not set
-        self.timestamps_container = os.getenv("TIMESTAMPS_CONTAINER_NAME")
-        self.video_description_container_name = os.getenv("VIDEO_DESCRIPTION_CONTAINER_NAME")
+        self.keyframe_container = "keyframes"
         self.video_path = video_path
         self.transcript_path = transcript_path
         _, self.video_extension = os.path.splitext(self.video_path)
-        self.transcription_service = transcription_service
         self.url = url
-        self.index_name = index_name
         self.language = language
         self.frame_stacking_grid_size = frame_stacking_grid_size
         self.keyframe_config = keyframe_config
         self.original_video_path = video_path
+        self.provider = provider
 
     async def _get_blob_manager(self):
         """
-        Create and return a new blob manager instance for each caller.
-        Each video part gets its own blob manager to avoid race conditions.
+        Return the storage provider instance.
         """
-        return provider_factory.create_storage_provider()
+        return self.provider.storage_provider
 
     async def _check_and_compress_video(self, video_path: str) -> str:
         """
@@ -219,7 +210,9 @@ class IngestionPipeline:
         """
         try:
             file_size_mb = os.path.getsize(video_path) / (1024 * 1024)
-            self.logger.info(f"Video file size for {os.path.basename(video_path)}: {file_size_mb:.2f} MB")
+            self.logger.info(
+                f"Video file size for {os.path.basename(video_path)}: {file_size_mb:.2f} MB"
+            )
 
             if file_size_mb > 500:
                 self.logger.info(
@@ -275,13 +268,13 @@ class IngestionPipeline:
 
             # Check if video already exists in the index
             is_already_ingested = await check_video_already_ingested(
-                hash_id=video_hash_id, index_name=self.index_name
+                hash_id=video_hash_id, search_provider=self.provider.vectordb_chapter
             )
 
             if is_already_ingested:
 
                 self.logger.info(
-                    f"Video with hash_id {video_hash_id} already exists in index {self.index_name}. Skipping pipeline - no processing needed."
+                    f"Video with hash_id {video_hash_id} already ingested. Skipping pipeline - no processing needed."
                 )
                 return False
 
@@ -291,7 +284,6 @@ class IngestionPipeline:
         except Exception as e:
             self.logger.exception(f"Exception occurred during early ingestion check: {e}")
             raise
-
 
     async def _process_single_video_part(
         self,
@@ -340,7 +332,7 @@ class IngestionPipeline:
 
             # Set keyframes blob URL
             context.keyframes_blob_folder_url = await blob_manager.get_file_url(
-                folder_name=self.keyframe_container, file_name=f"{context.hash_id}"
+                file_name=f"{context.hash_id}"
             )
 
             # ============================================================
@@ -378,7 +370,9 @@ class IngestionPipeline:
                     transcript_content = await load_srt(self.transcript_path)
 
                     # Split transcript by time to match video split
-                    part_a_srt, part_b_srt = split_transcript_by_time(transcript_content, video_split_time)
+                    part_a_srt, part_b_srt = split_transcript_by_time(
+                        transcript_content, video_split_time
+                    )
 
                     # Select the appropriate part based on part_index
                     selected_transcript = part_a_srt if part_index == 0 else part_b_srt
@@ -392,6 +386,7 @@ class IngestionPipeline:
                 else:
                     # Single video - use transcript as-is
                     transcript_path = self.transcript_path
+                    context.transcript = await load_srt(transcript_path)
                     self.logger.info(f"Using provided transcript: {transcript_path}")
 
                 # Update context with prepared transcript path
@@ -400,19 +395,24 @@ class IngestionPipeline:
                 # Generate transcription
                 # For Part B (part_index=1), pass offset to adjust timestamps
                 time_offset = video_split_time if part_index == 1 else 0.0
-                context = await self._get_transcription(context, time_offset=time_offset)
+                context = await self._get_transcription(context, time_offset=time_offset, transcription_provider = self.provider.transcription_provider)
                 self.logger.info(f"[PHASE 1] Transcript generated for part {part_hash_id}")
 
             # Step 4: Generate semantic chapters and save to JSON (no embeddings, no upload)
-            context = await self._generate_semantic_chapters(context, self.url)
-            self.logger.info(f"[PHASE 1] Chapters and objects saved to JSON for part {part_hash_id}")
+            context = await self._generate_semantic_chapters(context = context, keyframe_index_name=self.provider.vectordb_keyframes.index_name, url = self.url)
+            self.logger.info(
+                f"[PHASE 1] Chapters and objects saved to JSON for part {part_hash_id}"
+            )
             self.logger.info(f"[PHASE 1] Local processing completed successfully")
 
             # ============================================================
             # PHASE 2: PARALLEL EMBEDDING GENERATION
             # ============================================================
             self.logger.info(f"[PHASE 2] Starting parallel embedding generation for {part_hash_id}")
-            embedding_orchestrator = EmbeddingOrchestrator()
+            embedding_orchestrator = EmbeddingOrchestrator(
+                embedding_provider=self.provider.embedding_provider,
+                image_embedding_provider=self.provider.image_embedding_provider,
+            )
             await embedding_orchestrator.generate_all_embeddings(part_hash_id)
             self.logger.info(f"[PHASE 2] All embeddings generated successfully")
 
@@ -421,13 +421,13 @@ class IngestionPipeline:
             # ============================================================
             self.logger.info(f"[PHASE 3] Starting parallel uploads and indexing for {part_hash_id}")
             upload_orchestrator = UploadOrchestrator(
-                index_name=self.index_name,
-                blob_manager=blob_manager
+                search_provider={"chapter":self.provider.vectordb_chapter, "object_collection":self.provider.vectordb_object_registry, "keyframe":self.provider.vectordb_keyframes},
+                blob_manager=blob_manager,
             )
             await upload_orchestrator.upload_all(
                 video_id=part_hash_id,
                 url=self.url,
-                keyframe_blob_url=context.keyframes_blob_folder_url
+                keyframe_blob_url=context.keyframes_blob_folder_url,
             )
             self.logger.info(f"[PHASE 3] All uploads and indexing completed successfully")
 
@@ -439,8 +439,6 @@ class IngestionPipeline:
             await cleanup_manager.cleanup(part_hash_id)
             self.logger.info(f"[PHASE 4] Cleanup completed successfully")
 
-            await blob_manager.close()
-
             self.logger.info(f"Successfully processed video part: {part_hash_id}")
 
         except Exception as e:
@@ -450,10 +448,10 @@ class IngestionPipeline:
             raise
 
     async def _get_transcription(
-        self, context: ProcessingContext, time_offset: float = 0.0
+        self, context: ProcessingContext, transcription_provider: BaseTranscriptionProvider, time_offset: float = 0.0, 
     ) -> ProcessingContext:
         """
-        Generate transcription for video - functional version.
+        Generate transcription for video.
 
         Args:
             context: Processing context for the video
@@ -474,69 +472,40 @@ class IngestionPipeline:
                 context.local_resources.append(new_video_path)  # Track renamed copy for cleanup
                 self.logger.info(f"Video file copied to: {context.video_path}")
 
-            # Handle transcript_path case - no transcription needed, just use provided transcript
-            transcript_path_to_use = context.transcript_path or self.transcript_path
-            if transcript_path_to_use:
-                self.logger.info(f"Using provided transcript path: {transcript_path_to_use}")
+        
+            self.logger.info(f"Using transcription provider: {transcription_provider.__class__.__name__}")
+            output_dir = await get_media_folder()
 
-                # Copy provided transcript to target location
-                target_transcript_path = os.path.join(
+            # Extract language name for translation (used by Azure Speech Service if needed)
+            source_language_name = None
+            if self.language:
+                source_language_name = self.language.name.split("_")[0].capitalize()
+
+            # Call provider's transcribe_video method with appropriate parameters
+            context.transcript, local_paths = await transcription_provider.transcribe_video(
+                video_path=context.video_path,
+                hash_id=context.hash_id,
+                output_dir=output_dir,
+                language=self.language.value if self.language else None,
+                translate_to_english=True,
+                source_language_name=source_language_name,
+                response_format="srt"  # Used by Whisper, ignored by Azure Speech Service
+            )
+            self.logger.info("Successfully generated the transcript using transcription provider.")
+
+            # Adjust transcript timestamps if offset is provided (for Part B videos)
+            if time_offset > 0:
+                self.logger.info(f"Adjusting transcript timestamps by offset: {time_offset}s")
+                context.transcript = adjust_transcript_timestamps(
+                    context.transcript, time_offset
+                )
+                # Save adjusted transcript
+                adjusted_transcript_path = os.path.join(
                     await get_media_folder(), f"transcript_{context.hash_id}.srt"
                 )
-
-                # Only copy if source and target are different files
-                if os.path.abspath(transcript_path_to_use) != os.path.abspath(
-                    target_transcript_path
-                ):
-                    shutil.copy2(transcript_path_to_use, target_transcript_path)
-                else:
-                    self.logger.info(
-                        f"Transcript already at target location: {target_transcript_path}"
-                    )
-
-                # Load transcript content
-                context.transcript = await load_srt(target_transcript_path)
-                self.logger.info("Successfully loaded provided transcript")
-
-                # Track transcript file for cleanup
-                local_paths = [target_transcript_path]
-
-            else:
-                # Normal transcription flow
-                if self.transcription_service == TranscriptionServices.AZURE_STT:
-                    transcriber = CloudTranscription(
-                        video_path=context.video_path,
-                        hash_id=context.hash_id,
-                        language=self.language,
-                    )
-                elif self.transcription_service is None:
-                    transcriber = CloudTranscription(
-                        video_path=context.video_path,
-                        hash_id=context.hash_id,
-                        language=self.language,
-                    )
-                else:
-                    transcriber = WhisperTranscription(
-                        video_path=context.video_path, hash_id=context.hash_id
-                    )
-
-                self.logger.info("Initialized the transcriber instance")
-                context.transcript, local_paths = await transcriber()
-                self.logger.info("Successfully generated the transcript for the video.")
-
-                # Adjust transcript timestamps if offset is provided (for Part B videos)
-                if time_offset > 0:
-                    self.logger.info(f"Adjusting transcript timestamps by offset: {time_offset}s")
-                    context.transcript = adjust_transcript_timestamps(
-                        context.transcript, time_offset
-                    )
-                    # Save adjusted transcript
-                    adjusted_transcript_path = os.path.join(
-                        await get_media_folder(), f"transcript_{context.hash_id}.srt"
-                    )
-                    async with aiofiles.open(adjusted_transcript_path, "w", encoding="utf-8") as f:
-                        await f.write(context.transcript)
-                    self.logger.info(f"Saved adjusted transcript to {adjusted_transcript_path}")
+                async with aiofiles.open(adjusted_transcript_path, "w", encoding="utf-8") as f:
+                    await f.write(context.transcript)
+                self.logger.info(f"Saved adjusted transcript to {adjusted_transcript_path}")
 
             context.local_resources.extend(local_paths)
             del local_paths
@@ -547,7 +516,7 @@ class IngestionPipeline:
             raise
 
     async def _generate_semantic_chapters(
-        self, context: ProcessingContext, url: Optional[str] = None
+        self, context: ProcessingContext,keyframe_index_name:str, url: Optional[str] = None
     ) -> ProcessingContext:
         """
         Generate semantic chapters from transcript using the chapter ingestion pipeline.
@@ -559,13 +528,15 @@ class IngestionPipeline:
             )
             chapter_pipeline = ChapterIngestionPipeline(
                 hash_id=context.hash_id,
-                index_name=self.index_name,
+                keyframe_index_name = keyframe_index_name,
                 transcript=context.transcript,
                 keyframe_blob_url=context.keyframes_blob_folder_url,
                 frame_stacking_grid_size=self.frame_stacking_grid_size,
                 parent_id=context.parent_id,
                 parent_duration=context.parent_duration,
                 video_duration=context.video_duration,
+                llm_provider=self.provider.llm_provider,
+                embedding_provider=self.provider.embedding_provider,
             )
             self.logger.info("Successfully created an instance of ChapterIngestionPipeline!")
 
@@ -611,7 +582,6 @@ class IngestionPipeline:
         except Exception as e:
             self.logger.warning(f"Could not check for audio stream: {e}")
             return False
-
 
     async def run(self):
         """Main ingestion pipeline method - now supports video splitting and parallel processing."""

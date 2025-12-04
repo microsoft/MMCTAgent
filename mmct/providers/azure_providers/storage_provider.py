@@ -5,62 +5,85 @@ import aiofiles
 from urllib.parse import urlparse
 from azure.storage.blob.aio import BlobServiceClient
 from loguru import logger
-from typing import Dict, Any
-from mmct.providers.base import StorageProvider
+from typing import Dict, Any, Union, Optional
+from mmct.providers.base import BaseStorageProvider
 from mmct.providers.credentials import AzureCredentials
+from azure.core.credentials import AzureKeyCredential
+from azure.core.credentials_async import AsyncTokenCredential
 from mmct.utils.error_handler import handle_exceptions, convert_exceptions
 from mmct.utils.error_handler import ProviderException, ConfigurationException
 
 
-class AzureStorageProvider(StorageProvider):
+class AzureStorageProvider(BaseStorageProvider):
     """Azure Blob Storage provider implementation."""
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(
+        self,
+        storage_account_name: str,
+        keyframe_container_name: str,
+        credentials: Optional[Union[AzureKeyCredential, AsyncTokenCredential]] = None,
+        blob_connection_string: Optional[str] = None,
+    ):
         """
         Initialize Azure Storage Provider.
 
         Args:
-            config: Configuration dictionary with:
-                - account_url: Azure Storage account URL (or use BLOB_ACCOUNT_URL env var)
-                - use_managed_identity: Whether to use managed identity (default: True)
+            storage_account_name: Azure Storage account name
+            credentials: Azure credentials for token-based authentication (mutually exclusive with blob_connection_string)
+            blob_connection_string: Connection string for connection string-based authentication (mutually exclusive with credentials)
+
+        Raises:
+            ConfigurationException: If storage_account_name is missing, or if neither credentials nor
+                                   blob_connection_string is provided, or if both are provided
         """
-        self.config = config
-        self.credential = None
-        self.service_client = None
+        if not storage_account_name:
+            raise ConfigurationException("Storage account name is required!")
+        
+        if not keyframe_container_name:
+            raise ConfigurationException("Keyframe container name is required!")
+
+        # Validate that exactly one of credentials or blob_connection_string is provided
+        if credentials is None and blob_connection_string is None:
+            raise ConfigurationException(
+                "Either credentials or blob_connection_string must be provided!"
+            )
+
+        if credentials is not None and blob_connection_string is not None:
+            raise ConfigurationException(
+                "Only one of credentials or blob_connection_string should be provided, not both!"
+            )
+
+        self.credentials = credentials
+        self.blob_connection_string = blob_connection_string
+        self.storage_account_name = storage_account_name
+        self.keyframe_container_name = keyframe_container_name
+        self.storage_account_url = f"https://{self.storage_account_name}.blob.core.windows.net/"
+        self.service_client = self._initialize()
 
     def _initialize(self):
-        """Initialize credential and service client asynchronously."""
-        if self.service_client is None:
-            try:
-                use_managed_identity = self.config.get("storage_use_managed_identity") or os.getenv("STORAGE_USE_MANAGED_IDENTITY", "true").lower() == "true"
-
-                if use_managed_identity:
-                    self.credential = AzureCredentials.get_async_credentials()
-                else:
-                    # For non-managed identity, you'd use connection string or SAS token
-                    raise ConfigurationException("Non-managed identity auth not yet implemented for blob storage")
-
-                account_url = self.config.get("storage_account_url") or os.getenv("STORAGE_ACCOUNT_URL")
-                if not account_url:
-                    raise ConfigurationException("Azure Storage account_url is required")
-
+        """Initialize BlobServiceClient with either credentials or connection string."""
+        try:
+            if self.credentials is not None:
+                # Use credentials with token-based authentication
                 self.service_client = BlobServiceClient(
-                    account_url=account_url,
-                    credential=self.credential,
+                    account_url=self.storage_account_url,
+                    credential=self.credentials,
                 )
-                logger.info("Successfully initialized Azure Blob Storage client")
-            except Exception as e:
-                logger.exception(f"Failed to initialize Azure Blob Storage client: {e}")
-                raise ProviderException(f"Failed to initialize Azure Blob Storage client: {e}")
+                logger.info("Successfully initialized Azure Blob Storage client with credentials")
+            else:
+                # Use connection string authentication
+                self.service_client = BlobServiceClient.from_connection_string(
+                    conn_str=self.blob_connection_string
+                )
+                logger.info("Successfully initialized Azure Blob Storage client with connection string")
 
-    def _ensure_initialized(self):
-        """Ensure the client is initialized before operations."""
-        if self.service_client is None:
-            self._initialize()
+            return self.service_client
+        except Exception as e:
+            logger.exception(f"Failed to initialize Azure Blob Storage client: {e}")
+            raise ProviderException(f"Failed to initialize Azure Blob Storage client: {e}")
 
     async def load_file_to_memory(self, folder: str, file_name: str) -> bytes:
         """Load a file's content into memory as bytes."""
-        self._ensure_initialized()
 
         client = None
         try:
@@ -81,20 +104,17 @@ class AzureStorageProvider(StorageProvider):
         """
         Generate a URL for a file that doesn't yet exist in storage.
         """
-        self._ensure_initialized()
-
         try:
-            folder_name = kwargs.pop("folder_name")
+            folder_name = self.keyframe_container_name
             # Use service client URL if available, otherwise fall back to config
             if self.service_client:
                 # Remove trailing slash to avoid double slashes in URL
-                base_url = self.service_client.url.rstrip('/')
+                base_url = self.service_client.url.rstrip("/")
                 url = f"{base_url}/{folder_name}/{file_name}"
             else:
-                account_url = self.config.get("storage_account_url") or os.getenv("STORAGE_ACCOUNT_URL")
-                if not account_url:
+                if not self.storage_account_url:
                     raise ConfigurationException("Azure Storage account_url is required")
-                url = f"{account_url.rstrip('/')}/{folder_name}/{file_name}"
+                url = f"{self.storage_account_url.rstrip('/')}/{folder_name}/{file_name}"
 
             logger.info(f"Generated file URL: {url}")
             return url
@@ -106,21 +126,28 @@ class AzureStorageProvider(StorageProvider):
 
     @handle_exceptions(retries=3, exceptions=(Exception,))
     @convert_exceptions({Exception: ProviderException})
-    async def save_file(self, file_name: str, src_file_path: str, **kwargs) -> str:
+    async def upload_file(self, file_name: str, src_file_path: str, **kwargs) -> str:
         """Upload a local file to blob storage."""
-        self._ensure_initialized()
-
         client = None
+        container_client = None
         try:
             logger.debug(f"Uploading file: {src_file_path}")
             folder_name = kwargs.pop("folder_name")
+
+            # Check if container exists, create if it doesn't
+            container_client = self.service_client.get_container_client(folder_name)
+            if not await container_client.exists():
+                logger.info(f"Container {folder_name} does not exist. Creating it...")
+                await container_client.create_container()
+                logger.info(f"Successfully created container: {folder_name}")
+
             client = self.service_client.get_blob_client(container=folder_name, blob=file_name)
             async with aiofiles.open(src_file_path, "rb") as f:
                 data = await f.read()
             await client.upload_blob(data, overwrite=True)
 
             logger.debug(f"Successfully uploaded file: {src_file_path}")
-            url = f"{self.service_client.url}/{folder_name}/{file_name}"
+            url = f"{self.storage_account_url}/{folder_name}/{file_name}"
             return url
         except Exception as e:
             logger.exception(f"Error uploading file {src_file_path}: {e}")
@@ -128,94 +155,8 @@ class AzureStorageProvider(StorageProvider):
         finally:
             if client:
                 await client.close()
-
-    @handle_exceptions(retries=3, exceptions=(Exception,))
-    @convert_exceptions({Exception: ProviderException})
-    async def save_base64(self, file_name: str, b64_str: str, **kwargs) -> str:
-        """Upload base64-encoded data to blob storage."""
-        self._ensure_initialized()
-
-        client = None
-        try:
-            folder_name = kwargs.pop("folder_name")
-            logger.info(f"Uploading base64 data to Container: {folder_name}, File: {file_name}")
-            client = self.service_client.get_blob_client(container=folder_name, blob=file_name)
-            data = base64.b64decode(b64_str)
-            await client.upload_blob(data, overwrite=True)
-
-            url = f"{self.service_client.url}/{folder_name}/{file_name}"
-            return url
-        except Exception as e:
-            logger.exception(f"Error uploading base64 data: {e}")
-            raise ProviderException(f"Error uploading base64 data: {e}")
-        finally:
-            if client:
-                await client.close()
-
-    @handle_exceptions(retries=3, exceptions=(Exception,))
-    @convert_exceptions({Exception: ProviderException})
-    async def save_string(self, file_name: str, content: str, **kwargs) -> str:
-        """Upload a string directly to blob storage."""
-        self._ensure_initialized()
-
-        client = None
-        try:
-            folder_name = kwargs.pop("folder_name")
-            logger.info(f"Uploading string content to Container: {folder_name}, Blob: {file_name}")
-            client = self.service_client.get_blob_client(container=folder_name, blob=file_name)
-            await client.upload_blob(content, overwrite=True)
-
-            logger.info(f"Successfully uploaded content to file: {file_name}")
-            url = f"{self.service_client.url}/{folder_name}/{file_name}"
-            return url
-        except Exception as e:
-            logger.exception(f"Error uploading string content: {e}")
-            raise ProviderException(f"Error uploading string content: {e}")
-        finally:
-            if client:
-                await client.close()
-
-    @handle_exceptions(retries=3, exceptions=(Exception,))
-    @convert_exceptions({Exception: ProviderException})
-    async def save_to_file(self, file_name: str, download_path: str, **kwargs) -> str:
-        """Download a file to a local file path."""
-        self._ensure_initialized()
-
-        client = None
-        try:
-            folder_name = kwargs.pop("folder_name")
-            logger.info(f"Downloading file {file_name} to {download_path}")
-            Path(download_path).parent.mkdir(parents=True, exist_ok=True)
-
-            client = self.service_client.get_blob_client(container=folder_name, blob=file_name)
-            stream = await client.download_blob()
-            data = await stream.readall()
-
-            async with aiofiles.open(download_path, "wb") as f:
-                await f.write(data)
-
-            logger.info(f"Successfully downloaded file to {download_path}")
-            return download_path
-        except Exception as e:
-            logger.exception(f"Error downloading file: {e}")
-            raise ProviderException(f"Error downloading file: {e}")
-        finally:
-            if client:
-                await client.close()
-
-    @handle_exceptions(retries=3, exceptions=(Exception,))
-    @convert_exceptions({Exception: ProviderException})
-    async def download_from_url(self, file_url: str, save_folder: str) -> str:
-        """Download a file from its URL to a local folder."""
-        try:
-            logger.info(f"Downloading file from URL: {file_url}")
-            parsed = urlparse(file_url)
-            folder_name, blob_name = parsed.path.lstrip("/").split("/", 1)
-            local_path = os.path.join(save_folder, blob_name)
-            return await self.save_to_file(folder_name=folder_name,file_name=blob_name,download_path=local_path)
-        except Exception as e:
-            logger.exception(f"Error downloading file from URL: {e}")
-            raise ProviderException(f"Error downloading file from URL: {e}")
+            if container_client:
+                await container_client.close()
 
     async def close(self):
         """Close the underlying service client and cleanup."""
