@@ -66,11 +66,7 @@ class GetContextTool:
         if url:
             filter_conditions["url"] = {"eq": url}
         if video_id:
-            if len(video_id)==64:
-                parent_id = video_id
-            else:
-                parent_id = video_id[:64]
-            filter_conditions["parent_id"] = {"eq": parent_id}
+            filter_conditions["hash_video_id"] = {"eq": video_id}
         
         # Add time overlap filter if both start_time and end_time are provided
         # Overlap condition: doc.start_time < end_time AND doc.end_time > start_time
