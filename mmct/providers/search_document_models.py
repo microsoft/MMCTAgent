@@ -124,28 +124,6 @@ class ChapterIndexDocument(BaseModel):
         facetable=False,
         key=False
     )
-    parent_id: str = Field(
-        default="None",
-        description="Original video ID (before splitting)",
-        searchable=False,
-        filterable=True,
-        retrievable=True,
-        stored=True,
-        sortable=False,
-        facetable=False,
-        key=False
-    )
-    parent_duration: str = Field(
-        default="None",
-        description="Original video duration in seconds",
-        searchable=False,
-        filterable=True,
-        retrievable=True,
-        stored=True,
-        sortable=False,
-        facetable=False,
-        key=False
-    )
     video_duration: str = Field(
         default="None",
         description="Duration of this specific video part in seconds",
@@ -309,28 +287,6 @@ class KeyframeDocument(BaseModel):
         retrievable=True,
         stored=True,
         sortable=False,
-        facetable=False,
-        key=False
-    )
-    parent_id: str = Field(
-        default="",
-        description="Original video ID (before splitting)",
-        searchable=False,
-        filterable=True,
-        retrievable=True,
-        stored=True,
-        sortable=False,
-        facetable=False,
-        key=False
-    )
-    parent_duration: float = Field(
-        default=0.0,
-        description="Duration of parent video in seconds",
-        searchable=False,
-        filterable=True,
-        retrievable=True,
-        stored=True,
-        sortable=True,
         facetable=False,
         key=False
     )

@@ -44,10 +44,7 @@ class KeyframeProcessor:
         self,
         video_path: str,
         video_hash_id: str,
-        parent_id: str,
-        parent_duration: float,
         video_duration: float,
-        offset_time: Optional[float] = None,
     ) -> str:
         """
         Process keyframes for a video part: extract and save metadata to JSON.
@@ -55,10 +52,7 @@ class KeyframeProcessor:
         Args:
             video_path: Path to the video file
             video_hash_id: Hash ID for this video part
-            parent_id: Hash ID of the parent/original video
-            parent_duration: Duration of the parent video in seconds
             video_duration: Duration of this video part in seconds
-            offset_time: Time offset in seconds for Part B videos (None for Part A)
 
         Returns:
             str: Path to the saved keyframe metadata JSON file
@@ -68,7 +62,7 @@ class KeyframeProcessor:
             logger.info(f"Extracting keyframes for video {video_hash_id}...")
             keyframe_extractor = KeyframeExtractor(self.keyframe_config)
             keyframe_metadata_list = await keyframe_extractor.extract_keyframes(
-                video_path=video_path, video_id=video_hash_id, offset_time=offset_time
+                video_path=video_path, video_id=video_hash_id
             )
             logger.info(f"Successfully extracted {len(keyframe_metadata_list)} keyframes")
 
@@ -76,8 +70,6 @@ class KeyframeProcessor:
             json_file_path = await self._save_keyframe_metadata_to_json(
                 keyframe_metadata_list=keyframe_metadata_list,
                 video_hash_id=video_hash_id,
-                parent_id=parent_id,
-                parent_duration=parent_duration,
                 video_duration=video_duration,
             )
 
@@ -92,8 +84,6 @@ class KeyframeProcessor:
         self,
         keyframe_metadata_list: list,
         video_hash_id: str,
-        parent_id: str,
-        parent_duration: float,
         video_duration: float,
     ) -> str:
         """
@@ -102,8 +92,6 @@ class KeyframeProcessor:
         Args:
             keyframe_metadata_list: List of FrameMetadata objects from keyframe extraction
             video_hash_id: Hash ID for this video part
-            parent_id: Hash ID of the parent/original video
-            parent_duration: Duration of the parent video in seconds
             video_duration: Duration of this video part in seconds
 
         Returns:
@@ -135,9 +123,7 @@ class KeyframeProcessor:
         # Create the collection
         collection = KeyframeMetadataCollection(
             video_id=video_hash_id,
-            parent_id=parent_id,
             video_duration=video_duration,
-            parent_duration=parent_duration,
             keyframes=keyframe_metadata_objects,
         )
 

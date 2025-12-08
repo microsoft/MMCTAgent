@@ -9,9 +9,9 @@ import os
 import json
 from typing import List, Optional, Tuple
 from loguru import logger
-from mmct.video_pipeline.core.ingestion.semantic_chunking.semantic_chunker import SemanticChunker
-from mmct.video_pipeline.core.ingestion.chapter_generator.chapter_generator import ChapterGenerator
-from mmct.video_pipeline.core.ingestion.chapter_generator.object_collection_processor import ObjectCollectionProcessor
+from .semantic_chunking.semantic_chunker import SemanticChunker
+from .chapter_generator import ChapterGenerator
+from .object_collection_processor import ObjectCollectionProcessor
 from mmct.video_pipeline.core.ingestion.models import ChapterMetadata, ChapterMetadataCollection
 from mmct.video_pipeline.utils.helper import get_media_folder
 from mmct.providers.base import (
@@ -43,8 +43,6 @@ class ChapterIngestionPipeline:
         keyframe_index_name: str,
         embedding_provider: BaseEmbeddingProvider,
         frame_stacking_grid_size: int = 4,
-        parent_id: Optional[str] = None,
-        parent_duration: Optional[float] = None,
         video_duration: Optional[float] = None,
     ) -> None:
         """
@@ -58,16 +56,12 @@ class ChapterIngestionPipeline:
             llm_provider: LLM provider instance (handles both text and vision tasks)
             embedding_provider: Embedding provider instance (required)
             frame_stacking_grid_size: Grid size for frame stacking (default: 4)
-            parent_id: ID of parent video if this is a part
-            parent_duration: Duration of parent video
             video_duration: Duration of current video
         """
         # Core attributes
         self.transcript = transcript
         self.hash_id = hash_id
         self.frame_stacking_grid_size = frame_stacking_grid_size
-        self.parent_id = parent_id
-        self.parent_duration = parent_duration
         self.video_duration = video_duration
         self.keyframe_blob_url = keyframe_blob_url
         self.keyframe_index_name = keyframe_index_name
@@ -167,8 +161,6 @@ class ChapterIngestionPipeline:
         # Create the collection
         collection = ChapterMetadataCollection(
             hash_video_id=self.hash_id,
-            parent_id=self.parent_id or "None",
-            parent_duration=str(self.parent_duration) if self.parent_duration is not None else "None",
             video_duration=str(self.video_duration) if self.video_duration is not None else "None",
             url=url or "None",
             chapters=chapter_metadata_list,

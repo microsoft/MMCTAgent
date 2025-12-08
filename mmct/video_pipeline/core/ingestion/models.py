@@ -185,17 +185,9 @@ class KeyframeMetadataCollection(BaseModel):
         ...,
         description="Unique hash ID for the video part"
     )
-    parent_id: str = Field(
-        ...,
-        description="Hash ID of the original video before splitting"
-    )
     video_duration: float = Field(
         ...,
         description="Duration of the video part in seconds"
-    )
-    parent_duration: float = Field(
-        ...,
-        description="Duration of the original video in seconds"
     )
     created_at: str = Field(
         default_factory=lambda: datetime.utcnow().isoformat() + "Z",
@@ -270,14 +262,6 @@ class ChapterMetadataCollection(BaseModel):
     hash_video_id: str = Field(
         ...,
         description="Hash-based video identifier"
-    )
-    parent_id: str = Field(
-        default="None",
-        description="Original video ID (before splitting)"
-    )
-    parent_duration: str = Field(
-        default="None",
-        description="Original video duration in seconds"
     )
     video_duration: str = Field(
         default="None",

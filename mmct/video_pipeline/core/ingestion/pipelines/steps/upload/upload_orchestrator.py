@@ -138,8 +138,6 @@ class UploadOrchestrator:
                     "motion_score": keyframe.motion_score,
                     "timestamp_seconds": keyframe.timestamp_seconds,
                     "blob_url": keyframe.blob_url or "",
-                    "parent_id": keyframe_collection.parent_id,
-                    "parent_duration": keyframe_collection.parent_duration,
                     "video_duration": keyframe_collection.video_duration,
                 }
                 documents.append(doc)
@@ -222,8 +220,6 @@ class UploadOrchestrator:
                     url=chapter_collection.url,
                     time=current_time,
                     chapter_transcript=chapter.chapter_transcript,
-                    parent_id=chapter_collection.parent_id,
-                    parent_duration=chapter_collection.parent_duration,
                     video_duration=chapter_collection.video_duration,
                     start_time=chapter.start_time,
                     end_time=chapter.end_time,
