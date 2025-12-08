@@ -328,13 +328,6 @@ def create_keyframe_index_schema(index_name: str, dimensions: int = 512) -> Sear
             sortable=True,
         ),
         SimpleField(name="blob_url", type=SearchFieldDataType.String),
-        SimpleField(name="parent_id", type=SearchFieldDataType.String, filterable=True),
-        SimpleField(
-            name="parent_duration",
-            type=SearchFieldDataType.Double,
-            filterable=True,
-            sortable=True,
-        ),
         SimpleField(
             name="video_duration",
             type=SearchFieldDataType.Double,

@@ -1,0 +1,67 @@
+pipeline:
+  name: "default_ingestion"
+  mode: "sequential"
+
+  steps:
+    # Step 1: Pre-validation (early check + audio validation combined)
+    - id: "pre_validation"
+      type: "ingestion.pre_validation"
+      params:
+        skip_if_exists: true
+        require_audio_when_no_transcript: true
+
+    # Step 2: Compress video if size exceeds threshold
+    - id: "compress"
+      type: "ingestion.compress"
+      params:
+        max_size_mb: 500
+        target_size_mb: 500
+        device: "cuda"
+
+    # Step 3: Extract keyframes from video
+    - id: "keyframes"
+      type: "ingestion.keyframes"
+      params:
+        source_step: "compress"
+        apply_time_offset: false
+        motion_threshold: 1.5
+        max_frame_width: 800  # Downscale for faster optical flow
+        sample_fps: 2
+        device: "cuda"
+
+    # Step 4: Transcribe video or use provided transcript
+    - id: "transcribe"
+      type: "ingestion.transcribe"
+      params:
+        video_step: "compress"
+        apply_time_offset: false
+
+    # Step 5: Generate semantic chapters from transcript and keyframes
+    - id: "chapters"
+      type: "ingestion.chapters"
+      params:
+        transcript_step: "transcribe"
+        keyframes_step: "keyframes"
+        max_chapter_duration: 300 # seconds
+        max_concurrent_requests: 3
+
+    # Step 6: Generate embeddings for chapters and keyframes (parallel)
+    - id: "embeddings"
+      type: "ingestion.embeddings"
+      params:
+        chapters_step: "chapters"
+        keyframes_step: "keyframes"
+
+    # Step 7: Upload files and index data (parallel)
+    - id: "upload"
+      type: "ingestion.upload"
+      params:
+        chapters_step: "chapters"
+        keyframes_step: "keyframes"
+        embeddings_step: "embeddings"
+
+    # Step 8: Cleanup temporary files
+    - id: "cleanup"
+      type: "ingestion.cleanup"
+      params:
+        keep_keyframes: false

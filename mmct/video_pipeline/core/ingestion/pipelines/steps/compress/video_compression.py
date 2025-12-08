@@ -18,13 +18,13 @@ class VideoCompressor:
         num_threads: int = 2,
         audio_bitrate_kbps=128,
         output_dir: str = "Compressed",
-
         # NEW: fast mode controls
-        fast_mode: bool = True,                # use single-pass proxy-style compression
-        max_width: int = 720,                  # max width for downscaling
-        max_fps: float = 10.0,                 # cap FPS
-        crf: int = 28,                         # CRF for x264 (lower=better quality)
-        nvenc_cq: int = 28,                    # CQ for NVENC (lower=better quality)
+        fast_mode: bool = True,  # use single-pass proxy-style compression
+        max_width: int = 720,  # max width for downscaling
+        max_fps: float = 10.0,  # cap FPS
+        crf: int = 28,  # CRF for x264 (lower=better quality)
+        nvenc_cq: int = 28,  # CQ for NVENC (lower=better quality)
+        device: str = "auto",  # auto, cpu, cuda (nvidia), amf (amd), qsv (intel)
     ):
         self.audio_codec = audio_codec
         self.preset = preset
@@ -43,6 +43,7 @@ class VideoCompressor:
         self.max_fps = max_fps
         self.crf = crf
         self.nvenc_cq = nvenc_cq
+        self.device = device.lower()
 
         self.video_codec, self.use_gpu = self._detect_gpu_codec(video_codec)
         self.duration = self._get_duration()
@@ -53,12 +54,36 @@ class VideoCompressor:
     # GPU detection utilities
     # ------------------------------------------------------------------
     def _detect_gpu_codec(self, preferred_codec):
-        """Detect available GPU encoders and return appropriate codec"""
+        """Detect available GPU encoders and return appropriate codec based on device setting"""
+
+        # If CPU forced, skip detection
+        if self.device == "cpu":
+            self.logger.info("Device set to CPU, using preferred codec: " + preferred_codec)
+            return preferred_codec, False
+
         gpu_codecs = {
             "nvidia": ["h264_nvenc", "hevc_nvenc"],
             "amd": ["h264_amf", "hevc_amf"],
             "intel": ["h264_qsv", "hevc_qsv"],
         }
+
+        # Filter based on device hint if specific one provided
+        target_vendors = []
+        if self.device == "cuda" or self.device == "nvidia":
+            target_vendors = ["nvidia"]
+        elif self.device == "amf" or self.device == "amd":
+            target_vendors = ["amd"]
+        elif self.device == "qsv" or self.device == "intel":
+            target_vendors = ["intel"]
+        else:
+            # Auto mode - try all
+            target_vendors = ["nvidia", "amd", "intel"]
+
+        for vendor in target_vendors:
+            for codec in gpu_codecs[vendor]:
+                if self._test_encoder(codec):
+                    self.logger.info(f"Using {vendor.upper()} GPU encoder: {codec}")
+                    return codec, True
 
         for codec in gpu_codecs["nvidia"]:
             if self._test_encoder(codec):
@@ -300,7 +325,9 @@ class VideoCompressor:
             if not has_video:
                 raise RuntimeError("Compressed video has no video stream!")
             if not has_audio:
-                self.logger.warning("Compressed video has no audio stream (may not exist originally)")
+                self.logger.warning(
+                    "Compressed video has no audio stream (may not exist originally)"
+                )
             else:
                 self.logger.info("Compressed video has both video and audio streams")
         except Exception as e:
@@ -317,18 +344,37 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Compress video files to target size or proxy")
     parser.add_argument("input_path", help="Path to input video file")
-    parser.add_argument("-s", "--size", type=int, default=500, help="Target size in MB (default: 500)")
-    parser.add_argument("-o", "--output", default="Compressed", help="Output directory (default: Compressed)")
+    parser.add_argument(
+        "-s", "--size", type=int, default=500, help="Target size in MB (default: 500)"
+    )
+    parser.add_argument(
+        "-o", "--output", default="Compressed", help="Output directory (default: Compressed)"
+    )
     parser.add_argument("--video-codec", default="libx264", help="Video codec (default: libx264)")
     parser.add_argument("--audio-codec", default="aac", help="Audio codec (default: aac)")
     parser.add_argument("--preset", default="fast", help="Encoding preset (default: fast)")
     parser.add_argument("--threads", type=int, default=2, help="Number of threads (default: 2)")
-    parser.add_argument("--audio-bitrate", type=int, default=128, help="Audio bitrate in kbps (default: 128)")
-    parser.add_argument("--fast-mode", action="store_true", default=False, help="Use fast single-pass proxy compression")
-    parser.add_argument("--max-width", type=int, default=720, help="Max width in fast mode (default: 720)")
-    parser.add_argument("--max-fps", type=float, default=10.0, help="Max fps in fast mode (default: 10)")
-    parser.add_argument("--crf", type=int, default=28, help="CRF for x264 in fast mode (default: 28)")
-    parser.add_argument("--nvenc-cq", type=int, default=28, help="CQ for NVENC in fast mode (default: 28)")
+    parser.add_argument(
+        "--audio-bitrate", type=int, default=128, help="Audio bitrate in kbps (default: 128)"
+    )
+    parser.add_argument(
+        "--fast-mode",
+        action="store_true",
+        default=False,
+        help="Use fast single-pass proxy compression",
+    )
+    parser.add_argument(
+        "--max-width", type=int, default=720, help="Max width in fast mode (default: 720)"
+    )
+    parser.add_argument(
+        "--max-fps", type=float, default=10.0, help="Max fps in fast mode (default: 10)"
+    )
+    parser.add_argument(
+        "--crf", type=int, default=28, help="CRF for x264 in fast mode (default: 28)"
+    )
+    parser.add_argument(
+        "--nvenc-cq", type=int, default=28, help="CQ for NVENC in fast mode (default: 28)"
+    )
 
     args = parser.parse_args()
 

@@ -8,14 +8,25 @@ import asyncio
 import base64
 from typing import Annotated, Optional
 from loguru import logger
-from mmct.providers.base import BaseLLMProvider, BaseStorageProvider, BaseKeyframesVectorDBProvider, BaseImageEmbeddingProvider
+from mmct.providers.base import (
+    BaseLLMProvider,
+    BaseStorageProvider,
+    BaseKeyframesVectorDBProvider,
+    BaseImageEmbeddingProvider,
+)
 from mmct.video_pipeline.core.tools.utils.search_keyframes import KeyframeSearcher
 
 
 class QueryFrameTool:
-    def __init__(self, llm_provider:BaseLLMProvider, storage_provider:BaseStorageProvider, vectordb_keyframes: BaseKeyframesVectorDBProvider, image_embedding_provider:BaseImageEmbeddingProvider):
+    def __init__(
+        self,
+        llm_provider: BaseLLMProvider,
+        storage_provider: BaseStorageProvider,
+        vectordb_keyframes: BaseKeyframesVectorDBProvider,
+        image_embedding_provider: BaseImageEmbeddingProvider,
+    ):
         """Initialize QueryFrameTool with provider configuration.
-        
+
         Args:
             providers: VideoAgentProviderConfig containing all required providers
         """
@@ -65,12 +76,8 @@ class QueryFrameTool:
             - Text visible in frames
             - Any other visual details relevant to query
         """
-        if len(video_id) == 64:
-            parent_id = video_id
-        else:
-            parent_id = video_id[:64]
 
-        save_frames_locally = False # variable to debug the frames
+        save_frames_locally = False  # variable to debug the frames
         # If there is a FAISS index directory in examples/ (e.g. from exported indices), prefer it
         provider_config = None
         alt_faiss_dir = os.path.join(os.getcwd(), "examples", "mmct_faiss_indices")
@@ -93,7 +100,7 @@ class QueryFrameTool:
         if not (None in (start_time, end_time)):
             combined_filter = dict()
             combined_filter["timestamp_seconds"] = {"ge": start_time, "le": end_time}
-            combined_filter["parent_id"] = {"eq": parent_id}
+            combined_filter["video_id"] = {"eq": video_id}
 
             # Search for relevant frames with similarity filtering
             results = await searcher.search_keyframes(

@@ -43,11 +43,6 @@ class GetRelevantFrames:
             3. Pass these frame IDs to query_frame for actual visual analysis
         """
         try:
-            if video_id:
-                if len(video_id)==64:
-                    parent_id = video_id
-                else:
-                    parent_id = video_id[:64]
             # If there is a FAISS index directory in examples/ (e.g. from exported indices), prefer it
             provider_config = None
             alt_faiss_dir = os.path.join(os.getcwd(), "examples", "mmct_faiss_indices")
@@ -65,7 +60,7 @@ class GetRelevantFrames:
             
             video_filter = dict()
             if video_id:
-                video_filter["parent_id"] = {"eq": parent_id}
+                video_filter["video_id"] = {"eq": video_id}
 
             # Search for relevant frames
             results = await searcher.search_keyframes(

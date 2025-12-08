@@ -25,24 +25,30 @@ class WhisperTranscriptionProvider(BaseTranscriptionProvider):
         self,
         endpoint: str,
         api_version: str,
-        deployment_name:str,
+        deployment_name: str,
         speech_timeout: Optional[int] = 200,
         credentials: Optional[Union[AzureKeyCredential, AsyncTokenCredential]] = None,
         api_key: Optional[str] = None,
     ):
         if not endpoint:
-            raise ConfigurationException("Azure OpenAI endpoint is required for Whisper Transcription Provider!")
+            raise ConfigurationException(
+                "Azure OpenAI endpoint is required for Whisper Transcription Provider!"
+            )
 
         if not deployment_name:
-            raise ConfigurationException("Azure OpenAI deployment name is required for Whisper Transcription Provider!")
-        
+            raise ConfigurationException(
+                "Azure OpenAI deployment name is required for Whisper Transcription Provider!"
+            )
+
         if not api_version:
-            raise ConfigurationException("Azure OpenAI api version is required for Whisper Transcription Provider!")
-    
+            raise ConfigurationException(
+                "Azure OpenAI api version is required for Whisper Transcription Provider!"
+            )
+
         # Validate that exactly one of credentials or api_key is provided
         if credentials is None and api_key is None:
             raise ConfigurationException("Either credentials or api_key must be provided!")
-        
+
         self.credentials = credentials
         self.endpoint = endpoint
         self.deployment_name = deployment_name
@@ -82,34 +88,28 @@ class WhisperTranscriptionProvider(BaseTranscriptionProvider):
             "Whisper API requires file-based transcription. Use transcribe_file() instead."
         )
 
-    def _split_audio_file(self, audio_path: str) -> tuple[str, str]:
-        """Split audio file into two equal halves.
+    def _split_audio_into_chunks(
+        self, audio_path: str, chunk_duration_ms: int = 10 * 60 * 1000
+    ) -> List[str]:
+        """Split audio file into fixed-duration chunks (default 10 minutes).
 
         Args:
             audio_path: Path to the audio file to split
+            chunk_duration_ms: Duration of each chunk in milliseconds (default 10 mins)
 
         Returns:
-            Tuple of (first_half_path, second_half_path)
+            List of paths to temporary chunk files
         """
+        chunk_paths = []
         try:
-            logger.info(f"Splitting audio file: {audio_path}")
+            logger.info(f"Splitting audio file into chunks of {chunk_duration_ms}ms: {audio_path}")
 
             # Load audio file
             audio = AudioSegment.from_file(audio_path)
-
-            # Calculate midpoint
             duration_ms = len(audio)
-            midpoint_ms = duration_ms // 2
 
-            logger.info(f"Audio duration: {duration_ms}ms, splitting at {midpoint_ms}ms")
-
-            # Split into two halves
-            first_half = audio[:midpoint_ms]
-            second_half = audio[midpoint_ms:]
-
-            # Determine the original format
+            # Determine export format
             file_ext = os.path.splitext(audio_path)[1].lower()
-            # Map common extensions to pydub format names
             format_map = {
                 ".mp3": "mp3",
                 ".wav": "wav",
@@ -121,36 +121,129 @@ class WhisperTranscriptionProvider(BaseTranscriptionProvider):
             }
             export_format = format_map.get(file_ext, "mp3")
 
-            # Use named temporary files to avoid conflicts
-            first_half_fd, first_half_path = tempfile.mkstemp(
-                suffix=file_ext, prefix="whisper_split_1_"
-            )
-            second_half_fd, second_half_path = tempfile.mkstemp(
-                suffix=file_ext, prefix="whisper_split_2_"
-            )
+            # Split into chunks
+            for i, start_ms in enumerate(range(0, duration_ms, chunk_duration_ms)):
+                end_ms = min(start_ms + chunk_duration_ms, duration_ms)
+                chunk = audio[start_ms:end_ms]
 
-            # Close file descriptors as pydub will write directly
-            os.close(first_half_fd)
-            os.close(second_half_fd)
+                # Create temp file for chunk
+                chunk_fd, chunk_path = tempfile.mkstemp(
+                    suffix=f"_{i}{file_ext}", prefix="whisper_chunk_"
+                )
+                os.close(chunk_fd)
 
-            logger.info(f"Exporting first half to {first_half_path} as {export_format}")
-            # Export the splits with explicit parameters to avoid conversion issues
-            first_half.export(
-                first_half_path,
-                format=export_format,
-                parameters=["-q:a", "0"],  # High quality, fast encoding
-            )
+                logger.debug(f"Exporting chunk {i} ({start_ms}-{end_ms}ms) to {chunk_path}")
+                chunk.export(chunk_path, format=export_format, parameters=["-q:a", "0"])
+                chunk_paths.append(chunk_path)
 
-            logger.info(f"Exporting second half to {second_half_path} as {export_format}")
-            second_half.export(second_half_path, format=export_format, parameters=["-q:a", "0"])
-
-            logger.info(f"Successfully split audio into: {first_half_path} and {second_half_path}")
-
-            return first_half_path, second_half_path
+            logger.info(f"Successfully split into {len(chunk_paths)} chunks")
+            return chunk_paths
 
         except Exception as e:
+            # Cleanup any chunks created so far
+            for path in chunk_paths:
+                try:
+                    if os.path.exists(path):
+                        os.remove(path)
+                except:
+                    pass
             logger.error(f"Failed to split audio file: {e}")
             raise ProviderException(f"Failed to split audio file: {e}")
+
+    def _format_timestamp(self, seconds: float) -> str:
+        """Convert seconds to SRT timestamp format (HH:MM:SS,mmm)."""
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+        millis = int((seconds - int(seconds)) * 1000)
+        return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
+
+    def _merge_chunks(self, chunks_results: List[any], chunk_duration_ms: int) -> List[dict]:
+        """Merge segment results from multiple chunks, shifting timestamps."""
+        # This implementation expects chunks_results to be list of objects with a 'segments' attribute
+        # commonly returned by Azure OpenAI when response_format="verbose_json"
+
+        all_segments = []
+        time_offset_s = 0.0
+
+        for i, result in enumerate(chunks_results):
+            # The result object from client.audio.translations.create(..., response_format="verbose_json")
+            # is a Transcription object which has a segments list.
+            # Each segment has start, end, text, etc.
+
+            if hasattr(result, "segments"):
+                segments = result.segments
+            elif isinstance(result, dict) and "segments" in result:
+                segments = result["segments"]
+            else:
+                # Fallback if raw text or unexpected format
+                logger.warning(
+                    f"Chunk {i} result does not have segments. Appending raw text as single segment."
+                )
+                all_segments.append(
+                    {
+                        "start": time_offset_s,
+                        "end": time_offset_s + (chunk_duration_ms / 1000),
+                        "text": str(result),
+                    }
+                )
+                time_offset_s += chunk_duration_ms / 1000
+                continue
+
+            for segment in segments:
+                # Handle both object access and dict access
+                if isinstance(segment, dict):
+                    seg_start = segment.get("start", 0.0)
+                    seg_end = segment.get("end", 0.0)
+                    text = segment.get("text", "")
+                else:
+                    seg_start = getattr(segment, "start", 0.0)
+                    seg_end = getattr(segment, "end", 0.0)
+                    text = getattr(segment, "text", "")
+
+                # Create new segment with shifted timestamps
+                new_segment = {
+                    "start": seg_start + time_offset_s,
+                    "end": seg_end + time_offset_s,
+                    "text": text,
+                }
+                all_segments.append(new_segment)
+
+            # Increment offset by the chunk duration (or strict duration of this chunk?)
+            # Using fixed chunk duration is safer to align with the splitting logic,
+            # effectively assuming the split was perfect.
+            time_offset_s += chunk_duration_ms / 1000
+
+        return all_segments
+
+    def _convert_to_output_format(self, segments: List[dict], output_format: str) -> str:
+        """Convert merged segments to the requested output format."""
+        if output_format == "srt":
+            output = []
+            for i, seg in enumerate(segments, 1):
+                start = self._format_timestamp(seg["start"])
+                end = self._format_timestamp(seg["end"])
+                text = seg["text"].strip()
+                output.append(f"{i}\n{start} --> {end}\n{text}\n")
+            return "\n".join(output)
+
+        elif output_format == "vtt":
+            output = ["WEBVTT\n"]
+            for seg in segments:
+                # VTT uses dot for millis
+                start = self._format_timestamp(seg["start"]).replace(",", ".")
+                end = self._format_timestamp(seg["end"]).replace(",", ".")
+                text = seg["text"].strip()
+                output.append(f"{start} --> {end}\n{text}\n")
+            return "\n".join(output)
+
+        elif output_format == "json":
+            import json
+
+            return json.dumps({"segments": segments}, indent=2)
+
+        else:  # "text" or default
+            return " ".join([seg["text"].strip() for seg in segments])
 
     async def _transcribe_single_file(
         self, audio_path: str, deployment_name: str, response_format: str
@@ -171,18 +264,72 @@ class WhisperTranscriptionProvider(BaseTranscriptionProvider):
             )
         return result
 
+    async def _process_large_file(
+        self, audio_path: str, output_format: str, deployment_name: str
+    ) -> str:
+        """Process a large audio file by splitting, transcribing chunks, and merging results."""
+        chunk_paths = []
+        try:
+            # Step 1: Split into 10-minute chunks
+            chunk_paths = self._split_audio_into_chunks(audio_path)
+
+            chunk_results = []
+
+            # Step 2: Transcribe each chunk
+            for i, chunk_path in enumerate(chunk_paths):
+                logger.info(f"Transcribing chunk {i+1}/{len(chunk_paths)}: {chunk_path}")
+
+                # We FORCE verbose_json for chunks to get timestamps for accurate merging
+                # independent of what the user asked for.
+                # We will convert to user format at the end.
+                result = await self._transcribe_single_file(
+                    chunk_path, deployment_name, response_format="verbose_json"
+                )
+                chunk_results.append(result)
+
+            # Step 3: Merge results
+            logger.info("Merging chunk results...")
+            merged_segments = self._merge_chunks(chunk_results, chunk_duration_ms=10 * 60 * 1000)
+
+            # Step 4: Convert to requested format
+            logger.info(f"Converting merged results to format: {output_format}")
+            final_output = self._convert_to_output_format(merged_segments, output_format)
+
+            return final_output
+
+        finally:
+            # Cleanup chunks
+            for path in chunk_paths:
+                try:
+                    if os.path.exists(path):
+                        os.remove(path)
+                except Exception as e:
+                    logger.warning(f"Failed to cleanup temporary chunk {path}: {e}")
+
     @handle_exceptions(retries=3, exceptions=(Exception,))
     @convert_exceptions({Exception: ProviderException})
     async def transcribe_file(self, audio_path: str, language: str = None, **kwargs) -> str:
         """Transcribe audio file to text using Azure OpenAI Whisper with automatic retry logic.
 
-        Handles content size limit errors by splitting audio into halves and transcribing separately.
+        Handles large files automatically by chunking.
         """
         try:
             response_format = kwargs.get("response_format", "text")
 
+            # Check file size (approx 24MB limit gives some buffer for API overhead)
+            file_size = os.path.getsize(audio_path)
+            limit_bytes = 24 * 1024 * 1024  # 24 MB
+
+            if file_size > limit_bytes:
+                logger.info(
+                    f"File size {file_size} bytes exceeds limit {limit_bytes} bytes. Using chunked processing."
+                )
+                return await self._process_large_file(
+                    audio_path, response_format, self.deployment_name
+                )
+
+            # Try transcribing the whole file directly
             try:
-                # Try transcribing the whole file first
                 result = await self._transcribe_single_file(
                     audio_path, self.deployment_name, response_format
                 )
@@ -190,48 +337,15 @@ class WhisperTranscriptionProvider(BaseTranscriptionProvider):
 
             except Exception as e:
                 error_msg = str(e)
-
-                # Check if it's a content size limit error
-                if "Maximum content size limit" in error_msg and "exceeded" in error_msg:
+                # Fallback to chunking if API rejects it despite size check (e.g. size vs duration limits)
+                if "Maximum content size limit" in error_msg:
                     logger.warning(
-                        f"File too large for Whisper API. Splitting into halves: {error_msg}"
+                        f"API rejected file size. Falling back to chunked processing: {error_msg}"
                     )
-
-                    # Split the audio file
-                    first_half_path, second_half_path = self._split_audio_file(audio_path)
-
-                    try:
-                        # Transcribe both halves
-                        logger.info("Transcribing first half...")
-                        first_result = await self._transcribe_single_file(
-                            first_half_path, self.deployment_name, response_format
-                        )
-
-                        logger.info("Transcribing second half...")
-                        second_result = await self._transcribe_single_file(
-                            second_half_path, self.deployment_name, response_format
-                        )
-
-                        # Combine results
-                        combined_result = f"{first_result} {second_result}"
-                        logger.info("Successfully transcribed both halves and combined results")
-
-                        return combined_result
-
-                    finally:
-                        # Clean up temporary split files
-                        for temp_file in [first_half_path, second_half_path]:
-                            try:
-                                if os.path.exists(temp_file):
-                                    os.remove(temp_file)
-                                    logger.debug(f"Removed temporary file: {temp_file}")
-                            except Exception as cleanup_error:
-                                logger.warning(
-                                    f"Failed to remove temporary file {temp_file}: {cleanup_error}"
-                                )
-                else:
-                    # Re-raise if it's not a size limit error
-                    raise
+                    return await self._process_large_file(
+                        audio_path, response_format, self.deployment_name
+                    )
+                raise
 
         except Exception as e:
             logger.error(f"Azure Whisper transcription failed: {e}")
@@ -290,7 +404,7 @@ class WhisperTranscriptionProvider(BaseTranscriptionProvider):
         hash_id: str,
         output_dir: Optional[str] = None,
         language: str = None,
-        **kwargs
+        **kwargs,
     ) -> Tuple[str, List[str]]:
         """
         Transcribe video file by extracting audio and transcribing it.
@@ -329,9 +443,7 @@ class WhisperTranscriptionProvider(BaseTranscriptionProvider):
             logger.info(f"Starting transcription with format: {response_format}")
 
             transcript = await self.transcribe_file(
-                audio_path=audio_path,
-                language=language,
-                response_format=response_format
+                audio_path=audio_path, language=language, response_format=response_format
             )
             logger.info("Successfully generated transcript")
 
