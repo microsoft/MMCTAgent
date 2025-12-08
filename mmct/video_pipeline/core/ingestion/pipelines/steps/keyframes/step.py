@@ -38,10 +38,17 @@ class KeyframeExtractionStep(PipelineStep):
         sample_fps = self.get_param(
             "sample_fps", context, default=keyframe_config.get("sample_fps", 2)
         )
+        max_frame_width = self.get_param(
+            "max_frame_width", context, default=keyframe_config.get("max_frame_width", 800)
+        )
+        num_workers = self.get_param(
+            "num_workers", context, default=keyframe_config.get("num_workers", 4)
+        )
+        device = self.get_param("device", context, default="cpu")
 
         context.logger.info(
             f"Extracting keyframes from {video_path} with motion_threshold={motion_threshold}, "
-            f"sample_fps={sample_fps}"
+            f"sample_fps={sample_fps}, max_frame_width={max_frame_width}, device={device}"
         )
 
         try:
@@ -49,6 +56,9 @@ class KeyframeExtractionStep(PipelineStep):
             config = KeyframeExtractionConfig(
                 motion_threshold=motion_threshold,
                 sample_fps=sample_fps,
+                max_frame_width=max_frame_width,
+                num_workers=num_workers,
+                device=device,
             )
 
             # Create processor

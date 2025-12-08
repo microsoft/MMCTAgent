@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class FrameMetadata:
     """Metadata for an extracted keyframe frame on disk."""
+
     frame_number: int
     timestamp_seconds: float
     motion_score: float
@@ -39,16 +40,19 @@ class KeyframeExtractionConfig:
         How many parallel segments of the video to process.
         1 = sequential. >1 will split the video by frame ranges.
     """
+
     motion_threshold: float = 0.8
     sample_fps: int = 1
     max_frame_width: int = 800
     debug_mode: bool = False
     num_workers: int = 4
+    device: str = "cpu"  # cpu, cuda, auto
 
 
 # ============================================================
 # Internal helpers
 # ============================================================
+
 
 def _motion_score_cpu(prev_gray: np.ndarray, curr_gray: np.ndarray) -> float:
     """
@@ -84,9 +88,7 @@ def _sample_interval(actual_fps: float, target_sample_fps: int) -> int:
     return max(interval, 1)
 
 
-def _calc_scale_factor(
-    width: int, height: int, max_frame_width: int
-) -> Tuple[float, int, int]:
+def _calc_scale_factor(width: int, height: int, max_frame_width: int) -> Tuple[float, int, int]:
     """
     Compute how much to downscale a frame to respect max_frame_width
     (applied to longest edge). Returns (scale_factor, scaled_w, scaled_h).
@@ -141,16 +143,12 @@ def _process_segment(
         return []
 
     # compute downscale + temporal sampling
-    scale_factor, scaled_w, scaled_h = _calc_scale_factor(
-        width, height, config.max_frame_width
-    )
+    scale_factor, scaled_w, scaled_h = _calc_scale_factor(width, height, config.max_frame_width)
     interval = _sample_interval(fps, config.sample_fps)
     threshold = config.motion_threshold
 
     # log which backend this worker is using
-    logger.info(
-        f"[segment {start}-{stop}] optical flow backend: CPU (Farneback)"
-    )
+    logger.info(f"[segment {start}-{stop}] optical flow backend: CPU (Farneback)")
 
     # seek to approximate start frame
     cap.set(cv2.CAP_PROP_POS_FRAMES, start)
@@ -175,7 +173,7 @@ def _process_segment(
             continue
 
         # Calculate timestamp
-        ts_sec = (frame_idx / fps)
+        ts_sec = frame_idx / fps
 
         # spatial downsampling to reduce optical flow cost
         if scale_factor < 1.0:
@@ -217,7 +215,9 @@ def _process_segment(
     cap.release()
     return results
 
+
 # Main extractor class
+
 
 class KeyframeExtractor:
     """
@@ -233,7 +233,6 @@ class KeyframeExtractor:
 
     def __init__(self, config: Optional[KeyframeExtractionConfig] = None) -> None:
         self.config = config or KeyframeExtractionConfig()
-
 
     async def extract_keyframes(
         self,
@@ -287,8 +286,7 @@ class KeyframeExtractor:
         else:
             chunk = math.ceil(total_frames / workers)
             segments = [
-                (start, min(start + chunk, total_frames))
-                for start in range(0, total_frames, chunk)
+                (start, min(start + chunk, total_frames)) for start in range(0, total_frames, chunk)
             ]
 
         # Parallel execution:
@@ -320,14 +318,13 @@ class KeyframeExtractor:
         # Order results by frame_number before returning
         all_results.sort(key=lambda m: m.frame_number)
 
-        logger.info(
-            f"KeyframeExtractor: extracted {len(all_results)} keyframes -> {keyframes_dir}"
-        )
+        logger.info(f"KeyframeExtractor: extracted {len(all_results)} keyframes -> {keyframes_dir}")
 
         return all_results
 
 
 # Convenience top-level async helper
+
 
 async def extract_keyframes_from_video(
     video_path: str,
@@ -336,6 +333,7 @@ async def extract_keyframes_from_video(
     max_frame_width: int = 800,
     debug_mode: bool = False,
     num_workers: int = 4,
+    device: str = "cpu",
 ) -> List[FrameMetadata]:
     """
     One-shot convenience wrapper that constructs KeyframeExtractor with
@@ -349,6 +347,7 @@ async def extract_keyframes_from_video(
         max_frame_width=max_frame_width,
         debug_mode=debug_mode,
         num_workers=num_workers,
+        device=device,
     )
 
     extractor = KeyframeExtractor(config)

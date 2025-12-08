@@ -51,13 +51,7 @@ class IngestionPipeline:
         frame_stacking_grid_size: Annotated[
             int, "Grid size for frame horizontal stacking (>1 enables stacking, 1 disables)"
         ] = 4,
-        keyframe_config: Annotated[
-            Optional[Dict[str, float]],
-            "Configuration for keyframe extraction thresholds",
-        ] = {"motion_threshold": 1.5, "sample_fps": 2},
-        save_local_report: Annotated[
-            bool, "Whether to save the pipeline report locally"
-        ] = False,
+        save_local_report: Annotated[bool, "Whether to save the pipeline report locally"] = False,
     ):
         try:
             logger.info("Successfully retrieved the MMCT config")
@@ -73,9 +67,7 @@ class IngestionPipeline:
 
         # Validate that language is provided if transcript_path is not provided
         if not transcript_path and not language:
-            raise ValueError(
-                "language parameter is required when transcript_path is not provided"
-            )
+            raise ValueError("language parameter is required when transcript_path is not provided")
 
         self.video_path = video_path
         self.provider = provider
@@ -83,7 +75,6 @@ class IngestionPipeline:
         self.url = url
         self.transcript_path = transcript_path
         self.frame_stacking_grid_size = frame_stacking_grid_size
-        self.keyframe_config = keyframe_config
         self.save_local_report = save_local_report
         self.original_video_path = video_path
 
@@ -96,10 +87,8 @@ class IngestionPipeline:
             video_id = await get_file_hash(self.video_path)
             # Use original path for duration to be safe, or provided path
             video_duration = await get_video_duration(self.video_path)
-            
-            self.logger.info(
-                f"Video ID: {video_id}, Duration: {video_duration:.2f}s"
-            )
+
+            self.logger.info(f"Video ID: {video_id}, Duration: {video_duration:.2f}s")
 
             # Create StepContext for this execution
             context = StepContext(
@@ -114,17 +103,13 @@ class IngestionPipeline:
                 video_id=video_id,
                 video_duration=video_duration,
                 user_params={
-                    "keyframe_config": self.keyframe_config,
                     "frame_stacking_grid_size": self.frame_stacking_grid_size,
                 },
                 save_local_report=self.save_local_report,
             )
 
             # Instantiate PipelineRunner
-            runner = PipelineRunner(
-                pipeline_config=pipeline_config,
-                context=context
-            )
+            runner = PipelineRunner(pipeline_config=pipeline_config, context=context)
 
             self.logger.info(f"Starting pipeline execution for {video_id}...")
             report = await runner.run()

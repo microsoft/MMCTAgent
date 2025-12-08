@@ -16,6 +16,7 @@ pipeline:
       params:
         max_size_mb: 500
         target_size_mb: 500
+        device: "cuda"
 
     # Step 3: Extract keyframes from video
     - id: "keyframes"
@@ -23,6 +24,10 @@ pipeline:
       params:
         source_step: "compress"
         apply_time_offset: false
+        motion_threshold: 1.5
+        max_frame_width: 800  # Downscale for faster optical flow
+        sample_fps: 2
+        device: "cuda"
 
     # Step 4: Transcribe video or use provided transcript
     - id: "transcribe"
@@ -37,6 +42,8 @@ pipeline:
       params:
         transcript_step: "transcribe"
         keyframes_step: "keyframes"
+        max_chapter_duration: 300 # seconds
+        max_concurrent_requests: 3
 
     # Step 6: Generate embeddings for chapters and keyframes (parallel)
     - id: "embeddings"

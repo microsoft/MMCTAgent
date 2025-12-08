@@ -19,9 +19,11 @@ from mmct.providers.base import BaseEmbeddingProvider
 
 class TranscriptSegment(BaseModel):
     """Represents a single segment of parsed transcript with timing information."""
+
     sentence: str
     start_time: float  # in seconds
-    end_time: float    # in seconds
+    end_time: float  # in seconds
+
 
 # Load environment variables
 load_dotenv(find_dotenv(), override=True)
@@ -44,17 +46,24 @@ class SemanticChunker:
     LONG_VIDEO_TIME_LIMIT = 120  # seconds for videos > 20 minutes
     VIDEO_DURATION_THRESHOLD = 20  # minutes
 
-    def __init__(self, transcript: str, embedding_provider: BaseEmbeddingProvider):
+    def __init__(
+        self,
+        transcript: str,
+        embedding_provider: BaseEmbeddingProvider,
+        max_chunk_duration: int = None,
+    ):
         """
         Initialize SemanticChunker.
 
         Args:
             transcript (str): Raw SRT transcript text to be processed
             embedding_provider (BaseEmbeddingProvider): Embedding provider instance (required)
+            max_chunk_duration (int): Maximum duration (in seconds) of each chunk. Optional.
         """
         self.transcript = transcript
         self.chunked_segments = []
         self.embedding_provider = embedding_provider
+        self.max_chunk_duration = max_chunk_duration
 
     async def _calculate_transcript_duration(self, srt_text: str) -> float:
         """
@@ -68,7 +77,9 @@ class SemanticChunker:
         """
         try:
             # Find all timestamp ranges
-            timestamp_matches = re.findall(r"(\d{2}:\d{2}:\d{2},\d{3}) --> (\d{2}:\d{2}:\d{2},\d{3})", srt_text)
+            timestamp_matches = re.findall(
+                r"(\d{2}:\d{2}:\d{2},\d{3}) --> (\d{2}:\d{2}:\d{2},\d{3})", srt_text
+            )
 
             if not timestamp_matches:
                 return 0.0
@@ -98,6 +109,7 @@ class SemanticChunker:
         Returns:
             List[TranscriptSegment]: List of parsed transcript segments with sentence, start_time, and end_time
         """
+
         async def parse_timestamp(timestamp):
             h, m, s, ms = map(int, re.split("[:,]", timestamp))
             return h * 3600 + m * 60 + s + ms / 1000
@@ -105,7 +117,7 @@ class SemanticChunker:
         entries = re.findall(
             r"(\d+)\n(\d{2}:\d{2}:\d{2},\d{3}) --> (\d{2}:\d{2}:\d{2},\d{3})\n(.+?)(?=\n\d+\n|\Z)",
             srt_text,
-            re.DOTALL
+            re.DOTALL,
         )
         segments = []
 
@@ -115,7 +127,7 @@ class SemanticChunker:
                 segment = TranscriptSegment(
                     sentence=text,
                     start_time=await parse_timestamp(start_time),
-                    end_time=await parse_timestamp(end_time)
+                    end_time=await parse_timestamp(end_time),
                 )
                 segments.append(segment)
 
@@ -145,7 +157,9 @@ class SemanticChunker:
         seconds = int(seconds)
         return f"{seconds // 3600:02d}:{(seconds % 3600) // 60:02d}:{seconds % 60:02d},{ms:03d}"
 
-    async def _perform_semantic_chunking(self, sentences, time_stamps, end_times, SIMILARITY_THRESHOLD, TIME_LIMIT):
+    async def _perform_semantic_chunking(
+        self, sentences, time_stamps, end_times, SIMILARITY_THRESHOLD, TIME_LIMIT
+    ):
         """
         Groups transcript text into semantic chunks using batch embeddings and greedy centroid-based approach.
         Compares new sentences against chunk centroid for better semantic coherence.
@@ -155,7 +169,9 @@ class SemanticChunker:
             return {}
 
         logger.info(f"🔄 Starting semantic chunking with {len(sentences)} sentences")
-        logger.info(f"📊 Configuration: SIMILARITY_THRESHOLD={SIMILARITY_THRESHOLD}, TIME_LIMIT={TIME_LIMIT}s")
+        logger.info(
+            f"📊 Configuration: SIMILARITY_THRESHOLD={SIMILARITY_THRESHOLD}, TIME_LIMIT={TIME_LIMIT}s"
+        )
 
         # Step 1: Batch embed all sentences
         logger.info("🧠 Creating batch embeddings for all sentences...")
@@ -187,7 +203,9 @@ class SemanticChunker:
         chunk_start_time = valid_data[0][1]
         chunk_end_time = valid_data[0][2]
 
-        logger.info(f"🎯 Initialized first chunk at {await self._format_timestamp(chunk_start_time)}")
+        logger.info(
+            f"🎯 Initialized first chunk at {await self._format_timestamp(chunk_start_time)}"
+        )
 
         for i in range(1, len(valid_data)):
             sentence, start_time, end_time, sentence_embedding = valid_data[i]
@@ -195,12 +213,16 @@ class SemanticChunker:
             # Progress logging every 50 sentences
             if i % 50 == 0:
                 progress_pct = (i / len(valid_data)) * 100
-                logger.info(f"⏳ Processing progress: {i}/{len(valid_data)} sentences ({progress_pct:.1f}%) | Chunks created: {chunks_created}")
+                logger.info(
+                    f"⏳ Processing progress: {i}/{len(valid_data)} sentences ({progress_pct:.1f}%) | Chunks created: {chunks_created}"
+                )
 
             # Calculate current chunk centroid
             chunk_centroid = await self._calculate_chunk_centroid(current_chunk_embeddings)
             if chunk_centroid is None:
-                logger.warning(f"Failed to calculate centroid at sentence {i}, adding to chunk anyway")
+                logger.warning(
+                    f"Failed to calculate centroid at sentence {i}, adding to chunk anyway"
+                )
                 current_chunk_sentences.append(sentence)
                 current_chunk_embeddings.append(sentence_embedding)
                 chunk_end_time = end_time
@@ -217,13 +239,17 @@ class SemanticChunker:
                 # Finalize current chunk
                 chunk_text = " ".join(current_chunk_sentences)
                 chunk_duration = chunk_end_time - chunk_start_time
-                chunks[f"{await self._format_timestamp(chunk_start_time)} --> {await self._format_timestamp(chunk_end_time)}"] = chunk_text
+                chunks[
+                    f"{await self._format_timestamp(chunk_start_time)} --> {await self._format_timestamp(chunk_end_time)}"
+                ] = chunk_text
                 chunks_created += 1
 
                 # Logging
                 reason = "LOW_SIMILARITY" if similarity_too_low else "TIME_LIMIT"
                 word_count = len(chunk_text.split())
-                logger.info(f"📦 Chunk #{chunks_created} created: {chunk_duration:.1f}s duration, {word_count} words | Reason: {reason} (sim={similarity:.3f})")
+                logger.info(
+                    f"📦 Chunk #{chunks_created} created: {chunk_duration:.1f}s duration, {word_count} words | Reason: {reason} (sim={similarity:.3f})"
+                )
 
                 # Track split reasons
                 if similarity_too_low:
@@ -246,20 +272,30 @@ class SemanticChunker:
         if current_chunk_sentences:
             chunk_text = " ".join(current_chunk_sentences)
             chunk_duration = chunk_end_time - chunk_start_time
-            chunks[f"{await self._format_timestamp(chunk_start_time)} --> {await self._format_timestamp(chunk_end_time)}"] = chunk_text
+            chunks[
+                f"{await self._format_timestamp(chunk_start_time)} --> {await self._format_timestamp(chunk_end_time)}"
+            ] = chunk_text
             chunks_created += 1
             word_count = len(chunk_text.split())
-            logger.info(f"📦 Final Chunk #{chunks_created} created: {chunk_duration:.1f}s duration, {word_count} words | Reason: END_OF_TRANSCRIPT")
+            logger.info(
+                f"📦 Final Chunk #{chunks_created} created: {chunk_duration:.1f}s duration, {word_count} words | Reason: END_OF_TRANSCRIPT"
+            )
 
         # Final summary logging
-        reduction_pct = ((len(valid_data) - len(chunks)) / len(valid_data)) * 100 if len(valid_data) > 0 else 0
+        reduction_pct = (
+            ((len(valid_data) - len(chunks)) / len(valid_data)) * 100 if len(valid_data) > 0 else 0
+        )
         logger.info(f"✅ Semantic chunking complete!")
-        logger.info(f"📈 Results: {len(valid_data)} sentences → {len(chunks)} chunks ({reduction_pct:.1f}% reduction)")
+        logger.info(
+            f"📈 Results: {len(valid_data)} sentences → {len(chunks)} chunks ({reduction_pct:.1f}% reduction)"
+        )
         logger.info(f"🔀 Split reasons: {similarity_splits} similarity, {time_splits} time limit")
 
         return chunks
 
-    async def _semantic_chunking(self, srt_text: str, SIMILARITY_THRESHOLD=None, TIME_LIMIT=None) -> List[TranscriptSegment]:
+    async def _semantic_chunking(
+        self, srt_text: str, SIMILARITY_THRESHOLD=None, TIME_LIMIT=None
+    ) -> List[TranscriptSegment]:
         """
         Performs semantic chunking on parsed transcript segments based on content similarity.
 
@@ -283,9 +319,13 @@ class SemanticChunker:
                 TIME_LIMIT = self.SHORT_VIDEO_TIME_LIMIT
             else:
                 TIME_LIMIT = self.LONG_VIDEO_TIME_LIMIT
-            logger.info(f"Transcript duration: {transcript_duration_minutes:.1f} minutes, using TIME_LIMIT: {TIME_LIMIT}s")
+            logger.info(
+                f"Transcript duration: {transcript_duration_minutes:.1f} minutes, using TIME_LIMIT: {TIME_LIMIT}s"
+            )
 
-        logger.info(f"Using SIMILARITY_THRESHOLD: {SIMILARITY_THRESHOLD}, TIME_LIMIT: {TIME_LIMIT}s")
+        logger.info(
+            f"Using SIMILARITY_THRESHOLD: {SIMILARITY_THRESHOLD}, TIME_LIMIT: {TIME_LIMIT}s"
+        )
 
         # Parse transcript into segments
         segments = await self._parse_transcript(srt_text)
@@ -297,7 +337,9 @@ class SemanticChunker:
         end_times = [seg.end_time for seg in segments]
 
         # Perform semantic chunking and get the chunks dict
-        chunks_dict = await self._perform_semantic_chunking(sentences, time_stamps, end_times, SIMILARITY_THRESHOLD, TIME_LIMIT)
+        chunks_dict = await self._perform_semantic_chunking(
+            sentences, time_stamps, end_times, SIMILARITY_THRESHOLD, TIME_LIMIT
+        )
 
         # Convert chunks dict to List[TranscriptSegment]
         chunked_segments = []
@@ -313,16 +355,16 @@ class SemanticChunker:
             end_time = await parse_timestamp_str(end_str)
 
             segment = TranscriptSegment(
-                sentence=chunk_text,
-                start_time=start_time,
-                end_time=end_time
+                sentence=chunk_text, start_time=start_time, end_time=end_time
             )
             chunked_segments.append(segment)
 
         logger.info(f"Created {len(chunked_segments)} semantic chunks")
         return chunked_segments
 
-    async def _add_empty_intervals(self, segments: List[TranscriptSegment], max_empty_seconds=50) -> List[TranscriptSegment]:
+    async def _add_empty_intervals(
+        self, segments: List[TranscriptSegment], max_empty_seconds=50
+    ) -> List[TranscriptSegment]:
         """
         Insert empty intervals between segments when there are gaps.
 
@@ -352,7 +394,7 @@ class SemanticChunker:
                         empty_segment = TranscriptSegment(
                             sentence="",
                             start_time=empty_start,
-                            end_time=empty_start + max_empty_seconds
+                            end_time=empty_start + max_empty_seconds,
                         )
                         result.append(empty_segment)
                         empty_start += max_empty_seconds
@@ -360,17 +402,13 @@ class SemanticChunker:
                     # Add final chunk to reach the segment start
                     if empty_start < segment.start_time:
                         empty_segment = TranscriptSegment(
-                            sentence="",
-                            start_time=empty_start,
-                            end_time=segment.start_time
+                            sentence="", start_time=empty_start, end_time=segment.start_time
                         )
                         result.append(empty_segment)
                 else:
                     # Add single empty interval
                     empty_segment = TranscriptSegment(
-                        sentence="",
-                        start_time=prev_end_time,
-                        end_time=segment.start_time
+                        sentence="", start_time=prev_end_time, end_time=segment.start_time
                     )
                     result.append(empty_segment)
 
@@ -378,10 +416,14 @@ class SemanticChunker:
             result.append(segment)
             prev_end_time = segment.end_time
 
-        logger.info(f"Added empty intervals: {len(segments)} segments → {len(result)} segments (added {len(result) - len(segments)} empty intervals)")
+        logger.info(
+            f"Added empty intervals: {len(segments)} segments → {len(result)} segments (added {len(result) - len(segments)} empty intervals)"
+        )
         return result
 
-    async def _merge_short_clusters(self, clusters: List[TranscriptSegment], min_duration_seconds: int = 30) -> List[TranscriptSegment]:
+    async def _merge_short_clusters(
+        self, clusters: List[TranscriptSegment], min_duration_seconds: int = 30
+    ) -> List[TranscriptSegment]:
         """
         Merge clusters shorter than min_duration with subsequent clusters to improve chapter quality.
 
@@ -398,7 +440,9 @@ class SemanticChunker:
         merged_clusters = []
         i = 0
 
-        logger.info(f"Starting cluster merging. Original clusters: {len(clusters)}, Min duration: {min_duration_seconds}s")
+        logger.info(
+            f"Starting cluster merging. Original clusters: {len(clusters)}, Min duration: {min_duration_seconds}s"
+        )
 
         while i < len(clusters):
             current_segment = clusters[i]
@@ -413,17 +457,21 @@ class SemanticChunker:
                 merged_segment = TranscriptSegment(
                     sentence=f"{current_segment.sentence} {next_segment.sentence}",
                     start_time=current_segment.start_time,
-                    end_time=next_segment.end_time
+                    end_time=next_segment.end_time,
                 )
                 merged_clusters.append(merged_segment)
-                logger.debug(f"Merged cluster: {duration:.1f}s + {next_duration:.1f}s = {duration + next_duration:.1f}s")
+                logger.debug(
+                    f"Merged cluster: {duration:.1f}s + {next_duration:.1f}s = {duration + next_duration:.1f}s"
+                )
                 i += 2  # Skip next cluster since we merged it
             else:
                 # Cluster is long enough or it's the last one, keep as is
                 merged_clusters.append(current_segment)
                 i += 1
 
-        logger.info(f"Cluster merging complete. Final clusters: {len(merged_clusters)} (reduced by {len(clusters) - len(merged_clusters)})")
+        logger.info(
+            f"Cluster merging complete. Final clusters: {len(merged_clusters)} (reduced by {len(clusters) - len(merged_clusters)})"
+        )
         return merged_clusters
 
     async def _process_and_chunk_transcript(self, srt_text: str) -> List:
@@ -437,7 +485,9 @@ class SemanticChunker:
             List[TranscriptSegment]: Processed and chunked transcript segments
         """
         # Perform semantic chunking - returns List[TranscriptSegment]
-        chunked_segments = await self._semantic_chunking(srt_text=srt_text)
+        chunked_segments = await self._semantic_chunking(
+            srt_text=srt_text, TIME_LIMIT=self.max_chunk_duration
+        )
         logger.info(f"Semantic chunking complete: {len(chunked_segments)} chunks created")
 
         # Add empty intervals for gaps in the transcript
@@ -445,7 +495,9 @@ class SemanticChunker:
         logger.info(f"After adding empty intervals: {len(chunked_segments)} segments")
 
         # Merge short duration clusters to improve chapter quality and reduce processing time
-        chunked_segments = await self._merge_short_clusters(chunked_segments, min_duration_seconds=30)
+        chunked_segments = await self._merge_short_clusters(
+            chunked_segments, min_duration_seconds=30
+        )
         logger.info(f"Clusters after merging: {len(chunked_segments)}")
 
         return chunked_segments

@@ -25,9 +25,12 @@ class CompressionStep(PipelineStep):
         """Execute video compression if needed."""
         max_size_mb = self.get_param("max_size_mb", context, default=500)
         target_size_mb = self.get_param("target_size_mb", context, default=500)
+        device = self.get_param("device", context, default="auto")
 
         video_path = context.video_path
-        context.logger.info(f"Checking video compression for: {os.path.basename(video_path)}")
+        context.logger.info(
+            f"Checking video compression for: {os.path.basename(video_path)} (device={device})"
+        )
 
         try:
             # Check file size
@@ -52,6 +55,7 @@ class CompressionStep(PipelineStep):
                     input_path=video_path,
                     target_size_mb=target_size_mb,
                     output_dir=compressed_dir,
+                    device=device,
                 )
 
                 # Compress in thread pool

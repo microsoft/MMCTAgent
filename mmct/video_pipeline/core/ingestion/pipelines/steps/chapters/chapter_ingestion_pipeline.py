@@ -14,10 +14,7 @@ from .chapter_generator import ChapterGenerator
 from .object_collection_processor import ObjectCollectionProcessor
 from mmct.video_pipeline.core.ingestion.models import ChapterMetadata, ChapterMetadataCollection
 from mmct.video_pipeline.utils.helper import get_media_folder
-from mmct.providers.base import (
-    BaseLLMProvider,
-    BaseEmbeddingProvider
-)
+from mmct.providers.base import BaseLLMProvider, BaseEmbeddingProvider
 
 from dotenv import load_dotenv, find_dotenv
 
@@ -44,6 +41,8 @@ class ChapterIngestionPipeline:
         embedding_provider: BaseEmbeddingProvider,
         frame_stacking_grid_size: int = 4,
         video_duration: Optional[float] = None,
+        max_concurrent_requests: int = 3,
+        max_chapter_duration: Optional[int] = None,
     ) -> None:
         """
         Initialize ChapterIngestionPipeline.
@@ -57,6 +56,8 @@ class ChapterIngestionPipeline:
             embedding_provider: Embedding provider instance (required)
             frame_stacking_grid_size: Grid size for frame stacking (default: 4)
             video_duration: Duration of current video
+            max_concurrent_requests: Maximum concurrent LLM requests for chapter generation
+            max_chapter_duration: Maximum duration (in seconds) of each chapter
         """
         # Core attributes
         self.transcript = transcript
@@ -73,12 +74,14 @@ class ChapterIngestionPipeline:
         # Initialize components with providers
         self.semantic_chunker = SemanticChunker(
             transcript=transcript,
-            embedding_provider=self.embedding_provider
+            embedding_provider=self.embedding_provider,
+            max_chunk_duration=max_chapter_duration,
         )
         self.chapter_generator = ChapterGenerator(
             frame_stacking_grid_size=frame_stacking_grid_size,
             keyframe_index=self.keyframe_index_name,
             llm_provider=self.llm_provider,
+            max_concurrent_requests=max_concurrent_requests,
         )
 
         # Initialize object collection processor
@@ -92,7 +95,6 @@ class ChapterIngestionPipeline:
         self.chapter_transcripts = []
         self.chapter_timestamps = []
 
-
     async def _create_chapters(self):
         """Create chapters using ChapterGenerator class."""
         if not self.chunked_segments:
@@ -101,14 +103,18 @@ class ChapterIngestionPipeline:
 
         # Use the chapter generator to create chapters in batch
         # Note: max_concurrent_requests is set in ChapterGenerator.__init__
-        self.chapter_responses, self.chapter_transcripts, self.chapter_timestamps = await self.chapter_generator.create_chapters_batch(
-            chunked_segments=self.chunked_segments,
-            video_id=self.hash_id,
-            subject_variety={},
-            categories="",
+        self.chapter_responses, self.chapter_transcripts, self.chapter_timestamps = (
+            await self.chapter_generator.create_chapters_batch(
+                chunked_segments=self.chunked_segments,
+                video_id=self.hash_id,
+                subject_variety={},
+                categories="",
+            )
         )
 
-        logger.info(f"Chapter creation completed: {len(self.chapter_responses)} chapters created with timestamps")
+        logger.info(
+            f"Chapter creation completed: {len(self.chapter_responses)} chapters created with timestamps"
+        )
 
     async def _save_chapters_to_json(self, url: Optional[str] = None) -> str:
         """
@@ -132,7 +138,9 @@ class ChapterIngestionPipeline:
             if chapter_response.object_collection:
                 try:
                     # Convert the List[ObjectResponse] to JSON-serializable list
-                    object_collection_list = [obj.model_dump() for obj in chapter_response.object_collection]
+                    object_collection_list = [
+                        obj.model_dump() for obj in chapter_response.object_collection
+                    ]
                     object_collection_json = json.dumps(object_collection_list)
                 except Exception as e:
                     logger.warning(f"Failed to serialize object_collection: {e}")
@@ -206,12 +214,16 @@ class ChapterIngestionPipeline:
             chapter_responses=self.chapter_responses,
             video_id=self.hash_id,
             url=url,
-            video_duration=self.video_duration
+            video_duration=self.video_duration,
         )
         if merged_registry:
-            logger.info(f"Object collection processed: {len(merged_registry)} unique objects, saved to {object_json_path}")
+            logger.info(
+                f"Object collection processed: {len(merged_registry)} unique objects, saved to {object_json_path}"
+            )
         else:
-            logger.info(f"No objects found in chapters, saved empty collection to {object_json_path}")
+            logger.info(
+                f"No objects found in chapters, saved empty collection to {object_json_path}"
+            )
 
         # Step 4: Save chapters to JSON (without embeddings)
         logger.info("Step 4: Saving chapters to JSON...")

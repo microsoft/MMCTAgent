@@ -34,7 +34,16 @@ class ChapterGenerationStep(PipelineStep):
         # Get frame stacking config
         frame_stacking_grid_size = context.user_params.get("frame_stacking_grid_size", 4)
 
-        context.logger.info(f"Generating chapters for video: {context.video_id}")
+        # Get max concurrent requests
+        max_concurrent_requests = self.get_param("max_concurrent_requests", context, default=3)
+        # Get max chapter duration
+        max_chapter_duration = self.get_param("max_chapter_duration", context, default=None)
+
+        context.logger.info(
+            f"Generating chapters for video: {context.video_id} "
+            f"with max_concurrent_requests={max_concurrent_requests}, "
+            f"max_chapter_duration={max_chapter_duration}"
+        )
 
         try:
             # Create chapter pipeline
@@ -47,11 +56,13 @@ class ChapterGenerationStep(PipelineStep):
                 video_duration=context.video_duration,
                 llm_provider=context.provider.llm_provider,
                 embedding_provider=context.provider.embedding_provider,
+                max_concurrent_requests=max_concurrent_requests,
+                max_chapter_duration=max_chapter_duration,
             )
 
             # Run chapter generation
-            chapter_responses, chapter_transcripts, is_already_ingested = await chapter_pipeline.run(
-                url=context.url
+            chapter_responses, chapter_transcripts, is_already_ingested = (
+                await chapter_pipeline.run(url=context.url)
             )
 
             context.logger.info(f"Generated {len(chapter_responses)} chapters")
