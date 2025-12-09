@@ -9,6 +9,7 @@ Example:
 """
 
 from .azure_providers.llm_provider import AzureLLMProvider
+from .azure_providers.azure_reasoning_llm_provider import AzureReasoningLLMProvider
 from .azure_providers.embedding_provider import AzureEmbeddingProvider
 from .azure_providers.ai_search_chapter_provider import AISearchChapterProvider
 from .azure_providers.ai_search_object_collection_provider import AISearchObjectCollectionProvider
@@ -20,6 +21,7 @@ from .azure_providers.speech_service_provider import AzureSpeechServiceProvider
 
 __all__ = [
     'AzureLLMProvider',
+    'AzureReasoningLLMProvider',
     'AzureEmbeddingProvider',
     'AISearchChapterProvider',
     'AISearchObjectCollectionProvider',

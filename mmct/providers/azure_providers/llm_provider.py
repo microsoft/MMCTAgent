@@ -7,7 +7,6 @@ from azure.core.credentials_async import AsyncTokenCredential
 from mmct.utils.error_handler import ProviderException, ConfigurationException
 from typing import Dict, Any, List, Union, Optional
 from mmct.utils.error_handler import handle_exceptions, convert_exceptions
-from mmct.providers.credentials import AzureCredentials
 from autogen_ext.models.openai import AzureOpenAIChatCompletionClient
 
 
@@ -101,7 +100,6 @@ class AzureLLMProvider(BaseLLMProvider):
         try:
 
             temperature = kwargs.get("temperature",0)
-            print(temperature)
             max_tokens = kwargs.get("max_tokens",4000)
             response_format = kwargs.get("response_format")
             

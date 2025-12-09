@@ -7,7 +7,6 @@ from azure.storage.blob.aio import BlobServiceClient
 from loguru import logger
 from typing import Dict, Any, Union, Optional
 from mmct.providers.base import BaseStorageProvider
-from mmct.providers.credentials import AzureCredentials
 from azure.core.credentials import AzureKeyCredential
 from azure.core.credentials_async import AsyncTokenCredential
 from mmct.utils.error_handler import handle_exceptions, convert_exceptions
