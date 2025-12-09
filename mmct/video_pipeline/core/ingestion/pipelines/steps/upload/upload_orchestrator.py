@@ -10,7 +10,7 @@ import json
 import uuid
 import asyncio
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Optional
 from loguru import logger
 
 from mmct.video_pipeline.core.ingestion.models import (
@@ -18,7 +18,7 @@ from mmct.video_pipeline.core.ingestion.models import (
     ChapterMetadataCollection,
     ObjectCollectionMetadata,
 )
-from mmct.video_pipeline.core.ingestion.key_frames_extractor.keyframe_search_index import KeyframeSearchIndex
+from mmct.video_pipeline.core.ingestion.pipelines.steps.keyframes.keyframe_search_index import KeyframeSearchIndex
 from mmct.video_pipeline.utils.helper import get_media_folder
 from mmct.providers.search_document_models import ChapterIndexDocument
 from mmct.utils.error_handler import handle_exceptions, convert_exceptions, ProviderException

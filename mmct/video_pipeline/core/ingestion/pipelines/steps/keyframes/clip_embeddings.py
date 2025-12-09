@@ -3,7 +3,7 @@ import logging
 from typing import List, Optional
 import numpy as np
 from dataclasses import dataclass
-from mmct.video_pipeline.core.ingestion.key_frames_extractor.keyframe_extractor import FrameMetadata
+from .keyframe_extractor import FrameMetadata
 from mmct.video_pipeline.utils.helper import get_media_folder
 from mmct.providers.custom_providers import ClipImageEmbeddingProvider
 

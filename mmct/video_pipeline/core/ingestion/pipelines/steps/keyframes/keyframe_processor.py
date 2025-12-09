@@ -10,7 +10,7 @@ import json
 from typing import Optional
 from loguru import logger
 
-from mmct.video_pipeline.core.ingestion.key_frames_extractor.keyframe_extractor import (
+from .keyframe_extractor import (
     KeyframeExtractor,
     KeyframeExtractionConfig,
 )

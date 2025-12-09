@@ -5,7 +5,6 @@ import base64
 import asyncio
 from datetime import time
 from typing import List, Dict, Tuple
-from mmct.config.settings import settings
 from mmct.video_pipeline.core.ingestion.models import (
     ChapterCreationResponse,
     SubjectVarietyResponse,
