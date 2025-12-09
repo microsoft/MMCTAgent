@@ -129,6 +129,15 @@ class PipelineRunner:
                         f"Step {step_cfg.id} completed in {step_duration:.2f}s"
                     )
 
+                    # Check if step requested pipeline termination
+                    should_continue = result.outputs.get("should_continue", True)
+                    if not should_continue:
+                        self.logger.info(
+                            f"Step {step_cfg.id} requested pipeline termination. Skipping remaining steps."
+                        )
+                        pipeline_status = "completed"
+                        break
+
                 except Exception as e:
                     step_duration = time.time() - step_start if 'step_start' in locals() else 0.0
 

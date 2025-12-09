@@ -4,7 +4,7 @@ from typing import List, Optional, Tuple
 from loguru import logger
 from pydantic import BaseModel, Field
 from mmct.video_pipeline.core.ingestion.models import ChapterCreationResponse, ObjectResponse, ObjectCollectionMetadata
-from mmct.video_pipeline.core.ingestion.chapter_generator.video_summary import VideoSummary
+from .video_summary import VideoSummary
 from mmct.video_pipeline.utils.helper import get_media_folder
 
 

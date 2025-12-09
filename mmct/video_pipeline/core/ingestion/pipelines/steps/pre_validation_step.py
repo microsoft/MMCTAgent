@@ -45,14 +45,21 @@ class PreValidationStep(PipelineStep):
                 context.logger.info(
                     f"Video {video_hash_id} already ingested. Pipeline will be skipped."
                 )
-                raise RuntimeError(
-                    f"Video {video_hash_id} already ingested. Skipping pipeline."
+                # Return early with should_continue=False to gracefully end pipeline
+                return StepResult(
+                    step_id=self.step_id,
+                    outputs={
+                        "is_already_ingested": True,
+                        "has_audio": None,  # Not checked
+                        "audio_check_skipped": True,
+                        "should_continue": False,
+                    },
+                    metrics={},
+                    artifacts=[],
                 )
 
             context.logger.info("✓ Video not found in index, proceeding...")
 
-        except RuntimeError:
-            raise
         except Exception as e:
             context.logger.exception(f"Early check failed: {e}")
             raise

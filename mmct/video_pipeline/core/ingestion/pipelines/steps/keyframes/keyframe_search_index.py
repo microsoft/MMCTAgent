@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timezone
 import numpy as np
 
-from mmct.video_pipeline.core.ingestion.key_frames_extractor.clip_embeddings import FrameEmbedding
+from .clip_embeddings import FrameEmbedding
 from mmct.providers.base import BaseKeyframesVectorDBProvider
 
 logger = logging.getLogger(__name__)
