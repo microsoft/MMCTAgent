@@ -47,7 +47,7 @@ class AzureSpeechServiceProvider(BaseTranscriptionProvider):
     def _get_speech_config_with_token(self, language: str = None) -> speechsdk.SpeechConfig:
         """Create Speech SDK configuration with fresh token."""
         try:
-            if self.credentials is not None:
+            if self.credential is not None:
                 # Get token for managed identity
                 token = self.credential.get_token("https://cognitiveservices.azure.com/.default")
                 auth_token = f"aad#{self.speech_service_resource_id}#{token.token}"

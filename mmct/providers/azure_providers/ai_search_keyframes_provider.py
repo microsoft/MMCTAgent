@@ -86,7 +86,7 @@ class AISearchKeyframesProvider(BaseKeyframesVectorDBProvider):
         return create_azure_index_schema(
             model_class=KeyframeDocument,
             index_name=self.index_name,
-            vector_dimensions=self.dimensions or 1536,
+            vector_dimensions=self.dimensions or 512,
             vector_field_name="embeddings",
         )
 
