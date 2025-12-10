@@ -5,7 +5,6 @@ from loguru import logger
 from mmct.config.providers import IngestionProviderConfig
 from mmct.video_pipeline.core.ingestion.languages import Languages
 from mmct.video_pipeline.utils.helper import (
-    get_file_hash,
     get_media_folder,
 )
 from mmct.video_pipeline.core.ingestion.utils.helper import (
@@ -30,6 +29,7 @@ class IngestionPipeline:
     def __init__(
         self,
         video_path: Annotated[str, "Local path to the video file to be ingested"],
+        video_id: Annotated[str, "Unique identifier (hash) for the video"],
         provider: Annotated[
             IngestionProviderConfig,
             "Configuration object containing all service providers",
@@ -70,6 +70,7 @@ class IngestionPipeline:
             raise ValueError("language parameter is required when transcript_path is not provided")
 
         self.video_path = video_path
+        self.video_id = video_id
         self.provider = provider
         self.language = language
         self.url = url
@@ -84,11 +85,10 @@ class IngestionPipeline:
             pipeline_config = get_default_ingestion_config()
 
             # Calculate parent video metadata
-            video_id = await get_file_hash(self.video_path)
             # Use original path for duration to be safe, or provided path
             video_duration = await get_video_duration(self.video_path)
 
-            self.logger.info(f"Video ID: {video_id}, Duration: {video_duration:.2f}s")
+            self.logger.info(f"Video ID: {self.video_id}, Duration: {video_duration:.2f}s")
 
             # Create StepContext for this execution
             context = StepContext(
@@ -100,7 +100,7 @@ class IngestionPipeline:
                 url=self.url,
                 transcript_path=self.transcript_path,
                 output_dir=await get_media_folder(),
-                video_id=video_id,
+                video_id=self.video_id,
                 video_duration=video_duration,
                 user_params={
                     "frame_stacking_grid_size": self.frame_stacking_grid_size,
@@ -111,7 +111,7 @@ class IngestionPipeline:
             # Instantiate PipelineRunner
             runner = PipelineRunner(pipeline_config=pipeline_config, context=context)
 
-            self.logger.info(f"Starting pipeline execution for {video_id}...")
+            self.logger.info(f"Starting pipeline execution for {self.video_id}...")
             report = await runner.run()
 
             if report.status == "failed":
@@ -119,6 +119,7 @@ class IngestionPipeline:
                 raise Exception("Ingestion pipeline failed.")
 
             self.logger.info("Pipeline completed successfully!")
+            return report
 
         except Exception as e:
             self.logger.exception(f"Exception occurred while running Ingestion pipeline: {e}")

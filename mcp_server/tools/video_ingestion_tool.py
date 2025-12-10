@@ -4,6 +4,7 @@ from mmct.video_pipeline.core.ingestion.ingestion_pipeline import (
     IngestionPipeline,
     Languages,
 )
+from mmct.video_pipeline.utils.helper import get_file_hash
 import os
 import aiohttp
 import aiofiles
@@ -34,7 +35,7 @@ Once ingested, the video data is stored in the specified search index, making it
 ## Output
 
 No direct response is returned. The ingestion pipeline enriches and indexes the video in the specified knowledge base index, enabling later use by kb_tool, video_agent_tool, and other MMCT flows.
-"""
+""",
 )
 async def video_ingestion_tool(
     video_url: Annotated[str, "Video URL"],
@@ -71,19 +72,28 @@ async def video_ingestion_tool(
                     logger.info(f"Transcript saved to {transcript_file_name}")
                 else:
                     logger.warning(f"Failed to download transcript, status code: {response.status}")
-                    raise Exception(f"Failed to download transcript, status code: {response.status}")
+                    raise Exception(
+                        f"Failed to download transcript, status code: {response.status}"
+                    )
+
+        video_path = os.path.join(os.getcwd(), file_name)
+        if not hash_video_id:
+            hash_video_id = await get_file_hash(video_path)
 
         ingestion_tool = IngestionPipeline(
-            video_path=os.path.join(os.getcwd(), file_name),
-            index_name=index_name,
+            video_path=video_path,
+            video_id=hash_video_id,
+            # index_name=index_name, # Removed: Not supported
             language=language,
-            transcription_service=transcription_service,
+            # transcription_service=transcription_service, # Removed: Not supported
             url=url,
-            transcript_path=os.path.join(os.getcwd(), transcript_file_name) if transcript_file_name else None,
-            use_computer_vision_tool=use_computer_vision_tool,
+            transcript_path=(
+                os.path.join(os.getcwd(), transcript_file_name) if transcript_file_name else None
+            ),
+            # use_computer_vision_tool=use_computer_vision_tool, # Removed: Not supported
             disable_console_log=disable_console_log,
-            hash_video_id=hash_video_id,
             frame_stacking_grid_size=frame_stacking_grid_size,
+            # provider=... # TODO: Provider configuration is required but missing in original code
         )
 
         await ingestion_tool.run()
