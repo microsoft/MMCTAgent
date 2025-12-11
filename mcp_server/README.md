@@ -79,7 +79,8 @@ python client.py
     "language": "en-US",
     "transcription_service": "whisper",
     "use_computer_vision_tool": False,
-    "frame_stacking_grid_size": 4
+    "frame_stacking_grid_size": 4,
+    "hash_video_id": "optional-video-id"
 }
 ```
 

@@ -155,9 +155,12 @@ ingestion_provider = IngestionProviderConfig(
     llm_provider=custom_llm,
     # You can also pass other providers like search_provider, embedding_provider, storage_provider, etc.
 )
+video_path="path/to/video.mp4"
+video_id = "some-video-id" # or calculate hash
+
 ingestion = IngestionPipeline(
-    video_path="path/to/video.mp4",
-    index_name="your-index",
+    video_path=video_path,
+    video_id=video_id,
     provider=ingestion_provider
 )
 await ingestion.run()

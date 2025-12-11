@@ -59,16 +59,23 @@ Demonstrates the video ingestion pipeline for processing videos.
 
 **Usage:**
 ```python
-from mmct.video_pipeline import IngestionPipeline, Languages, TranscriptionServices
+from mmct.video_pipeline import IngestionPipeline, Languages
+from mmct.video_pipeline.utils.helper import get_file_hash
+from mmct.config.providers import IngestionProviderConfig
+# ... import providers ...
+
+# provider = IngestionProviderConfig(...)
+
+video_path = "path/to/video.mp4"
+video_id = await get_file_hash(video_path)
 
 pipeline = IngestionPipeline(
-    video_path="path/to/video.mp4",
-    index_name="video-index",
-    transcription_service=TranscriptionServices.WHISPER,
+    video_path=video_path,
+    video_id=video_id,
     language=Languages.ENGLISH_INDIA,
-    use_computer_vision_tool=False
+    provider=provider
 )
-await pipeline()
+await pipeline.run()
 ```
 
 ### 4. **custom_provider_example.py**

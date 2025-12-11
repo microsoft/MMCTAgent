@@ -237,6 +237,7 @@ from mmct.providers.azure import (
     WhisperTranscriptionProvider
 )
 from mmct.providers.local import ClipImageEmbeddingProvider
+from mmct.video_pipeline.utils.helper import get_file_hash
 from azure.identity import DefaultAzureCredential, AzureCliCredential, ChainedTokenCredential
 
 credentials = ChainedTokenCredential(AzureCliCredential(), DefaultAzureCredential())
@@ -286,10 +287,14 @@ provider = IngestionProviderConfig(
 )
 
 
+video_path = "path-of-your-video"
+video_id = await get_file_hash(video_path)
+
 ingestion = IngestionPipeline(
-    video_path="path-of-your-video",
+    video_path=video_path,
+    video_id=video_id,
     language=Languages.ENGLISH_INDIA,
-    provider = provider
+    provider=provider
 )
 
 # Run the ingestion pipeline
