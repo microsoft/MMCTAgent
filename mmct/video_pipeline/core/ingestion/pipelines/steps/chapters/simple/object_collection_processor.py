@@ -3,7 +3,11 @@ import json
 from typing import List, Optional, Tuple
 from loguru import logger
 from pydantic import BaseModel, Field
-from mmct.video_pipeline.core.ingestion.models import ChapterCreationResponse, ObjectResponse, ObjectCollectionMetadata
+from mmct.video_pipeline.core.ingestion.models import (
+    ChapterCreationResponse,
+    ObjectResponse,
+    ObjectCollectionMetadata,
+)
 from .video_summary import VideoSummary
 from mmct.video_pipeline.utils.helper import get_media_folder
 
@@ -12,11 +16,12 @@ class MergedObjectCollectionResponse(BaseModel):
     """
     Response model for merged object collection.
     """
+
     model_config = {"extra": "forbid"}
 
     merged_objects: Optional[List[ObjectResponse]] = Field(
         default_factory=list,
-        description="List of ObjectResponse objects containing name, appearance, identity, first_seen timestamp, and additional_details"
+        description="List of ObjectResponse objects containing name, appearance, identity, first_seen timestamp, and additional_details",
     )
 
 
@@ -43,7 +48,7 @@ class ObjectCollectionProcessor:
         chapter_responses: List[ChapterCreationResponse],
         video_id: str,
         url: Optional[str] = None,
-        video_duration: Optional[float] = None
+        video_duration: Optional[float] = None,
     ) -> Tuple[Optional[List[ObjectResponse]], str]:
         """
         Main method to process chapter responses and create merged object collection and video summary.
@@ -88,8 +93,7 @@ class ObjectCollectionProcessor:
         return merged_registry, json_path
 
     def _extract_registries(
-        self,
-        chapter_responses: List[ChapterCreationResponse]
+        self, chapter_responses: List[ChapterCreationResponse]
     ) -> List[List[ObjectResponse]]:
         """
         Extract object collections from chapter responses.
@@ -105,12 +109,18 @@ class ObjectCollectionProcessor:
         for idx, chapter in enumerate(chapter_responses):
             if chapter.object_collection:
                 registries.append(chapter.object_collection)
-                logger.debug(f"Extracted collection from chapter {idx}: {len(chapter.object_collection)} objects")
+                logger.debug(
+                    f"Extracted collection from chapter {idx}: {len(chapter.object_collection)} objects"
+                )
 
-        logger.info(f"Extracted {len(registries)} non-empty collections from {len(chapter_responses)} chapters")
+        logger.info(
+            f"Extracted {len(registries)} non-empty collections from {len(chapter_responses)} chapters"
+        )
         return registries
 
-    async def _merge_registries(self, registries: List[List[ObjectResponse]]) -> Optional[List[ObjectResponse]]:
+    async def _merge_registries(
+        self, registries: List[List[ObjectResponse]]
+    ) -> Optional[List[ObjectResponse]]:
         """
         Merge multiple object collections using LLM to handle duplicates.
         Uses batch processing for large numbers of collections.
@@ -132,9 +142,7 @@ class ObjectCollectionProcessor:
         return await self._merge_registries_in_batches(registries, batch_size=3)
 
     async def _merge_registries_in_batches(
-        self,
-        registries: List[List[ObjectResponse]],
-        batch_size: int = 3
+        self, registries: List[List[ObjectResponse]], batch_size: int = 3
     ) -> Optional[List[ObjectResponse]]:
         """
         Merge object collections in batches, passing the result of the previous batch
@@ -148,38 +156,41 @@ class ObjectCollectionProcessor:
             Merged object collection as a list of ObjectResponse objects
         """
         logger.info(f"Starting registry merge in batches of {batch_size}...")
-        
+
         # Split registries into groups of batch_size
         registry_batches = [
-            registries[i:i + batch_size]
-            for i in range(0, len(registries), batch_size)
+            registries[i : i + batch_size] for i in range(0, len(registries), batch_size)
         ]
-        
-        logger.info(f"Processing {len(registries)} registries in {len(registry_batches)} merge batches")
-        
+
+        logger.info(
+            f"Processing {len(registries)} registries in {len(registry_batches)} merge batches"
+        )
+
         # Track the accumulated merged result
         accumulated_merged_registry = None
-        
+
         # Process each batch
         for batch_idx, current_batch in enumerate(registry_batches):
-            logger.info(f"Processing merge batch {batch_idx + 1}/{len(registry_batches)} with {len(current_batch)} registries")
-            
+            logger.info(
+                f"Processing merge batch {batch_idx + 1}/{len(registry_batches)} with {len(current_batch)} registries"
+            )
+
             # For the first batch, merge without prior context
             if accumulated_merged_registry is None:
                 accumulated_merged_registry = await self._merge_and_enrich_objects(
-                    current_batch,
-                    prev_merged_registry=None
+                    current_batch, prev_merged_registry=None
                 )
             else:
                 # For subsequent batches, pass the accumulated result as previous context
                 # This ensures cohesion by passing context forward
                 accumulated_merged_registry = await self._merge_and_enrich_objects(
-                    current_batch,
-                    prev_merged_registry=accumulated_merged_registry
+                    current_batch, prev_merged_registry=accumulated_merged_registry
                 )
-        
+
         if accumulated_merged_registry:
-            logger.info(f"Final merged collection contains {len(accumulated_merged_registry)} objects")
+            logger.info(
+                f"Final merged collection contains {len(accumulated_merged_registry)} objects"
+            )
         else:
             logger.warning("No objects found after batch merging")
 
@@ -188,7 +199,7 @@ class ObjectCollectionProcessor:
     async def _merge_and_enrich_objects(
         self,
         current_registries: List[List[ObjectResponse]],
-        prev_merged_registry: Optional[List[ObjectResponse]] = None
+        prev_merged_registry: Optional[List[ObjectResponse]] = None,
     ) -> Optional[List[ObjectResponse]]:
         """
         Perform a dedicated LLM call to merge and enrich object collections,
@@ -201,31 +212,34 @@ class ObjectCollectionProcessor:
         Returns:
             Merged object collection as a list of ObjectResponse objects
         """
-        logger.info(f"Performing dedicated object collection merge and enrichment for {len(current_registries)} collections...")
-        
+        logger.info(
+            f"Performing dedicated object collection merge and enrichment for {len(current_registries)} collections..."
+        )
+
         # Prepare all object collections
         all_objects = []
         has_previous_context = prev_merged_registry is not None and len(prev_merged_registry) > 0
 
         # If we have previous merged results, add them first
         if has_previous_context:
-            all_objects.append({
-                'batch_number': 'Previous Merged Results',
-                'objects': [obj.model_dump() for obj in prev_merged_registry]
-            })
+            all_objects.append(
+                {
+                    "batch_number": "Previous Merged Results",
+                    "objects": [obj.model_dump() for obj in prev_merged_registry],
+                }
+            )
 
         # Add all current registries
         for i, registry in enumerate(current_registries):
             if registry:
-                all_objects.append({
-                    'batch_number': i + 1,
-                    'objects': [obj.model_dump() for obj in registry]
-                })
+                all_objects.append(
+                    {"batch_number": i + 1, "objects": [obj.model_dump() for obj in registry]}
+                )
 
         if not all_objects:
             logger.info("No objects found in any collection, skipping merge")
             return None
-        
+
         # Adjust merge prompt based on whether we have previous context
         context_instruction = ""
         if has_previous_context:
@@ -271,20 +285,20 @@ class ObjectCollectionProcessor:
         """
 
         registries_json = json.dumps(all_objects, indent=2)
-        
+
         user_prompt = f"""Here are the object collections from {len(all_objects)} different video chapters to merge:
 
 {registries_json}
 
 Please create a single, exhaustive, merged object collection that includes ALL objects with detailed attributes.
 Carefully identify duplicate objects that refer to the same entity and merge them according to the rules."""
-        
+
         try:
             messages = [
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
+                {"role": "user", "content": user_prompt},
             ]
-            
+
             result = await self.llm_provider.chat_completion(
                 messages=messages,
                 temperature=0.0,
@@ -292,11 +306,13 @@ Carefully identify duplicate objects that refer to the same entity and merge the
             )
 
             # Extract the parsed response
-            merged_response: MergedObjectCollectionResponse = result['content']
+            merged_response: MergedObjectCollectionResponse = result["content"]
             merged_registry = merged_response.merged_objects
 
             if merged_registry:
-                logger.info(f"Object merge complete: {len(merged_registry)} objects in merged collection")
+                logger.info(
+                    f"Object merge complete: {len(merged_registry)} objects in merged collection"
+                )
             else:
                 logger.warning("Object merge returned empty collection")
 
@@ -312,7 +328,7 @@ Carefully identify duplicate objects that refer to the same entity and merge the
         video_id: str,
         url: Optional[str] = None,
         video_summary: str = "",
-        video_duration: Optional[float] = None
+        video_duration: Optional[float] = None,
     ) -> str:
         """
         Save the merged object collection and video summary to local JSON file (without embeddings).
@@ -357,11 +373,15 @@ Carefully identify duplicate objects that refer to the same entity and merge the
             object_collections_dir = os.path.join(media_folder, "object_collections")
             os.makedirs(object_collections_dir, exist_ok=True)
 
-            json_file_path = os.path.join(object_collections_dir, f"object_collection_{video_id}.json")
+            json_file_path = os.path.join(
+                object_collections_dir, f"object_collection_{video_id}.json"
+            )
             with open(json_file_path, "w", encoding="utf-8") as f:
                 json.dump(metadata.model_dump(), f, indent=2, ensure_ascii=False)
 
-            logger.info(f"Saved object collection with {object_count} objects and video summary to {json_file_path}")
+            logger.info(
+                f"Saved object collection with {object_count} objects and video summary to {json_file_path}"
+            )
             return json_file_path
 
         except Exception as e:

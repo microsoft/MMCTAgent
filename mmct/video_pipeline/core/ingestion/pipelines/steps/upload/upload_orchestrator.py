@@ -35,7 +35,7 @@ class UploadOrchestrator:
     - Object collection documents to search index
     """
 
-    def __init__(self, search_provider:dict, blob_manager=None):
+    def __init__(self, search_provider: dict, blob_manager=None):
         """
         Initialize the upload orchestrator.
 
@@ -117,17 +117,23 @@ class UploadOrchestrator:
                     # Update blob_url in metadata
                     keyframe.blob_url = blob_url
 
-                logger.info(f"Uploaded {len(keyframe_collection.keyframes)} keyframe images to blob storage")
+                logger.info(
+                    f"Uploaded {len(keyframe_collection.keyframes)} keyframe images to blob storage"
+                )
 
             # Create search documents for keyframes
             documents = []
             for keyframe in keyframe_collection.keyframes:
                 if not keyframe.embeddings:
-                    logger.warning(f"Keyframe {keyframe.keyframe_filename} has no embeddings, skipping")
+                    logger.warning(
+                        f"Keyframe {keyframe.keyframe_filename} has no embeddings, skipping"
+                    )
                     continue
 
                 # Generate deterministic ID
-                frame_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{video_id}_{keyframe.keyframe_filename}"))
+                frame_id = str(
+                    uuid.uuid5(uuid.NAMESPACE_DNS, f"{video_id}_{keyframe.keyframe_filename}")
+                )
 
                 doc = {
                     "id": frame_id,
@@ -154,11 +160,15 @@ class UploadOrchestrator:
                 # Upload in batches
                 batch_size = 100
                 for i in range(0, len(documents), batch_size):
-                    batch = documents[i:i + batch_size]
+                    batch = documents[i : i + batch_size]
                     await self.search_provider_keyframe.upload_documents(batch)
-                    logger.info(f"Uploaded batch {i // batch_size + 1} of {len(batch)} keyframe documents")
+                    logger.info(
+                        f"Uploaded batch {i // batch_size + 1} of {len(batch)} keyframe documents"
+                    )
 
-                logger.info(f"Successfully uploaded {len(documents)} keyframe documents to search index")
+                logger.info(
+                    f"Successfully uploaded {len(documents)} keyframe documents to search index"
+                )
 
         except Exception as e:
             logger.error(f"Failed to upload keyframes: {e}")
@@ -231,7 +241,9 @@ class UploadOrchestrator:
             # Ensure chapter index exists
             index_exists = await self.search_provider_chapter.index_exists()
             if not index_exists:
-                logger.info(f"Creating chapter index '{self.search_provider_chapter.index_name}'...")
+                logger.info(
+                    f"Creating chapter index '{self.search_provider_chapter.index_name}'..."
+                )
                 await self.search_provider_chapter.create_index()
 
             # Upload to search index
@@ -239,7 +251,9 @@ class UploadOrchestrator:
                 await self.search_provider_chapter.upload_documents(
                     documents=documents,
                 )
-                logger.info(f"Successfully uploaded {len(documents)} chapter documents to search index")
+                logger.info(
+                    f"Successfully uploaded {len(documents)} chapter documents to search index"
+                )
 
         except Exception as e:
             logger.error(f"Failed to upload chapters: {e}")
@@ -259,7 +273,9 @@ class UploadOrchestrator:
             # Read object collection metadata JSON
             media_folder = await get_media_folder()
             object_collections_dir = os.path.join(media_folder, "object_collections")
-            json_file_path = os.path.join(object_collections_dir, f"object_collection_{video_id}.json")
+            json_file_path = os.path.join(
+                object_collections_dir, f"object_collection_{video_id}.json"
+            )
 
             if not os.path.exists(json_file_path):
                 logger.warning(f"Object collection metadata JSON not found: {json_file_path}")
@@ -291,13 +307,13 @@ class UploadOrchestrator:
             # Ensure object collection index exists
             index_exists = await self.search_provider_object_collection.index_exists()
             if not index_exists:
-                logger.info(f"Creating object collection index '{self.search_provider_object_collection.index_name}'...")
+                logger.info(
+                    f"Creating object collection index '{self.search_provider_object_collection.index_name}'..."
+                )
                 await self.search_provider_object_collection.create_index()
 
             # Upload to search index
-            await self.search_provider_object_collection.upload_documents(
-                documents=[doc]
-            )
+            await self.search_provider_object_collection.upload_documents(documents=[doc])
             logger.info("Successfully uploaded object collection document to search index")
 
         except Exception as e:

@@ -74,6 +74,7 @@ class IngestionPipeline:
         self.provider = provider
         self.language = language
         self.url = url
+        self.video_id = video_id
         self.transcript_path = transcript_path
         self.frame_stacking_grid_size = frame_stacking_grid_size
         self.save_local_report = save_local_report
@@ -85,6 +86,9 @@ class IngestionPipeline:
             pipeline_config = get_default_ingestion_config()
 
             # Calculate parent video metadata
+            if not self.video_id:
+                self.video_id = await get_file_hash(self.video_path)
+
             # Use original path for duration to be safe, or provided path
             video_duration = await get_video_duration(self.video_path)
 

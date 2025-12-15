@@ -20,19 +20,13 @@ load_dotenv(find_dotenv(), override=True)
 
 class ChapterGenerator:
     def __init__(
-        self,
-        keyframe_index: str,
-        llm_provider,
-        frame_stacking_grid_size: int = 4,
-        max_concurrent_requests: int = 3
+        self, llm_provider, frame_stacking_grid_size: int = 4, max_concurrent_requests: int = 3
     ):
         self.llm_provider = llm_provider
         self.frame_stacking_grid_size = frame_stacking_grid_size
-        self.index_name = keyframe_index
         self.max_concurrent_requests = max_concurrent_requests
-      
 
-    async def _get_frames(self, transcript_seg:str, video_id: str) -> List[str]:
+    async def _get_frames(self, transcript_seg: str, video_id: str) -> List[str]:
         """
         Fetch and load video frames for a transcript segment from local JSON metadata.
 
@@ -45,7 +39,9 @@ class ChapterGenerator:
             timestamps:[start_time, end_time]
         """
         frames_metadata = []
-        match = re.search(r'(\d{2}:\d{2}:\d{2}),\d+\s*-->\s*(\d{2}:\d{2}:\d{2}),\d+', transcript_seg)
+        match = re.search(
+            r"(\d{2}:\d{2}:\d{2}),\d+\s*-->\s*(\d{2}:\d{2}:\d{2}),\d+", transcript_seg
+        )
         start_time, end_time = match.groups()
         # Convert string timestamps to time objects if needed
         if isinstance(start_time, str):
@@ -75,17 +71,19 @@ class ChapterGenerator:
         for keyframe in keyframes:
             timestamp_seconds = keyframe["timestamp_seconds"]
             if start_seconds <= timestamp_seconds <= end_seconds:
-                file_name = keyframe["keyframe_filename"].split('_')[-1].split('.')[0]
-                frames_metadata.append({
-                    'file_name': file_name,
-                    'timestamp_seconds': timestamp_seconds
-                })
+                file_name = keyframe["keyframe_filename"].split("_")[-1].split(".")[0]
+                frames_metadata.append(
+                    {"file_name": file_name, "timestamp_seconds": timestamp_seconds}
+                )
 
         # Sort frames_metadata by timestamp_seconds in ascending order
-        frames_metadata.sort(key=lambda x: x['timestamp_seconds'])
+        frames_metadata.sort(key=lambda x: x["timestamp_seconds"])
 
         # Load the keyframes from local
-        frames_file_paths = [os.path.join(keyframes_dir, f"{video_id}_{fdata['file_name']}.jpg") for fdata in frames_metadata]
+        frames_file_paths = [
+            os.path.join(keyframes_dir, f"{video_id}_{fdata['file_name']}.jpg")
+            for fdata in frames_metadata
+        ]
 
         # Load and convert to base64 directly
         base64_frames = []
@@ -94,14 +92,14 @@ class ChapterGenerator:
                 with open(fpath, "rb") as img_file:
                     base64_frames.append(base64.b64encode(img_file.read()).decode("utf-8"))
 
-        return base64_frames,frames_metadata, chapter_timestamps
-        
+        return base64_frames, frames_metadata, chapter_timestamps
+
     async def create_chapters_batch(
         self,
         chunked_segments: List,
         video_id: str,
         subject_variety: Dict[str, str],
-        categories: str = ""
+        categories: str = "",
     ) -> Tuple[List[ChapterCreationResponse], List[str], List[List[float]]]:
         """
         Create chapters from chunked transcript segments in parallel.
@@ -149,7 +147,7 @@ class ChapterGenerator:
                             transcript=seg_text,
                             video_id=video_id,
                             categories=categories,
-                            subject_variety=subject_variety
+                            subject_variety=subject_variety,
                         )
 
                         logger.info(f"Chapter {idx}: transcript segment: {seg_text}")
@@ -195,8 +193,7 @@ class ChapterGenerator:
             f"max {self.max_concurrent_requests} concurrent requests..."
         )
         tasks = [
-            create_single_chapter(idx, segment)
-            for idx, segment in enumerate(chunked_segments)
+            create_single_chapter(idx, segment) for idx, segment in enumerate(chunked_segments)
         ]
 
         # Execute all chapter creation tasks with controlled concurrency
@@ -241,8 +238,9 @@ class ChapterGenerator:
         Returns:
             Formatted string: "HH:MM:SS,mmm --> HH:MM:SS,mmm text"
         """
-        start_time = segment.start_time
-        end_time = segment.end_time
+        start_time = segment.get("start_time") if isinstance(segment, dict) else segment.start_time
+        end_time = segment.get("end_time") if isinstance(segment, dict) else segment.end_time
+        sentence = segment.get("sentence") if isinstance(segment, dict) else segment.sentence
 
         seg_text = (
             f"{int(start_time // 3600):02d}:"
@@ -252,8 +250,8 @@ class ChapterGenerator:
             f"{int(end_time // 3600):02d}:"
             f"{int((end_time % 3600) // 60):02d}:"
             f"{int(end_time % 60):02d},"
-            f"{int((end_time % 1) * 1000):03d} "
-            f"{segment.sentence}"
+            f"{int((end_time % 1) * 1000):03d}\n"
+            f"{sentence}"
         )
 
         return seg_text
@@ -300,7 +298,7 @@ class ChapterGenerator:
                 response_format=SubjectVarietyResponse,
             )
             # Get the parsed Pydantic model from the response
-            parsed_response: SubjectVarietyResponse = result['content']
+            parsed_response: SubjectVarietyResponse = result["content"]
             # Return the model as JSON string
             return parsed_response.model_dump_json()
         except Exception:
@@ -308,12 +306,11 @@ class ChapterGenerator:
                 subject="None", variety_of_subject="None"
             ).model_dump_json()
 
-
     async def _merge_and_enrich_objects(
         self,
         final_result: ChapterCreationResponse,
         batch_results: List[ChapterCreationResponse],
-        prev_merged_object_collection: ChapterCreationResponse = None
+        prev_merged_object_collection: ChapterCreationResponse = None,
     ) -> ChapterCreationResponse:
         """
         Perform a dedicated LLM call to merge and enrich object collections
@@ -328,7 +325,9 @@ class ChapterGenerator:
         Returns:
             ChapterCreationResponse with enriched and merged object_collection
         """
-        logger.info(f"Performing dedicated object collection merge and enrichment for {len(batch_results)} batches...")
+        logger.info(
+            f"Performing dedicated object collection merge and enrichment for {len(batch_results)} batches..."
+        )
 
         # Prepare all object collections from batch results
         all_objects = []
@@ -340,23 +339,29 @@ class ChapterGenerator:
 
         # If we have previous merged results, add them first
         if has_previous_context:
-            all_objects.append({
-                'batch_number': 'Previous Merged Results',
-                'objects': [obj.model_dump() for obj in prev_merged_object_collection.object_collection]
-            })
+            all_objects.append(
+                {
+                    "batch_number": "Previous Merged Results",
+                    "objects": [
+                        obj.model_dump() for obj in prev_merged_object_collection.object_collection
+                    ],
+                }
+            )
 
         # Add all batch results
         for i, batch_result in enumerate(batch_results):
             if batch_result.object_collection:
-                all_objects.append({
-                    'batch_number': i + 1,
-                    'objects': [obj.model_dump() for obj in batch_result.object_collection]
-                })
+                all_objects.append(
+                    {
+                        "batch_number": i + 1,
+                        "objects": [obj.model_dump() for obj in batch_result.object_collection],
+                    }
+                )
 
         if not all_objects:
             logger.info("No objects found in any batch, skipping merge")
             return final_result
-        
+
         # Adjust merge prompt based on whether we have previous context
         context_instruction = ""
         if has_previous_context:
@@ -400,7 +405,7 @@ class ChapterGenerator:
                 - object_collection: This is what you need to create - the exhaustive merged list of objects
 
                 CRITICAL: Only merge the object_collection. Keep other fields exactly as provided.
-                """
+                """,
             },
             {
                 "role": "user",
@@ -414,10 +419,10 @@ Context information (DO NOT MODIFY THESE - just use them for the response):
 - text_from_scene: {final_result.text_from_scene}
 
 Please create a single, exhaustive, merged object_collection that includes ALL objects with detailed attributes.
-Return a complete ChapterCreationResponse with the merged object_collection and the exact same values for other fields."""
-            }
+Return a complete ChapterCreationResponse with the merged object_collection and the exact same values for other fields.""",
+            },
         ]
-        
+
         try:
             merge_response = await self.llm_provider.chat_completion(
                 messages=merge_prompt,
@@ -425,18 +430,22 @@ Return a complete ChapterCreationResponse with the merged object_collection and 
                 response_format=ChapterCreationResponse,
             )
 
-            merged_result: ChapterCreationResponse = merge_response['content']
+            merged_result: ChapterCreationResponse = merge_response["content"]
 
             # Create a new ChapterCreationResponse with merged object_collection
             result_with_merged_objects = ChapterCreationResponse(
                 detailed_summary=final_result.detailed_summary,
                 action_taken=final_result.action_taken,
                 text_from_scene=final_result.text_from_scene,
-                object_collection=merged_result.object_collection if merged_result.object_collection else []
+                object_collection=(
+                    merged_result.object_collection if merged_result.object_collection else []
+                ),
             )
 
             if result_with_merged_objects.object_collection:
-                logger.info(f"Object merge complete: {len(result_with_merged_objects.object_collection)} objects in merged collection")
+                logger.info(
+                    f"Object merge complete: {len(result_with_merged_objects.object_collection)} objects in merged collection"
+                )
             else:
                 logger.warning("Object merge returned empty collection")
 
@@ -446,12 +455,11 @@ Return a complete ChapterCreationResponse with the merged object_collection and 
             logger.error(f"Error during object merge: {e}. Returning result without merge")
             return final_result
 
-
     async def _merge_objects_in_batches(
         self,
         final_result: ChapterCreationResponse,
         batch_results: List[ChapterCreationResponse],
-        batch_size: int = 3
+        batch_size: int = 3,
     ) -> ChapterCreationResponse:
         """
         Merge objects in batches of specified size, passing the result of the previous batch
@@ -472,28 +480,29 @@ Return a complete ChapterCreationResponse with the merged object_collection and 
             if batch_results:
                 final_result.object_collection = batch_results[0].object_collection
             return final_result
-        
+
         # Split batch_results into groups of batch_size
         result_batches = [
-            batch_results[i:i + batch_size]
-            for i in range(0, len(batch_results), batch_size)
+            batch_results[i : i + batch_size] for i in range(0, len(batch_results), batch_size)
         ]
-        
-        logger.info(f"Processing {len(batch_results)} results in {len(result_batches)} merge batches")
-        
+
+        logger.info(
+            f"Processing {len(batch_results)} results in {len(result_batches)} merge batches"
+        )
+
         # Track the accumulated merged result
         accumulated_merged_result = None
-        
+
         # Process each batch
         for batch_idx, current_batch in enumerate(result_batches):
-            logger.info(f"Processing merge batch {batch_idx + 1}/{len(result_batches)} with {len(current_batch)} results")
+            logger.info(
+                f"Processing merge batch {batch_idx + 1}/{len(result_batches)} with {len(current_batch)} results"
+            )
 
             # For the first batch, merge without prior context
             if accumulated_merged_result is None:
                 accumulated_merged_result = await self._merge_and_enrich_objects(
-                    final_result,
-                    current_batch,
-                    prev_merged_object_collection=None
+                    final_result, current_batch, prev_merged_object_collection=None
                 )
             else:
                 # For subsequent batches, pass the accumulated result as previous context
@@ -501,18 +510,19 @@ Return a complete ChapterCreationResponse with the merged object_collection and 
                 accumulated_merged_result = await self._merge_and_enrich_objects(
                     final_result,
                     current_batch,
-                    prev_merged_object_collection=accumulated_merged_result
+                    prev_merged_object_collection=accumulated_merged_result,
                 )
 
         # Update final_result with the fully merged object collection
         if accumulated_merged_result and accumulated_merged_result.object_collection:
-            logger.info(f"Final merged object collection contains {len(accumulated_merged_result.object_collection)} objects")
+            logger.info(
+                f"Final merged object collection contains {len(accumulated_merged_result.object_collection)} objects"
+            )
             final_result.object_collection = accumulated_merged_result.object_collection
         else:
             logger.warning("No objects found after batch merging")
 
         return final_result
-
 
     async def create_chapter(
         self,
@@ -535,15 +545,19 @@ Return a complete ChapterCreationResponse with the merged object_collection and 
         """
         try:
 
-            frames, frame_metadata, chapter_timestamps = await self._get_frames(transcript, video_id)
+            frames, frame_metadata, chapter_timestamps = await self._get_frames(
+                transcript, video_id
+            )
             # Apply frame stacking if enabled (grid_size > 1)
             if self.frame_stacking_grid_size > 1 and len(frames) > self.frame_stacking_grid_size:
-                logger.info(f"Applying frame stacking with grid_size={self.frame_stacking_grid_size}")
+                logger.info(
+                    f"Applying frame stacking with grid_size={self.frame_stacking_grid_size}"
+                )
                 processed_frames, processed_metadata = await create_stacked_frames_base64(
                     frames,
                     grid_size=self.frame_stacking_grid_size,
                     enable_stacking=True,
-                    frame_metadata=frame_metadata
+                    frame_metadata=frame_metadata,
                 )
             else:
                 processed_frames = frames
@@ -556,7 +570,7 @@ Return a complete ChapterCreationResponse with the merged object_collection and 
                 frame_stacking_info = f"""
                 NOTE: The video frames have been stacked horizontally with {self.frame_stacking_grid_size} frames per image to optimize processing. Each image shows {self.frame_stacking_grid_size} sequential frames arranged from left to right. Analyze all frames within each stacked image to understand the temporal progression of the video content.
                 """
-            
+
             system_prompt = f"""
             You are a VideoAnalyzerGPT. Your task is to analyze video content by examining keyframes and audio transcripts to extract comprehensive information about what is shown and discussed.{frame_stacking_info}
 
@@ -609,15 +623,17 @@ Return a complete ChapterCreationResponse with the merged object_collection and 
                         frame_timing_parts = []
                         for idx in range(len(batch)):
                             meta = processed_metadata[idx]
-                            if 'frames' in meta and isinstance(meta.get('frames'), list):
+                            if "frames" in meta and isinstance(meta.get("frames"), list):
                                 # Stacked frame with horizontal layout
-                                stack_info = f"Stacked Image {idx} ({meta['stacked_count']} frames, left to right):\n" # Stacking info
-                                for frame_info in meta['frames']:
-                                    stack_info += f"  Frame {frame_info['position']}: {frame_info['timestamp_seconds']}s\n" #adding the timestamp of each frame in the stack
+                                stack_info = f"Stacked Image {idx} ({meta['stacked_count']} frames, left to right):\n"  # Stacking info
+                                for frame_info in meta["frames"]:
+                                    stack_info += f"  Frame {frame_info['position']}: {frame_info['timestamp_seconds']}s\n"  # adding the timestamp of each frame in the stack
                                 frame_timing_parts.append(stack_info.strip())
                             else:
                                 # Single frame
-                                frame_timing_parts.append(f"Frame {idx}: {meta['timestamp_seconds']}s")
+                                frame_timing_parts.append(
+                                    f"Frame {idx}: {meta['timestamp_seconds']}s"
+                                )
                         frame_timing_text = "\n".join(frame_timing_parts)
 
                         batch_prompt = [
@@ -650,15 +666,17 @@ Return a complete ChapterCreationResponse with the merged object_collection and 
                         for local_idx in range(len(batch)):
                             global_idx = batch_start_idx + local_idx
                             meta = processed_metadata[global_idx]
-                            if 'frames' in meta and isinstance(meta.get('frames'), list):
+                            if "frames" in meta and isinstance(meta.get("frames"), list):
                                 # Stacked frame with horizontal layout
                                 stack_info = f"Stacked Image {global_idx} ({meta['stacked_count']} frames, left to right):\n"
-                                for frame_info in meta['frames']:
+                                for frame_info in meta["frames"]:
                                     stack_info += f"  Frame {frame_info['position']}: {frame_info['timestamp_seconds']}s\n"
                                 frame_timing_parts.append(stack_info.strip())
                             else:
                                 # Single frame
-                                frame_timing_parts.append(f"Frame {global_idx}: {meta['timestamp_seconds']}s")
+                                frame_timing_parts.append(
+                                    f"Frame {global_idx}: {meta['timestamp_seconds']}s"
+                                )
                         frame_timing_text = "\n".join(frame_timing_parts)
 
                         context = f"""You've already analyzed the first {i * MAX_FRAMES_PER_BATCH} frames of this video.
@@ -706,7 +724,7 @@ Return a complete ChapterCreationResponse with the merged object_collection and 
                             response_format=ChapterCreationResponse,
                         )
 
-                        batch_result: ChapterCreationResponse = batch_response['content']
+                        batch_result: ChapterCreationResponse = batch_response["content"]
                         results.append(batch_result)
                         logger.info(f"single batch result:{batch_result}")
                         # Update previous analyses for next batch
@@ -751,11 +769,13 @@ Return a complete ChapterCreationResponse with the merged object_collection and 
                     )
 
                     logger.info(f"combined batch response (without objects):{combined_response}")
-                    final_result: ChapterCreationResponse = combined_response['content']
+                    final_result: ChapterCreationResponse = combined_response["content"]
 
                     # Now perform object collection merge in batches of 3
                     logger.info("Performing object collection merge in batches of 3...")
-                    final_result = await self._merge_objects_in_batches(final_result, results, batch_size=3)
+                    final_result = await self._merge_objects_in_batches(
+                        final_result, results, batch_size=3
+                    )
 
                 else:
                     final_result: ChapterCreationResponse = results[0]
@@ -767,10 +787,12 @@ Return a complete ChapterCreationResponse with the merged object_collection and 
             frame_timing_parts = []
             for idx in range(len(processed_frames)):
                 meta = processed_metadata[idx]
-                if 'frames' in meta and isinstance(meta.get('frames'), list):
+                if "frames" in meta and isinstance(meta.get("frames"), list):
                     # Stacked frame with horizontal layout
-                    stack_info = f"Stacked Image {idx} ({meta['stacked_count']} frames, left to right):\n"
-                    for frame_info in meta['frames']:
+                    stack_info = (
+                        f"Stacked Image {idx} ({meta['stacked_count']} frames, left to right):\n"
+                    )
+                    for frame_info in meta["frames"]:
                         stack_info += f"  Frame {frame_info['position']}: {frame_info['timestamp_seconds']}s\n"
                     frame_timing_parts.append(stack_info.strip())
                 else:
@@ -793,7 +815,10 @@ Return a complete ChapterCreationResponse with the merged object_collection and 
                             },
                             processed_frames,
                         ),
-                        {"type": "text", "text": f"{frame_timing_text}\n\nThe audio transcription is: {transcript}"},
+                        {
+                            "type": "text",
+                            "text": f"{frame_timing_text}\n\nThe audio transcription is: {transcript}",
+                        },
                     ],
                 },
             ]
@@ -804,7 +829,7 @@ Return a complete ChapterCreationResponse with the merged object_collection and 
                 response_format=ChapterCreationResponse,
             )
 
-            response_object: ChapterCreationResponse = response['content']
+            response_object: ChapterCreationResponse = response["content"]
 
             # Return ChapterCreationResponse instance directly
             return response_object, chapter_timestamps

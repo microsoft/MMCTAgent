@@ -7,9 +7,8 @@ It coordinates semantic chunking, chapter generation, and saving to JSON files.
 
 import os
 import json
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Any
 from loguru import logger
-from .semantic_chunking.semantic_chunker import SemanticChunker
 from .chapter_generator import ChapterGenerator
 from .object_collection_processor import ObjectCollectionProcessor
 from mmct.video_pipeline.core.ingestion.models import ChapterMetadata, ChapterMetadataCollection
@@ -24,20 +23,14 @@ load_dotenv(find_dotenv(), override=True)
 
 class ChapterIngestionPipeline:
     """
-    Orchestrates the complete workflow of:
-    1. Semantic chunking of transcripts
-    2. Chapter generation from chunks
-    3. Document creation and ingestion to search index
-
+    Chapter generation from chunks
     """
 
     def __init__(
         self,
         hash_id: str,
-        transcript: str,
         keyframe_blob_url: str,
         llm_provider: BaseLLMProvider,
-        keyframe_index_name: str,
         embedding_provider: BaseEmbeddingProvider,
         frame_stacking_grid_size: int = 4,
         video_duration: Optional[float] = None,
@@ -49,8 +42,6 @@ class ChapterIngestionPipeline:
 
         Args:
             hash_id: Unique identifier for the video
-            index_name: Azure AI Search index name
-            transcript: Raw SRT transcript text
             keyframe_blob_url: URL to keyframe blob storage folder
             llm_provider: LLM provider instance (handles both text and vision tasks)
             embedding_provider: Embedding provider instance (required)
@@ -60,26 +51,19 @@ class ChapterIngestionPipeline:
             max_chapter_duration: Maximum duration (in seconds) of each chapter
         """
         # Core attributes
-        self.transcript = transcript
         self.hash_id = hash_id
         self.frame_stacking_grid_size = frame_stacking_grid_size
         self.video_duration = video_duration
         self.keyframe_blob_url = keyframe_blob_url
-        self.keyframe_index_name = keyframe_index_name
 
         # Store providers
         self.llm_provider = llm_provider
         self.embedding_provider = embedding_provider
 
         # Initialize components with providers
-        self.semantic_chunker = SemanticChunker(
-            transcript=transcript,
-            embedding_provider=self.embedding_provider,
-            max_chunk_duration=max_chapter_duration,
-        )
+
         self.chapter_generator = ChapterGenerator(
             frame_stacking_grid_size=frame_stacking_grid_size,
-            keyframe_index=self.keyframe_index_name,
             llm_provider=self.llm_provider,
             max_concurrent_requests=max_concurrent_requests,
         )
@@ -90,10 +74,58 @@ class ChapterIngestionPipeline:
         )
 
         # Pipeline state
-        self.chunked_segments = []
+        self.chunked_segments = []  # Store passed chunks
         self.chapter_responses = []
         self.chapter_transcripts = []
         self.chapter_timestamps = []
+
+    async def run(
+        self, url: Optional[str] = None, chunks: Optional[List[Any]] = None
+    ) -> Tuple[Optional[List], Optional[List], str]:
+        """
+        Execute the complete chapter generation and local storage pipeline.
+
+        Args:
+            url: Optional YouTube URL for the video
+            chunks: Pre-computed semantic chunks (optional if passed in init)
+
+        Returns:
+            Tuple of (chapter_responses, chapter_transcripts, chapters_json_path)
+        """
+        # Update chunks if passed in run
+        if chunks:
+            self.chunked_segments = chunks
+
+        if not self.chunked_segments:
+            logger.error("No semantic chunks provided to ChapterIngestionPipeline")
+            return None, None, ""
+        # Step 1: Generate chapters
+        logger.info("Step 1: Generating chapters from semantic chunks...")
+        await self._create_chapters()
+
+        # Step 2: Process object collection (save to JSON)
+        logger.info("Step 2: Processing object collection...")
+        merged_registry, object_json_path = await self.object_collection_processor.run(
+            chapter_responses=self.chapter_responses,
+            video_id=self.hash_id,
+            url=url,
+            video_duration=self.video_duration,
+        )
+        if merged_registry:
+            logger.info(
+                f"Object collection processed: {len(merged_registry)} unique objects, saved to {object_json_path}"
+            )
+        else:
+            logger.info(
+                f"No objects found in chapters, saved empty collection to {object_json_path}"
+            )
+
+        # Step 3: Save chapters to JSON (without embeddings)
+        logger.info("Step 3: Saving chapters to JSON...")
+        chapters_json_path = await self._save_chapters_to_json(url=url)
+
+        logger.info("Chapter pipeline completed successfully!")
+        return self.chapter_responses, self.chapter_transcripts, chapters_json_path
 
     async def _create_chapters(self):
         """Create chapters using ChapterGenerator class."""
@@ -185,49 +217,3 @@ class ChapterIngestionPipeline:
 
         logger.info(f"Saved {len(chapter_metadata_list)} chapters to {json_file_path}")
         return json_file_path
-
-    async def run(self, url: Optional[str] = None) -> Tuple[Optional[List], Optional[List], str]:
-        """
-        Execute the complete chapter generation and local storage pipeline.
-
-        Args:
-            url: Optional YouTube URL for the video
-
-        Returns:
-            Tuple of (chapter_responses, chapter_transcripts, chapters_json_path)
-        """
-        # Step 1: Semantic Chunking
-        logger.info("Step 1: Performing semantic chunking...")
-        self.chunked_segments = await self.semantic_chunker.run()
-
-        if not self.chunked_segments:
-            logger.error("Semantic chunking failed - no segments created")
-            return None, None, ""
-
-        # Step 2: Generate chapters
-        logger.info("Step 2: Generating chapters from semantic chunks...")
-        await self._create_chapters()
-
-        # Step 3: Process object collection (save to JSON)
-        logger.info("Step 3: Processing object collection...")
-        merged_registry, object_json_path = await self.object_collection_processor.run(
-            chapter_responses=self.chapter_responses,
-            video_id=self.hash_id,
-            url=url,
-            video_duration=self.video_duration,
-        )
-        if merged_registry:
-            logger.info(
-                f"Object collection processed: {len(merged_registry)} unique objects, saved to {object_json_path}"
-            )
-        else:
-            logger.info(
-                f"No objects found in chapters, saved empty collection to {object_json_path}"
-            )
-
-        # Step 4: Save chapters to JSON (without embeddings)
-        logger.info("Step 4: Saving chapters to JSON...")
-        chapters_json_path = await self._save_chapters_to_json(url=url)
-
-        logger.info("Chapter pipeline completed successfully!")
-        return self.chapter_responses, self.chapter_transcripts, chapters_json_path

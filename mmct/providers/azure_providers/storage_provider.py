@@ -37,7 +37,7 @@ class AzureStorageProvider(BaseStorageProvider):
         """
         if not storage_account_name:
             raise ConfigurationException("Storage account name is required!")
-        
+
         if not keyframe_container_name:
             raise ConfigurationException("Keyframe container name is required!")
 
@@ -74,7 +74,9 @@ class AzureStorageProvider(BaseStorageProvider):
                 self.service_client = BlobServiceClient.from_connection_string(
                     conn_str=self.blob_connection_string
                 )
-                logger.info("Successfully initialized Azure Blob Storage client with connection string")
+                logger.info(
+                    "Successfully initialized Azure Blob Storage client with connection string"
+                )
 
             return self.service_client
         except Exception as e:
