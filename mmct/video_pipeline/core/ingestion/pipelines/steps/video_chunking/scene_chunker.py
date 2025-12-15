@@ -188,22 +188,16 @@ def _align_to_transcript(scenes: List[SceneChunk], transcript: str) -> List[Scen
     if not segments:
         return scenes
 
-    aligned_scenes: List[SceneChunk] = []
+    allowed_scenes: List[SceneChunk] = []
 
     tolerance = 1e-3
-
-    # We treat 'scenes' as the base chunks to align
     segment_idx = 0
     last_end = 0.0
-
-    # For alignment, usually we need a final duration or fallback.
-    # Since we are iterating chunks, the 'end' of the last chunk might be the video end.
 
     for i, scene in enumerate(scenes):
         chunk_start = max(scene.start, last_end)
         chunk_end = max(scene.end, chunk_start)
 
-        # Advance index
         segment_idx = _advance_past_prior_segments(segments, segment_idx, chunk_start, tolerance)
 
         chunk_segments: List[TranscriptSegment] = []
@@ -237,19 +231,15 @@ def _align_to_transcript(scenes: List[SceneChunk], transcript: str) -> List[Scen
                 if segment.end >= chunk_end - tolerance:
                     break
 
-        # Calculate new boundaries
         if chunk_segments:
             first_seg = chunk_segments[0]
             last_seg = chunk_segments[-1]
 
-            # Snap start to segment start if it's earlier than chunk start?
-            # Snippet: min(chunk_start, first_seg.start) if first <= chunk
             candidate_start = (
                 min(chunk_start, first_seg.start) if first_seg.start <= chunk_start else chunk_start
             )
             adjusted_start = max(last_end, candidate_start)
 
-            # Snap end
             adjusted_end = chunk_end
             if adjusted_end < last_seg.end - tolerance:
                 adjusted_end = last_seg.end
@@ -261,7 +251,6 @@ def _align_to_transcript(scenes: List[SceneChunk], transcript: str) -> List[Scen
             adjusted_end = chunk_end
             segment_idx = scan_idx
 
-        # Combine text
         text_blob = " ".join(seg.text.strip() for seg in chunk_segments).strip()
 
         aligned_scenes.append(
@@ -335,10 +324,6 @@ class SceneChunker:
         # Serialize for output
         chunks_metadata = []
         for chunk in chunks:
-            print(
-                f"[video.chunk.scene] Chunk {chunk.index:04d}: "
-                f"{chunk.start:.2f}s -> {chunk.end:.2f}s (duration {chunk.duration:.2f}s)"
-            )
             chunks_metadata.append(
                 {
                     "chunk_id": chunk.index,
