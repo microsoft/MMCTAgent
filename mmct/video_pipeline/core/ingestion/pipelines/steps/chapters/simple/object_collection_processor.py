@@ -7,22 +7,10 @@ from mmct.video_pipeline.core.ingestion.models import (
     ChapterCreationResponse,
     ObjectResponse,
     ObjectCollectionMetadata,
+    MergedObjectCollectionResponse,
 )
 from .video_summary import VideoSummary
 from mmct.video_pipeline.utils.helper import get_media_folder
-
-
-class MergedObjectCollectionResponse(BaseModel):
-    """
-    Response model for merged object collection.
-    """
-
-    model_config = {"extra": "forbid"}
-
-    merged_objects: Optional[List[ObjectResponse]] = Field(
-        default_factory=list,
-        description="List of ObjectResponse objects containing name, appearance, identity, first_seen timestamp, and additional_details",
-    )
 
 
 class ObjectCollectionProcessor:

@@ -53,8 +53,11 @@ def _detect_scenes(video_path: Path, params: Dict[str, Any]) -> List[SceneChunk]
     if downscale > 1:
         video_manager.set_downscale_factor(downscale)
 
+    framerate = video_manager.get_base_timecode().framerate
+
+    detector = _build_detector(params, framerate)
+
     scene_manager = SceneManager()
-    detector = _build_detector(params, video_manager.get_base_timecode().framerate)
     scene_manager.add_detector(detector)
 
     try:
@@ -62,6 +65,7 @@ def _detect_scenes(video_path: Path, params: Dict[str, Any]) -> List[SceneChunk]
         scene_manager.detect_scenes(frame_source=video_manager)
         base_timecode = video_manager.get_base_timecode()
         detected = scene_manager.get_scene_list(base_timecode)
+
     finally:
         video_manager.release()
 
@@ -188,7 +192,7 @@ def _align_to_transcript(scenes: List[SceneChunk], transcript: str) -> List[Scen
     if not segments:
         return scenes
 
-    allowed_scenes: List[SceneChunk] = []
+    aligned_scenes: List[SceneChunk] = []
 
     tolerance = 1e-3
     segment_idx = 0
@@ -278,8 +282,10 @@ class SceneChunker:
         # 1. Detect Scenes
         try:
             loop = asyncio.get_running_loop()
+            scene_settings = self.params.get("scene_settings", self.params)
+
             chunks: List[SceneChunk] = await loop.run_in_executor(
-                None, _detect_scenes, self.video_path, self.params
+                None, _detect_scenes, self.video_path, scene_settings
             )
         except Exception as e:
             logger.error(f"Scene detection failed: {e}")
@@ -291,10 +297,14 @@ class SceneChunker:
             chunks = [SceneChunk(index=0, start=0.0, end=duration)]
 
         # 2. Enforce Max Length
-        max_scenes = int(self.params.get("max_scenes", 1000))
-        min_scene_len_seconds = float(self.params.get("min_scene_length", 2.0))
-        max_scene_length = float(self.params.get("max_scene_length", min_scene_len_seconds + 5.0))
-        overlap_seconds = float(self.params.get("overlap_seconds", 0.0))
+
+        scene_settings = self.params.get("scene_settings", self.params)
+
+        min_scene_len_seconds = float(scene_settings.get("min_scene_length", 2.0))
+        max_scene_length = float(
+            scene_settings.get("max_scene_length", min_scene_len_seconds + 5.0)
+        )
+        overlap_seconds = float(scene_settings.get("overlap_seconds", 0.0))
 
         if max_scene_length > 0.0:
             chunks = _enforce_max_scene_length(
@@ -313,13 +323,12 @@ class SceneChunker:
         # 4. Align with Transcript (Critical for Step.py)
         if self.transcript:
             chunks = _align_to_transcript(chunks, self.transcript)
+
             logger.info("Aligned scenes with transcript - boundaries extended.")
 
         # Re-index
         for idx, chunk in enumerate(chunks):
             chunk.index = idx
-
-        chunks = chunks[:max_scenes]
 
         # Serialize for output
         chunks_metadata = []

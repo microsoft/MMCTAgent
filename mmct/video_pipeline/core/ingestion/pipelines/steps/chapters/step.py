@@ -70,7 +70,7 @@ class ChapterGenerationStep(PipelineStep):
 
         max_concurrent_requests = self.get_param("max_concurrent_requests", context, default=3)
         frame_stacking_grid_size = context.user_params.get("frame_stacking_grid_size", 4)
-        chapter_gen_technique = self.get_param("chapter_gen_technique", context, default="scene")
+        chapter_gen_strategy = self.get_param("chapter_gen_strategy", context, default="scene")
 
         keyframe_blob_url = await context.provider.storage_provider.get_file_url(
             file_name=f"{context.video_id}"
@@ -83,130 +83,66 @@ class ChapterGenerationStep(PipelineStep):
         try:
             # With unified keyframes, we only need video_chunks to exist
             # Keyframes are extracted from full video and filtered by timestamp in ChapterGenerator
-            if video_chunks:
-                context.logger.info(
-                    f"Generating chapters for {len(video_chunks)} chunks using '{chapter_gen_technique}' technique."
+            context.logger.info(
+                f"Generating chapters for {len(video_chunks)} chunks using '{chapter_gen_strategy}' technique."
+            )
+
+            all_chunk_segments = []
+            for chunk_data in video_chunks:
+                chunk_transcript = chunk_data.get("transcript") or chunk_data.get("sentence") or ""
+
+                chunk_segment = {
+                    "start_time": chunk_data["start_time"],
+                    "end_time": chunk_data["end_time"],
+                    "sentence": chunk_transcript,
+                }
+                all_chunk_segments.append(chunk_segment)
+
+            context.logger.info(
+                f"Prepared {len(all_chunk_segments)} segments for batch processing."
+            )
+
+            if chapter_gen_strategy == "scene":
+                pipeline = ChapterSceneIngestionPipeline(
+                    hash_id=context.video_id,
+                    keyframe_blob_url=keyframe_blob_url,
+                    llm_provider=context.provider.llm_provider,
+                    embedding_provider=context.provider.embedding_provider,
+                    frame_stacking_grid_size=frame_stacking_grid_size,
+                    step_params=self.params,
+                    video_duration=context.video_duration,  # Global duration
+                    max_concurrent_requests=max_concurrent_requests,
                 )
 
-                all_chunk_segments = []
-                for chunk_data in video_chunks:
-                    chunk_transcript = (
-                        chunk_data.get("transcript") or chunk_data.get("sentence") or ""
-                    )
-
-                    chunk_segment = {
-                        "start_time": chunk_data["start_time"],
-                        "end_time": chunk_data["end_time"],
-                        "sentence": chunk_transcript,
-                    }
-                    all_chunk_segments.append(chunk_segment)
-
-                context.logger.info(
-                    f"Prepared {len(all_chunk_segments)} segments for batch processing."
+                all_chapter_responses, all_chapter_transcripts, merged_chapters_path = (
+                    await pipeline.run(url=context.url, chunks=all_chunk_segments)
                 )
 
-                if chapter_gen_technique == "scene":
-                    pipeline = ChapterSceneIngestionPipeline(
-                        hash_id=context.video_id,
-                        transcript="",  # Global transcript not used/needed if chunks provide their own text
-                        keyframe_blob_url=keyframe_blob_url,
-                        llm_provider=context.provider.llm_provider,
-                        embedding_provider=context.provider.embedding_provider,
-                        keyframe_index_name=context.provider.vectordb_keyframes.index_name,
-                        step_params={
-                            **context.user_params,
-                            **self.params,
-                        },
-                        video_duration=context.video_duration,  # Global duration
-                        max_concurrent_requests=max_concurrent_requests,
-                    )
+            elif chapter_gen_strategy == "simple":
+                pipeline = ChapterIngestionPipeline(
+                    hash_id=context.video_id,
+                    keyframe_blob_url=keyframe_blob_url,
+                    llm_provider=context.provider.llm_provider,
+                    embedding_provider=context.provider.embedding_provider,
+                    frame_stacking_grid_size=frame_stacking_grid_size,
+                    video_duration=context.video_duration,  # Global duration
+                    max_concurrent_requests=max_concurrent_requests,
+                )
 
-                    all_chapter_responses, all_chapter_transcripts, merged_chapters_path = (
-                        await pipeline.run(url=context.url, chunks=all_chunk_segments)
-                    )
-
-                elif chapter_gen_technique == "simple":
-                    pipeline = ChapterIngestionPipeline(
-                        hash_id=context.video_id,
-                        keyframe_blob_url=keyframe_blob_url,
-                        llm_provider=context.provider.llm_provider,
-                        embedding_provider=context.provider.embedding_provider,
-                        frame_stacking_grid_size=frame_stacking_grid_size,
-                        video_duration=context.video_duration,  # Global duration
-                        max_concurrent_requests=max_concurrent_requests,
-                    )
-
-                    all_chapter_responses, all_chapter_transcripts, merged_chapters_path = (
-                        await pipeline.run(url=context.url, chunks=all_chunk_segments)
-                    )
-
-                else:
-                    raise NotImplementedError(
-                        "Only 'scene' and 'simple' techniques supported for chunked processing."
-                    )
-                if not all_chapter_responses:
-                    all_chapter_responses = []
-                if not all_chapter_transcripts:
-                    all_chapter_transcripts = []
-
-                context.logger.info(f"Generated {len(all_chapter_responses)} chapters in batch.")
+                all_chapter_responses, all_chapter_transcripts, merged_chapters_path = (
+                    await pipeline.run(url=context.url, chunks=all_chunk_segments)
+                )
 
             else:
-                # Fallback to Original Logic (Single Video)
-                context.logger.info("Running single-video chapter generation.")
-                max_chapter_duration = self.get_param("max_chapter_duration", context, default=None)
+                raise NotImplementedError(
+                    "Only 'scene' and 'simple' techniques supported for chunked processing."
+                )
+            if not all_chapter_responses:
+                all_chapter_responses = []
+            if not all_chapter_transcripts:
+                all_chapter_transcripts = []
 
-                # ... [Copy of existing logic for single video retrieval] ...
-                transcript = context.data_store.get(transcript_step, "transcript")
-                clusters_data = context.data_store.get("semantic_clustering", "clusters")  # default
-                if isinstance(clusters_data, dict):
-                    chunks = clusters_data.get("clusters")
-                else:
-                    chunks = clusters_data
-
-                # Load frames logic (copied from original)
-                keyframes_data = context.data_store.get_all(keyframes_step)
-                frames = keyframes_data.get("frames", [])
-                if not frames:
-                    kjp = keyframes_data.get("keyframe_json_path")
-                    if kjp and Path(kjp).exists():
-                        with open(kjp) as f:
-                            frames = json.load(f).get("keyframes", [])
-
-                if chapter_gen_technique == "scene":
-                    pipeline = ChapterSceneIngestionPipeline(
-                        hash_id=context.video_id,
-                        transcript=transcript,
-                        keyframe_blob_url=keyframe_blob_url,
-                        llm_provider=context.provider.llm_provider,
-                        embedding_provider=context.provider.embedding_provider,
-                        keyframe_index_name=context.provider.vectordb_keyframes.index_name,
-                        step_params={**context.user_params, **self.params, "frames_list": frames},
-                        video_duration=context.video_duration,
-                        max_concurrent_requests=max_concurrent_requests,
-                        max_chapter_duration=max_chapter_duration,
-                    )
-                    responses, transcripts, json_path = await pipeline.run(
-                        url=context.url, chunks=chunks
-                    )
-                    all_chapter_responses = responses
-                    all_chapter_transcripts = transcripts
-                    merged_chapters_path = json_path
-                else:
-                    # Simple fallback
-                    chapter_pipeline = ChapterIngestionPipeline(
-                        hash_id=context.video_id,
-                        keyframe_blob_url=keyframe_blob_url,
-                        frame_stacking_grid_size=frame_stacking_grid_size,
-                        video_duration=context.video_duration,
-                        llm_provider=context.provider.llm_provider,
-                        embedding_provider=context.provider.embedding_provider,
-                        max_concurrent_requests=max_concurrent_requests,
-                        max_chapter_duration=max_chapter_duration,
-                    )
-                    all_chapter_responses, all_chapter_transcripts, _ = await chapter_pipeline.run(
-                        url=context.url, chunks=chunks
-                    )
+            context.logger.info(f"Generated {len(all_chapter_responses)} chapters in batch.")
 
             return StepResult(
                 step_id=self.step_id,
