@@ -4,10 +4,12 @@ Chapter Generator Module
 This module provides chapter generation and ingestion functionality.
 """
 
-from .simple.chapter_generator import ChapterGenerator
-from .simple.chapter_ingestion_pipeline import ChapterIngestionPipeline
+from .steps import ChapterGenerationStep
+from .llm_scene import SceneLLMChapterGenerationStep
+from .timeline_summary import ChapterTimelineSummaryStep
 
 __all__ = [
-    "ChapterGenerator",
-    "ChapterIngestionPipeline",
+    "ChapterGenerationStep",
+    "SceneLLMChapterGenerationStep",
+    "ChapterTimelineSummaryStep",
 ]

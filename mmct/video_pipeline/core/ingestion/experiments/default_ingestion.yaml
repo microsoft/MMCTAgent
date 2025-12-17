@@ -57,27 +57,36 @@ pipeline:
         transcript_step: "transcribe" # Global transcript available, but step uses chunk transcripts
         keyframes_step: "keyframes"
         video_chunking_step: "video_chunking"
-        chapter_gen_strategy: "simple"
-        max_chapter_duration: 300 
         max_concurrent_requests: 3
-        object_enrichment:
+        collect_object_collection: true
+
+    # Step 8: Enrich chapters and generate summaries
+    - id: "chapter_enrichment"
+      type: "ingestion.chapter_enrichment"
+      params:
+        chapters_step: "chapters"
+        collect_object_collection:
           enabled: true
           min_screen_time_seconds: 5.0
           max_active_context: 20
           min_chunk_occurrences: 1
+        segmented_enrichment: #Enable for long videos
+          enabled: true
+          segment_count: 5
+          boundary_window: 2
 
-    # Step 8: Generate embeddings (Should be able to handle list of chapters)
+    # Step 9: Generate embeddings (Should be able to handle list of chapters)
     - id: "embeddings"
       type: "ingestion.embeddings"
       params:
-        chapters_step: "chapters"
+        chapters_step: "chapter_enrichment"
         keyframes_step: "keyframes"
 
-    # Step 9: Upload files and index data
+    # Step 10: Upload files and index data
     - id: "upload"
       type: "ingestion.upload"
       params:
-        chapters_step: "chapters"
+        chapters_step: "chapter_enrichment"
         keyframes_step: "keyframes"
         embeddings_step: "embeddings"
 

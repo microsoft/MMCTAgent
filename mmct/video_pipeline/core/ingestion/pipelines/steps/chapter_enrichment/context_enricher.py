@@ -132,11 +132,29 @@ class ChapterContextEnrichmentStep:  # Removed PipelineStep inheritance
         return produced_chapters, object_payload
 
     def _build_object_config(self, params: Dict[str, Any]) -> Optional[ObjectEnrichmentConfig]:
-        obj_params = params.get("object_enrichment")
-        if not obj_params:
+        # Check for new key first
+        obj_params = params.get("collect_object_collection")
+
+        # Fallback to old key if new key not present or (less likely) is None
+        if obj_params is None:
+            obj_params = params.get("object_enrichment")
+
+        if obj_params is None:
             return None
-        if not bool(obj_params.get("enabled", True)):
-            return None
+
+        # Handle boolean shortcut (collect_object_collection: true/false)
+        if isinstance(obj_params, bool):
+            if not obj_params:
+                return None
+            # If True, use defaults
+            obj_params = {}
+
+        # If it's a dict, check enabled flag
+        if isinstance(obj_params, dict):
+            if not str(obj_params.get("enabled", "true")).lower() == "true":
+                return None
+
+
         return ObjectEnrichmentConfig(
             llm_request_options=dict(obj_params.get("llm_request_options", {}) or {}),
             max_active_context=int(obj_params.get("max_active_context", 12)),

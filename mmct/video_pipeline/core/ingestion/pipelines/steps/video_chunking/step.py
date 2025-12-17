@@ -59,19 +59,6 @@ class VideoChunkingStep(PipelineStep):
             )
             clusters = await clusterer.run()
 
-            if clusters:
-                try:
-                    debug_path = (
-                        Path(context.output_dir) / f"semantic_clusters_{context.video_id}.json"
-                    )
-                    with open(debug_path, "w", encoding="utf-8") as f:
-                        # Convert Pydantic models to dicts
-                        clusters_data = [c.model_dump() for c in clusters]
-                        json.dump(clusters_data, f, indent=2, ensure_ascii=False)
-                    context.logger.info(f"Saved semantic clusters for debugging to {debug_path}")
-                except Exception as e:
-                    context.logger.warning(f"Failed to save debug clusters: {e}")
-
             if not clusters:
                 context.logger.warning(
                     "No clusters generated. Proceeding with empty clusters list."

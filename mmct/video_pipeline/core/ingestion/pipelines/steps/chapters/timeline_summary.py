@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 from mmct.providers.base.llm_provider import BaseLLMProvider
 
 from mmct.video_pipeline.core.ingestion.models import ChapterCreationResponse
-from ...base import PipelineStep, StepContext, StepResult
+from ..base import PipelineStep, StepContext, StepResult
 
 DEFAULT_WINDOW_MINUTES = 10.0
 DEFAULT_OVERLAP_MINUTES = 2.0
