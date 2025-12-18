@@ -23,7 +23,7 @@ pipeline:
       type: "ingestion.transcribe"
       params:
         video_step: "compress" # Explicitly state input source
-        apply_time_offset: false
+
 
     # Step 4: Video Chunking
     # "transcript" strategy performs inline semantic clustering
@@ -44,7 +44,6 @@ pipeline:
       type: "ingestion.keyframes"
       params:
         source_step: "compress"
-        apply_time_offset: false
         motion_threshold: 1.5
         max_frame_width: 800
         sample_fps: 2
@@ -54,11 +53,12 @@ pipeline:
     - id: "chapters"
       type: "ingestion.chapters"
       params:
-        transcript_step: "transcribe" # Global transcript available, but step uses chunk transcripts
+        transcript_step: "transcribe"
         keyframes_step: "keyframes"
         video_chunking_step: "video_chunking"
         max_concurrent_requests: 3
         collect_object_collection: true
+        max_frames_per_chapter: 14
 
     # Step 8: Enrich chapters and generate summaries
     - id: "chapter_enrichment"
@@ -71,11 +71,11 @@ pipeline:
           max_active_context: 20
           min_chunk_occurrences: 1
         segmented_enrichment: #Enable for long videos
-          enabled: true
+          enabled: false
           segment_count: 5
           boundary_window: 2
 
-    # Step 9: Generate embeddings (Should be able to handle list of chapters)
+    # Step 9: Generate embeddings
     - id: "embeddings"
       type: "ingestion.embeddings"
       params:
