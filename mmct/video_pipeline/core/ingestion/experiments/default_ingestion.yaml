@@ -31,11 +31,11 @@ pipeline:
     - id: "video_chunking"
       type: "ingestion.video_chunking"
       params:
-        chunking_strategy: "transcript"
+        chunking_strategy: "scene"
         transcript_step: "transcribe"
         compress_step: "compress"
         scene_settings: # these are the scene detection parameters
-          min_scene_length: 5.0  # Minimum length of a scene in seconds
+          min_scene_length: 50.0  # Minimum length of a scene in seconds
           threshold: 60.0        # Scene detection threshold (higher = fewer scenes)
           max_scene_length: 600.0 # Maximum scene length (prevents artificial splitting)
 

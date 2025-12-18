@@ -18,7 +18,9 @@ from mmct.video_pipeline.core.ingestion.models import (
     ChapterMetadataCollection,
     ObjectCollectionMetadata,
 )
-from mmct.video_pipeline.core.ingestion.pipelines.steps.keyframes.keyframe_search_index import KeyframeSearchIndex
+from mmct.video_pipeline.core.ingestion.pipelines.steps.keyframes.keyframe_search_index import (
+    KeyframeSearchIndex,
+)
 from mmct.video_pipeline.utils.helper import get_media_folder
 from mmct.providers.search_document_models import ChapterIndexDocument
 from mmct.utils.error_handler import handle_exceptions, convert_exceptions, ProviderException
@@ -102,20 +104,36 @@ class UploadOrchestrator:
 
             # Upload keyframe images to blob storage if blob_manager is available
             if self.blob_manager:
-                for keyframe in keyframe_collection.keyframes:
-                    if not os.path.exists(keyframe.file_path):
-                        logger.warning(f"Keyframe file not found: {keyframe.file_path}")
-                        continue
+                semaphore = asyncio.Semaphore(20)  # Limit concurrent uploads
+                total_keyframes = len(keyframe_collection.keyframes)
+                completed_count = 0
 
-                    # Upload to blob storage
-                    blob_url = await self.blob_manager.upload_file(
-                        file_name=f"{video_id}/{keyframe.keyframe_filename}",
-                        src_file_path=keyframe.file_path,
-                        folder_name=self.blob_manager.keyframe_container_name,
-                    )
+                async def upload_single(keyframe):
+                    nonlocal completed_count
+                    async with semaphore:
+                        if not os.path.exists(keyframe.file_path):
+                            logger.warning(f"Keyframe file not found: {keyframe.file_path}")
+                            return
 
-                    # Update blob_url in metadata
-                    keyframe.blob_url = blob_url
+                        # Upload to blob storage
+                        blob_url = await self.blob_manager.upload_file(
+                            file_name=f"{video_id}/{keyframe.keyframe_filename}",
+                            src_file_path=keyframe.file_path,
+                            folder_name=self.blob_manager.keyframe_container_name,
+                        )
+
+                        # Update blob_url in metadata
+                        keyframe.blob_url = blob_url
+
+                        completed_count += 1
+                        if completed_count % 100 == 0 or completed_count == total_keyframes:
+                            logger.info(f"Uploaded {completed_count}/{total_keyframes} keyframes")
+
+                # Create tasks for all uploads
+                upload_tasks = [upload_single(kf) for kf in keyframe_collection.keyframes]
+
+                # Execute all uploads
+                await asyncio.gather(*upload_tasks)
 
                 logger.info(
                     f"Uploaded {len(keyframe_collection.keyframes)} keyframe images to blob storage"

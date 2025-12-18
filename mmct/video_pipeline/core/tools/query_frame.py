@@ -137,7 +137,9 @@ class QueryFrameTool:
         # Process blobs concurrently - direct blob to base64
         tasks = [
             self.download_and_encode_blob(
-                file_name=file_name, folder_name=self.storage_provider.keyframe_container_name, save_locally=save_frames_locally
+                file_name=file_name,
+                folder_name=self.storage_provider.keyframe_container_name,
+                save_locally=save_frames_locally,
             )
             for file_name in file_paths
         ]
