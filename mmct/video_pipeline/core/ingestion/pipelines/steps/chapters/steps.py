@@ -81,7 +81,7 @@ class ChapterGenerationStep(PipelineStep):
 
         if collect_object_collection:
             # --- 2. Timeline Summary Generation ---
-            logger.info("Generating timeline summary.")
+            logger.debug("Generating timeline summary.")
             timeline_summary_step = ChapterTimelineSummaryStep()
 
             timeline_summary_result = await timeline_summary_step.run_direct(
@@ -91,10 +91,12 @@ class ChapterGenerationStep(PipelineStep):
             )
 
             aggregated_video_summary = timeline_summary_result.get("global_summary", "")
-            logger.info(f"Generated video summary (length: {len(aggregated_video_summary)} chars).")
+            logger.debug(
+                f"Generated video summary (length: {len(aggregated_video_summary)} chars)."
+            )
         else:
             aggregated_video_summary = ""
-            logger.info("Skipping timeline summary generation (collect_object_collection=False).")
+            logger.debug("Skipping timeline summary generation (collect_object_collection=False).")
 
         return StepResult(
             step_id=self.step_id,

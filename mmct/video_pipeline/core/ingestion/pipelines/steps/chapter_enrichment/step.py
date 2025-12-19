@@ -85,7 +85,7 @@ class ChapterEnrichmentStep(PipelineStep):
             )
 
             if use_segmented:
-                logger.info(
+                logger.debug(
                     f"Using Segmented Enrichment (segments={segmented_config.get('segment_count')})"
                 )
                 enricher = SegmentedChapterContextEnrichmentStep()
@@ -102,7 +102,7 @@ class ChapterEnrichmentStep(PipelineStep):
                     params=step_params,
                 )
         else:
-            logger.info(
+            logger.debug(
                 "Skipping object enrichment (collect_object_collection=False). Using raw chapters."
             )
             # For compatibility, we format raw_chapters into the structure expected by saving logic
@@ -197,7 +197,7 @@ class ChapterEnrichmentStep(PipelineStep):
 
             with open(object_collection_path, "w", encoding="utf-8") as f:
                 json.dump(metadata_dict, f, indent=2, ensure_ascii=False)
-            logger.info(f"Saved object collection to {object_collection_path}")
+        context.logger.debug(f"Saved object collection to {object_collection_path}")
 
         logger.info(f"Saved chapters to {json_file_path}")
 

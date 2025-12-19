@@ -25,6 +25,7 @@ def _get_credential():
     """Get Azure credential, trying CLI first, then DefaultAzureCredential."""
     try:
         from azure.identity import AzureCliCredential
+
         # Try Azure CLI credential first
         cli_credential = AzureCliCredential()
         # Test if CLI credential works by getting a token
@@ -34,9 +35,7 @@ def _get_credential():
         return DefaultAzureCredential()
 
 
-async def load_images(
-    file_paths, valid_extensions={".jpg", ".jpeg", ".png", ".bmp", ".gif"}
-):
+async def load_images(file_paths, valid_extensions={".jpg", ".jpeg", ".png", ".bmp", ".gif"}):
     """
     This function loads the images from the directory with given file paths.
     """
@@ -45,15 +44,14 @@ async def load_images(
         try:
             return Image.open(path).copy()
         except Exception as e:
-            print(f"Failed to load {path}: {e}")
+            logger.warning(f"Failed to load {path}: {e}")
             return None
 
     # Filter only valid image files
     valid_files = [
         path
         for path in file_paths
-        if os.path.splitext(path)[1].lower() in valid_extensions
-        and os.path.isfile(path)
+        if os.path.splitext(path)[1].lower() in valid_extensions and os.path.isfile(path)
     ]
 
     tasks = [load_single_image(path) for path in valid_files]
@@ -64,13 +62,11 @@ async def load_images(
 async def download_blobs(blob_names, output_dir, container_name=None):
     if container_name is None:
         container_name = os.getenv("FRAMES_CONTAINER_NAME")
-    
+
     # Use Azure CLI credential if available, fallback to DefaultAzureCredential
     credential = _get_credential()
-        
-    blob_service_client = AsyncBlobServiceClient(
-        os.getenv("BLOB_ACCOUNT_URL"), credential
-    )
+
+    blob_service_client = AsyncBlobServiceClient(os.getenv("BLOB_ACCOUNT_URL"), credential)
     container_client = blob_service_client.get_container_client(container_name)
 
     async def download_single(blob_name):
@@ -87,13 +83,11 @@ async def download_blobs(blob_names, output_dir, container_name=None):
 
             return blob_name.split("/")[-1]
         except Exception as e:
-            print(f"Failed: {blob_name} - {e}")
+            logger.error(f"Failed: {blob_name} - {e}")
             return None
 
     download_tasks = [download_single(blob_name) for blob_name in blob_names]
-    results = await asyncio.gather(
-        *download_tasks
-    )
+    results = await asyncio.gather(*download_tasks)
     # results = await asyncio.gather(
     #     *(download_single(blob_name) for blob_name in blob_names)
     # )
@@ -138,9 +132,7 @@ async def encode_image_to_base64(image):
 async def stack_images_horizontally(frames, type="base64"):
     try:
         if type == "base64":
-            images = await asyncio.gather(
-                *[decode_base64_to_image(img) for img in frames]
-            )
+            images = await asyncio.gather(*[decode_base64_to_image(img) for img in frames])
         else:
             images = frames
         total_width = sum(image.width for image in images)
@@ -158,68 +150,68 @@ async def stack_images_horizontally(frames, type="base64"):
 async def stack_images_in_grid(frames, grid_size=4, type="base64"):
     """
     Stack images in a grid format (e.g., 2x2 for grid_size=4, 3x3 for grid_size=9).
-    
+
     Args:
         frames: List of base64 encoded images or PIL images
         grid_size: Number of images per grid (4, 9, 16, etc.)
         type: "base64" or "pil" depending on input format
-    
+
     Returns:
         List of PIL images representing grids
     """
     try:
         if not frames:
             return []
-        
+
         # Convert to PIL images if needed
         if type == "base64":
-            images = await asyncio.gather(
-                *[decode_base64_to_image(img) for img in frames]
-            )
+            images = await asyncio.gather(*[decode_base64_to_image(img) for img in frames])
         else:
             images = frames
-        
+
         # Calculate grid dimensions (square root for square grid)
         grid_cols = int(math.sqrt(grid_size))
         grid_rows = int(math.ceil(grid_size / grid_cols))
-        
+
         # Group frames into batches
         grids = []
         for i in range(0, len(images), grid_size):
-            batch = images[i:i + grid_size]
-            
+            batch = images[i : i + grid_size]
+
             if not batch:
                 continue
-                
+
             # Get dimensions for uniform sizing
             max_width = max(img.width for img in batch)
             max_height = max(img.height for img in batch)
-            
+
             # Create grid canvas
             canvas_width = max_width * grid_cols
             canvas_height = max_height * grid_rows
             grid_image = Image.new("RGB", (canvas_width, canvas_height), color="white")
-            
+
             # Place images in grid
             for idx, img in enumerate(batch):
                 row = idx // grid_cols
                 col = idx % grid_cols
-                
+
                 # Resize image to fit grid cell while maintaining aspect ratio
                 img_resized = img.resize((max_width, max_height), Image.Resampling.LANCZOS)
-                
+
                 x_pos = col * max_width
                 y_pos = row * max_height
                 grid_image.paste(img_resized, (x_pos, y_pos))
-            
+
             grids.append(grid_image)
-        
+
         return grids
     except Exception as e:
         raise Exception(f"Error while stacking images in grid: {e}")
 
 
-async def create_stacked_frames_base64(frames, grid_size=4, enable_stacking=True, frame_metadata=None):
+async def create_stacked_frames_base64(
+    frames, grid_size=4, enable_stacking=True, frame_metadata=None
+):
     """
     Create horizontally stacked frames in base64 format for LLM processing.
 
@@ -244,7 +236,7 @@ async def create_stacked_frames_base64(frames, grid_size=4, enable_stacking=True
         processed_metadata = []
 
         for i in range(0, len(frames), grid_size):
-            batch = frames[i:i + grid_size]
+            batch = frames[i : i + grid_size]
 
             # Stack this batch horizontally
             stacked_img = await stack_images_horizontally(batch, type="base64")
@@ -258,18 +250,21 @@ async def create_stacked_frames_base64(frames, grid_size=4, enable_stacking=True
 
                 frames_info = []
                 for j, orig_idx in enumerate(range(start_idx, end_idx), start=1):
-                    frames_info.append({
-                        'position': j,  # 1, 2, 3, 4 (left to right)
-                        'frame_index': orig_idx,
-                        'timestamp_seconds': frame_metadata[orig_idx]['timestamp_seconds']
-                    })
+                    frames_info.append(
+                        {
+                            "position": j,  # 1, 2, 3, 4 (left to right)
+                            "frame_index": orig_idx,
+                            "timestamp_seconds": frame_metadata[orig_idx]["timestamp_seconds"],
+                        }
+                    )
 
-                processed_metadata.append({
-                    'stacked_count': len(frames_info),
-                    'frames': frames_info
-                })
+                processed_metadata.append(
+                    {"stacked_count": len(frames_info), "frames": frames_info}
+                )
 
-        logger.info(f"Stacked {len(frames)} frames into {len(stacked_frames)} horizontally stacked images (stack_size={grid_size})")
+        logger.info(
+            f"Stacked {len(frames)} frames into {len(stacked_frames)} horizontally stacked images (stack_size={grid_size})"
+        )
         return stacked_frames, processed_metadata
     except Exception as e:
         logger.error(f"Error creating stacked frames: {e}")
@@ -315,14 +310,12 @@ async def load_required_files(session_id):
 
         # Use Azure CLI credential if available, fallback to DefaultAzureCredential
         credential = _get_credential()
-            
-        blob_service_client = BlobServiceClient(
-            os.getenv("BLOB_ACCOUNT_URL"), credential
-        )
+
+        blob_service_client = BlobServiceClient(os.getenv("BLOB_ACCOUNT_URL"), credential)
         save_content(
             container_name=os.getenv("VIDEO_CONTAINER_NAME"),
             blob_name=video_blob_name,
-            binary_data=True
+            binary_data=True,
         )
         save_content(
             container_name=os.getenv("TIMESTAMPS_CONTAINER_NAME"),
@@ -347,9 +340,7 @@ async def get_file_hash(file_path, hash_algorithm="sha256", suffix=""):
         """Generate a hash for a file asynchronously."""
         hash_func = hashlib.new(hash_algorithm)
 
-        async with aiofiles.open(
-            file_path, "rb"
-        ) as file:  # Open the file asynchronously
+        async with aiofiles.open(file_path, "rb") as file:  # Open the file asynchronously
             while True:
                 chunk = await file.read(8192)  # Read chunks asynchronously
                 if not chunk:
@@ -364,14 +355,12 @@ async def get_file_hash(file_path, hash_algorithm="sha256", suffix=""):
         raise
 
 
-async def file_upload_to_blob(
-    file_path: str, blob_file_name: str, container_name: str
-) -> str:
+async def file_upload_to_blob(file_path: str, blob_file_name: str, container_name: str) -> str:
     """Asynchronously uploads a file to Azure Blob Storage."""
     try:
         # Use Azure CLI credential if available, fallback to DefaultAzureCredential
         credential = _get_credential()
-            
+
         blob_service_client = AsyncBlobServiceClient(
             os.getenv("BLOB_ACCOUNT_URL"), credential=credential
         )
@@ -381,9 +370,7 @@ async def file_upload_to_blob(
 
         async with aiofiles.open(file_path, "rb") as data:
             file_bytes = await data.read()
-            await blob_client.upload_blob(
-                file_bytes, overwrite=True, blob_type="BlockBlob"
-            )
+            await blob_client.upload_blob(file_bytes, overwrite=True, blob_type="BlockBlob")
 
         blob_url = f"{os.getenv('BLOB_ACCOUNT_URL')}/{container_name}/{blob_file_name}"
         await blob_service_client.close()
@@ -402,10 +389,14 @@ async def extract_wav_from_video(video_path: str, output_path: str):
         # First check if video has an audio stream using ffprobe
         probe_process = await asyncio.create_subprocess_exec(
             "ffprobe",
-            "-v", "error",
-            "-select_streams", "a:0",
-            "-show_entries", "stream=codec_type",
-            "-of", "default=noprint_wrappers=1:nokey=1",
+            "-v",
+            "error",
+            "-select_streams",
+            "a:0",
+            "-show_entries",
+            "stream=codec_type",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
             video_path,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -424,7 +415,8 @@ async def extract_wav_from_video(video_path: str, output_path: str):
             "-y",
             "-i",
             video_path,
-            "-map", "0:a",  # Explicitly map audio stream
+            "-map",
+            "0:a",  # Explicitly map audio stream
             "-ac",
             "1",
             "-ar",
@@ -441,18 +433,21 @@ async def extract_wav_from_video(video_path: str, output_path: str):
 
         # Check if the process completed successfully
         if process.returncode != 0:
-            stderr_output = stderr.decode('utf-8', errors='ignore') if stderr else "No error output"
-            raise Exception(f"FFmpeg failed with return code {process.returncode}. Error: {stderr_output}")
+            stderr_output = stderr.decode("utf-8", errors="ignore") if stderr else "No error output"
+            raise Exception(
+                f"FFmpeg failed with return code {process.returncode}. Error: {stderr_output}"
+            )
 
         return output_path
     except Exception as e:
         raise Exception(f"Error getting audio from video, error:{e}")
 
+
 async def extract_mp3_from_video(video_path: str, output_path: str):
     """Extracts audio from a video file using FFmpeg."""
     try:
         with open(os.devnull, "wb") as devnull:
-                subprocess.call(
+            subprocess.call(
                 [
                     "ffmpeg",
                     "-y",
@@ -481,8 +476,14 @@ async def get_video_duration(video_path: str) -> float:
     """
     try:
         cmd = [
-            'ffprobe', '-v', 'quiet', '-show_entries', 'format=duration',
-            '-of', 'default=noprint_wrappers=1:nokey=1', video_path
+            "ffprobe",
+            "-v",
+            "quiet",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
+            video_path,
         ]
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
         duration = float(result.stdout.strip())
@@ -508,55 +509,75 @@ async def split_video_if_needed(video_path: str) -> tuple[list[str], list[str]]:
     """
     try:
         duration = await get_video_duration(video_path)
-        
+
         # Check if video is >= 30 minutes (1800 seconds)
         if duration < 1800:
             logger.info("Video duration is less than 30 minutes, no splitting needed")
-            return [video_path], ['']
-        
+            return [video_path], [""]
+
         logger.info("Video duration is >= 30 minutes, splitting video into two parts")
-        
+
         # Get video file info
         video_name, video_ext = os.path.splitext(os.path.basename(video_path))
-        
+
         # Get media folder for output paths
         media_folder = await get_media_folder()
-        
+
         # Calculate split point (half duration)
         split_point = duration / 2
-        
+
         # Define output paths in media folder
         part_a_path = os.path.join(media_folder, f"{video_name}_part_A{video_ext}")
         part_b_path = os.path.join(media_folder, f"{video_name}_part_B{video_ext}")
-        
+
         # Split video using ffmpeg
         # Part A: from start to middle
         cmd_a = [
-            'ffmpeg', '-i', video_path, '-t', str(split_point), 
-            '-c', 'copy', '-avoid_negative_ts', 'make_zero', part_a_path, '-y'
+            "ffmpeg",
+            "-i",
+            video_path,
+            "-t",
+            str(split_point),
+            "-c",
+            "copy",
+            "-avoid_negative_ts",
+            "make_zero",
+            part_a_path,
+            "-y",
         ]
-        
+
         # Part B: from middle to end
         cmd_b = [
-            'ffmpeg', '-i', video_path, '-ss', str(split_point), 
-            '-c', 'copy', '-avoid_negative_ts', 'make_zero', part_b_path, '-y'
+            "ffmpeg",
+            "-i",
+            video_path,
+            "-ss",
+            str(split_point),
+            "-c",
+            "copy",
+            "-avoid_negative_ts",
+            "make_zero",
+            part_b_path,
+            "-y",
         ]
-        
+
         logger.info("Splitting video into Part A...")
         result_a = subprocess.run(cmd_a, capture_output=True, text=True, check=True)
         logger.info(f"Part A created successfully: {part_a_path}")
-        
+
         logger.info("Splitting video into Part B...")
         result_b = subprocess.run(cmd_b, capture_output=True, text=True, check=True)
         logger.info(f"Part B created successfully: {part_b_path}")
-        
+
         # Verify both parts were created
         if not os.path.exists(part_a_path) or not os.path.exists(part_b_path):
             raise RuntimeError("Video splitting failed - output files not found")
-        
-        logger.info(f"Video successfully split into:\n  Part A: {part_a_path}\n  Part B: {part_b_path}")
-        return [part_a_path, part_b_path], ['', 'B']
-        
+
+        logger.info(
+            f"Video successfully split into:\n  Part A: {part_a_path}\n  Part B: {part_b_path}"
+        )
+        return [part_a_path, part_b_path], ["", "B"]
+
     except subprocess.CalledProcessError as e:
         logger.error(f"Error splitting video: {e}")
         logger.error(f"ffmpeg stderr: {e.stderr}")
@@ -696,6 +717,7 @@ async def get_media_folder() -> str:
     os.makedirs(media_path, exist_ok=True)
     return media_path
 
+
 async def remove_file(video_id):
     try:
         base_dir = await get_media_folder()
@@ -703,19 +725,19 @@ async def remove_file(video_id):
         async def remove_dir(dir_name):
             local_path = os.path.join(base_dir, dir_name)
             try:
-                print(f"Trying to remove directory: {local_path}")
+                logger.debug(f"Trying to remove directory: {local_path}")
                 if os.path.exists(local_path):
                     shutil.rmtree(local_path)
-                    print(f"Successfully removed directory: {local_path}")
+                    logger.debug(f"Successfully removed directory: {local_path}")
             except Exception as e:
-                print(f"Error deleting directory {local_path}: {e}")
+                logger.warning(f"Error deleting directory {local_path}: {e}")
 
         # Remove keyframes directory
         keyframes_dir_name = f"keyframes/{video_id}"
         await remove_dir(keyframes_dir_name)
 
-        print("All files and directories removed successfully!")
-        
+        logger.debug("All files and directories removed successfully!")
+
     except Exception as e:
         raise Exception(e)
 
@@ -731,106 +753,113 @@ async def load_srt(path: str) -> str:
     Returns:
         str: The complete content of the SRT file as a single string, with original formatting.
     """
-    async with aiofiles.open(path, mode='r', encoding='utf-8') as f:
+    async with aiofiles.open(path, mode="r", encoding="utf-8") as f:
         content = await f.read()
     return content.strip()
+
 
 def parse_srt_timestamps(srt_content: str) -> list:
     """
     Parse SRT content to extract timestamps and text segments.
-    
+
     Args:
         srt_content (str): SRT file content as string
-        
+
     Returns:
         list: List of dictionaries with 'start_time', 'end_time', 'text'
     """
     segments = []
-    blocks = srt_content.strip().split('\n\n')
-    
+    blocks = srt_content.strip().split("\n\n")
+
     for block in blocks:
         if not block.strip():
             continue
-            
-        lines = block.strip().split('\n')
+
+        lines = block.strip().split("\n")
         if len(lines) < 3:
             continue
-            
+
         # Extract timestamp line (second line)
         timestamp_line = lines[1]
-        if '-->' not in timestamp_line:
+        if "-->" not in timestamp_line:
             continue
-            
+
         # Parse timestamps
-        start_time_str, end_time_str = timestamp_line.split(' --> ')
-        
+        start_time_str, end_time_str = timestamp_line.split(" --> ")
+
         # Convert timestamp to seconds
         def timestamp_to_seconds(timestamp_str):
-            timestamp_str = timestamp_str.replace(',', '.')
-            h, m, s = timestamp_str.split(':')
+            timestamp_str = timestamp_str.replace(",", ".")
+            h, m, s = timestamp_str.split(":")
             return int(h) * 3600 + int(m) * 60 + float(s)
-        
+
         start_time = timestamp_to_seconds(start_time_str.strip())
         end_time = timestamp_to_seconds(end_time_str.strip())
-        
+
         # Extract text (lines after timestamp)
-        text = '\n'.join(lines[2:])
-        
-        segments.append({
-            'start_time': start_time,
-            'end_time': end_time,
-            'text': text
-        })
-    
+        text = "\n".join(lines[2:])
+
+        segments.append({"start_time": start_time, "end_time": end_time, "text": text})
+
     return segments
 
-async def chunk_video_by_timestamps(video_path: str, timestamps: list, output_dir: str, hash_id: str) -> list:
+
+async def chunk_video_by_timestamps(
+    video_path: str, timestamps: list, output_dir: str, hash_id: str
+) -> list:
     """
     Chunk video based on transcript timestamps for parallel processing.
-    
+
     Args:
         video_path (str): Path to the video file
         timestamps (list): List of timestamp segments from parse_srt_timestamps
         output_dir (str): Directory to save video chunks
         hash_id (str): Hash ID for naming chunks
-        
+
     Returns:
         list: List of paths to video chunk files
     """
     if not timestamps:
         logger.warning("No timestamps provided, returning original video")
         return [video_path]
-    
+
     # Calculate mid-point for 50-50 split
     mid_index = len(timestamps) // 2
-    
+
     # Get timestamps for two chunks
-    chunk1_start = timestamps[0]['start_time']
-    chunk1_end = timestamps[mid_index - 1]['end_time']
-    chunk2_start = timestamps[mid_index]['start_time']
-    chunk2_end = timestamps[-1]['end_time']
-    
+    chunk1_start = timestamps[0]["start_time"]
+    chunk1_end = timestamps[mid_index - 1]["end_time"]
+    chunk2_start = timestamps[mid_index]["start_time"]
+    chunk2_end = timestamps[-1]["end_time"]
+
     os.makedirs(output_dir, exist_ok=True)
-    
+
     chunk_paths = []
     chunks = [
         (chunk1_start, chunk1_end, f"{hash_id}.mp4"),
-        (chunk2_start, chunk2_end, f"{hash_id}B.mp4")
+        (chunk2_start, chunk2_end, f"{hash_id}B.mp4"),
     ]
-    
+
     for start_time, end_time, filename in chunks:
         output_path = os.path.join(output_dir, filename)
-        
+
         # Use FFmpeg to extract video segment
         cmd = [
-            'ffmpeg', '-i', video_path,
-            '-ss', str(start_time),
-            '-t', str(end_time - start_time),
-            '-c', 'copy',
-            '-avoid_negative_ts', 'make_zero',
-            '-y', output_path
+            "ffmpeg",
+            "-i",
+            video_path,
+            "-ss",
+            str(start_time),
+            "-t",
+            str(end_time - start_time),
+            "-c",
+            "copy",
+            "-avoid_negative_ts",
+            "make_zero",
+            "-y",
+            output_path,
         ]
-        
+
         try:
             subprocess.run(cmd, capture_output=True, text=True, check=True)
             chunk_paths.append(output_path)
@@ -838,30 +867,31 @@ async def chunk_video_by_timestamps(video_path: str, timestamps: list, output_di
         except subprocess.CalledProcessError as e:
             logger.error(f"Failed to create video chunk {output_path}: {e.stderr}")
             raise
-    
+
     return chunk_paths
+
 
 def split_transcript_by_segments(srt_content: str, segment_count: int = 2) -> list:
     """
     Split transcript content into segments for parallel processing.
     Resets timestamps for each chunk to start from 0 (matching video chunks created with FFmpeg).
-    
+
     Args:
         srt_content (str): Original SRT content
         segment_count (int): Number of segments to split into (default: 2)
-        
+
     Returns:
         list: List of SRT content strings for each segment
     """
     segments = parse_srt_timestamps(srt_content)
-    
+
     if not segments:
         return [srt_content]
-    
+
     # Split segments into chunks
     chunk_size = len(segments) // segment_count
     transcript_chunks = []
-    
+
     for i in range(segment_count):
         start_idx = i * chunk_size
         if i == segment_count - 1:
@@ -869,12 +899,12 @@ def split_transcript_by_segments(srt_content: str, segment_count: int = 2) -> li
             end_idx = len(segments)
         else:
             end_idx = (i + 1) * chunk_size
-        
+
         chunk_segments = segments[start_idx:end_idx]
-        
+
         if not chunk_segments:
             continue
-            
+
         # Calculate time offset for chunks after the first one (Part B, C, etc.)
         # Part A (i == 0) keeps original timestamps, others reset to start from 0
         if i == 0:
@@ -883,8 +913,8 @@ def split_transcript_by_segments(srt_content: str, segment_count: int = 2) -> li
         else:
             # Part B and beyond: Reset timestamps to start from 0
             # This matches what FFmpeg does with -avoid_negative_ts make_zero
-            time_offset = chunk_segments[0]['start_time']
-        
+            time_offset = chunk_segments[0]["start_time"]
+
         # Rebuild SRT format for this chunk
         chunk_srt = ""
         for j, segment in enumerate(chunk_segments, 1):
@@ -895,20 +925,21 @@ def split_transcript_by_segments(srt_content: str, segment_count: int = 2) -> li
                 hours = int(seconds // 3600)
                 minutes = int((seconds % 3600) // 60)
                 secs = seconds % 60
-                return f"{hours:02d}:{minutes:02d}:{secs:06.3f}".replace('.', ',')
-            
+                return f"{hours:02d}:{minutes:02d}:{secs:06.3f}".replace(".", ",")
+
             # Apply offset (0 for Part A, calculated offset for Part B+)
-            adjusted_start_time = segment['start_time'] - time_offset
-            adjusted_end_time = segment['end_time'] - time_offset
-            
+            adjusted_start_time = segment["start_time"] - time_offset
+            adjusted_end_time = segment["end_time"] - time_offset
+
             start_timestamp = seconds_to_timestamp(adjusted_start_time)
             end_timestamp = seconds_to_timestamp(adjusted_end_time)
-            
+
             chunk_srt += f"{j}\n{start_timestamp} --> {end_timestamp}\n{segment['text']}\n\n"
-        
+
         transcript_chunks.append(chunk_srt.strip())
-    
+
     return transcript_chunks
+
 
 def get_video_properties(video_path: str) -> Dict:
     """
@@ -973,15 +1004,18 @@ def seconds_to_hms(duration_seconds):
     # Format with leading zeros
     return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
+
 def _hhmmss_to_timedelta(ts: str) -> timedelta:
     h, m, s = map(int, ts.split(":"))
     return timedelta(hours=h, minutes=m, seconds=s)
+
 
 def _timedelta_to_hhmmss(td: timedelta) -> str:
     total = int(td.total_seconds())
     h, rem = divmod(total, 3600)
     m, s = divmod(rem, 60)
     return f"{h:02d}:{m:02d}:{s:02d}"
+
 
 async def _offset_single_source(src, duration_dict: Dict[str, str]) -> None:
     """
@@ -992,9 +1026,9 @@ async def _offset_single_source(src, duration_dict: Dict[str, str]) -> None:
     if len(vid) != 65 or not vid.endswith("B"):
         return  # Part-A or normal video → nothing to do
 
-    base_id = vid[:-1]                       # strip trailing 'B'
+    base_id = vid[:-1]  # strip trailing 'B'
     base_dur_str = duration_dict.get(base_id)
-    if not base_dur_str:                     # unknown duration → skip
+    if not base_dur_str:  # unknown duration → skip
         return
 
     base_td = _hhmmss_to_timedelta(base_dur_str)
@@ -1010,5 +1044,5 @@ async def offset_all_sources_in_response(resp, duration_dict: Dict[str, str]) ->
     and apply `_offset_single_source` concurrently.
     """
     await asyncio.gather(
-    *(_offset_single_source(src, duration_dict) for src in resp['content'].source)
+        *(_offset_single_source(src, duration_dict) for src in resp["content"].source)
     )

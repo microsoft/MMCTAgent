@@ -65,7 +65,7 @@ class UploadOrchestrator:
             url: Optional URL of the video
             keyframe_blob_url: Optional blob URL for keyframes folder
         """
-        logger.info(f"Starting parallel uploads for video {video_id}")
+        logger.debug(f"Starting parallel uploads for video {video_id}")
 
         # Run all upload tasks in parallel
         await asyncio.gather(
@@ -74,7 +74,7 @@ class UploadOrchestrator:
             self._upload_object_collection(video_id, url),
         )
 
-        logger.info(f"All uploads completed successfully for video {video_id}")
+        logger.debug(f"All uploads completed successfully for video {video_id}")
 
     @handle_exceptions(retries=3, exceptions=(Exception,))
     @convert_exceptions({Exception: ProviderException})
@@ -100,7 +100,7 @@ class UploadOrchestrator:
                 metadata_dict = json.load(f)
 
             keyframe_collection = KeyframeMetadataCollection(**metadata_dict)
-            logger.info(f"Uploading {len(keyframe_collection.keyframes)} keyframes...")
+            logger.debug(f"Uploading {len(keyframe_collection.keyframes)} keyframes...")
 
             # Upload keyframe images to blob storage if blob_manager is available
             if self.blob_manager:
@@ -127,7 +127,7 @@ class UploadOrchestrator:
 
                         completed_count += 1
                         if completed_count % 100 == 0 or completed_count == total_keyframes:
-                            logger.info(f"Uploaded {completed_count}/{total_keyframes} keyframes")
+                            logger.debug(f"Uploaded {completed_count}/{total_keyframes} keyframes")
 
                 # Create tasks for all uploads
                 upload_tasks = [upload_single(kf) for kf in keyframe_collection.keyframes]
@@ -223,7 +223,7 @@ class UploadOrchestrator:
                 metadata_dict = json.load(f)
 
             chapter_collection = ChapterMetadataCollection(**metadata_dict)
-            logger.info(f"Uploading {len(chapter_collection.chapters)} chapters...")
+            logger.debug(f"Uploading {len(chapter_collection.chapters)} chapters...")
 
             # Create search documents for chapters
             documents = []
@@ -304,7 +304,7 @@ class UploadOrchestrator:
                 metadata_dict = json.load(f)
 
             object_collection_metadata = ObjectCollectionMetadata(**metadata_dict)
-            logger.info("Uploading object collection...")
+            logger.debug("Uploading object collection...")
 
             if not object_collection_metadata.embeddings:
                 logger.warning("Object collection has no embeddings, creating empty embedding")
@@ -332,7 +332,7 @@ class UploadOrchestrator:
 
             # Upload to search index
             await self.search_provider_object_collection.upload_documents(documents=[doc])
-            logger.info("Successfully uploaded object collection document to search index")
+            logger.debug("Successfully uploaded object collection document to search index")
 
         except Exception as e:
             logger.error(f"Failed to upload object collection: {e}")

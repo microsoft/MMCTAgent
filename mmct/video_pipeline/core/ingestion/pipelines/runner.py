@@ -88,15 +88,33 @@ class PipelineRunner:
         pipeline_start = time.time()
         pipeline_status = "completed"
 
-        self.logger.info(f"Starting pipeline: {self.pipeline_config.name}")
-        self.logger.info(f"Mode: {self.pipeline_config.mode}")
-        self.logger.info(f"Steps: {len(self.pipeline_config.steps)}")
+        if self.context.verbosity >= 1:
+            self.logger.info(f"Starting pipeline: {self.pipeline_config.name}")
+            self.logger.info(f"Mode: {self.pipeline_config.mode}")
+            self.logger.info(f"Steps: {len(self.pipeline_config.steps)}")
 
         try:
-            for idx, step_cfg in enumerate(self.pipeline_config.steps, 1):
-                self.logger.info(
-                    f"[{idx}/{len(self.pipeline_config.steps)}] Executing step: {step_cfg.id} ({step_cfg.type})"
+            steps_iterable = self.pipeline_config.steps
+
+            # If verbosity is 0, wrap with tqdm
+            if self.context.verbosity == 0:
+                from tqdm import tqdm
+
+                steps_iterable = tqdm(
+                    self.pipeline_config.steps,
+                    desc=f"Ingesting {self.context.video_id[:8]}...",
+                    unit="step",
                 )
+
+            for idx, step_cfg in enumerate(steps_iterable, 1):
+
+                if self.context.verbosity >= 1:
+                    self.logger.info(
+                        f"[{idx}/{len(self.pipeline_config.steps)}] Executing step: {step_cfg.id} ({step_cfg.type})"
+                    )
+                elif self.context.verbosity == 0:
+                    if hasattr(steps_iterable, "set_description"):
+                        steps_iterable.set_description(f"Step: {step_cfg.id}")
 
                 try:
                     # Get step class from registry
@@ -125,21 +143,20 @@ class PipelineRunner:
                     )
                     self.execution_records.append(record)
 
-                    self.logger.info(
-                        f"Step {step_cfg.id} completed in {step_duration:.2f}s"
-                    )
+                    if self.context.verbosity >= 1:
+                        self.logger.info(f"Step {step_cfg.id} completed in {step_duration:.2f}s")
 
                     # Check if step requested pipeline termination
                     should_continue = result.outputs.get("should_continue", True)
                     if not should_continue:
-                        self.logger.info(
-                            f"Step {step_cfg.id} requested pipeline termination. Skipping remaining steps."
-                        )
+                        msg = f"Step {step_cfg.id} requested pipeline termination. Skipping remaining steps."
+                        if self.context.verbosity >= 1:
+                            self.logger.info(msg)
                         pipeline_status = "completed"
                         break
 
                 except Exception as e:
-                    step_duration = time.time() - step_start if 'step_start' in locals() else 0.0
+                    step_duration = time.time() - step_start if "step_start" in locals() else 0.0
 
                     self.logger.exception(f"Step {step_cfg.id} failed: {e}")
 
@@ -159,7 +176,8 @@ class PipelineRunner:
                     raise
 
         except Exception as e:
-            self.logger.exception(f"Pipeline {self.pipeline_config.name} failed: {e}")
+            if self.context.verbosity >= 1:
+                self.logger.exception(f"Pipeline {self.pipeline_config.name} failed: {e}")
             pipeline_status = "failed"
             raise
 

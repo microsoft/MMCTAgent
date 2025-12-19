@@ -52,7 +52,7 @@ class VideoChunkingStep(PipelineStep):
                 raise ValueError(f"Transcript not found from step: {transcript_step}")
 
             # 2. Run Semantic Clustering (Inline)
-            context.logger.info("Running inline semantic clustering...")
+            context.logger.debug("Running inline semantic clustering...")
             clusterer = SemanticChunker(
                 transcript=transcript,
                 embedding_provider=context.provider.embedding_provider,

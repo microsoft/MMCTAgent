@@ -117,7 +117,7 @@ class KeyframeExtractionStep(PipelineStep):
                     video_duration=context.video_duration,
                 )
 
-                context.logger.info(f"Keyframes extracted and saved to: {keyframe_json_path}")
+                context.logger.debug(f"Keyframes extracted and saved to: {keyframe_json_path}")
 
                 return StepResult(
                     step_id=self.step_id,
