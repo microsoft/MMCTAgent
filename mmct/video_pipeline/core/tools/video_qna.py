@@ -215,7 +215,7 @@ class VideoQnA:
         termination = text_mention_termination
 
         if self.use_critic_agent:
-            critic_tool_object = CriticTool(llm_provider = self.provider.llm_provider)
+            critic_tool_object = CriticTool(llm_provider=self.provider.llm_provider)
             self.critic = AssistantAgent(
                 name="critic",
                 model_client=self.model_client,

@@ -31,7 +31,7 @@ pipeline:
     - id: "video_chunking"
       type: "ingestion.video_chunking"
       params:
-        chunking_strategy: "scene"
+        chunking_strategy: "transcript"
         transcript_step: "transcribe"
         compress_step: "compress"
         scene_settings: # these are the scene detection parameters

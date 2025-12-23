@@ -27,7 +27,7 @@ class GetRelevantFrames:
         top_k: Annotated[int, "number of relevant frames to fetch"] = 5,
     ) -> List[str]:
         """
-        Discover relevant frame IDs based on visual queries when timestamps are unknown. get_relevant_frames tools is last resort of planner.
+        Discover relevant frame IDs  based on visual queries when timestamps are unknown. get_relevant_frames tools is last resort of planner.
 
         Description:
             Searches keyframe index to find relevant frames based on visual embeddings.
@@ -40,12 +40,8 @@ class GetRelevantFrames:
             - top_k (int): [Mandatory] Number of relevant frames to retrieve (default: 10)
 
         Output:
-            List of keyframe filenames (strings) that can be passed to query_frame for visual analysis
+            List of dictionary containing keyframe filenames (strings) and timestamps that can be passed to query_frame for visual analysis
 
-        Workflow:
-            1. Searches keyframe index using visual embeddings
-            2. Returns frame IDs as a list
-            3. Pass these frame IDs to query_frame for actual visual analysis
         """
         try:
             # If there is a FAISS index directory in examples/ (e.g. from exported indices), prefer it

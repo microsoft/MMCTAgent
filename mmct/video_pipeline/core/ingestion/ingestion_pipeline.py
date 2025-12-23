@@ -45,6 +45,10 @@ class IngestionPipeline:
             Optional[str],
             "Path to an existing transcript file (.srt); skips transcription if provided",
         ] = None,
+        pipeline_config_path: Annotated[
+            Optional[str],
+            "Optional path to a custom pipeline configuration YAML file",
+        ] = None,
         disable_console_log: Annotated[
             bool,
             "Boolean flag to disable console logs during ingestion (Deprecated, use verbosity=0)",
@@ -94,6 +98,7 @@ class IngestionPipeline:
         self.url = url
         self.video_id = video_id
         self.transcript_path = transcript_path
+        self.pipeline_config_path = pipeline_config_path
         self.frame_stacking_grid_size = frame_stacking_grid_size
         self.save_local_report = save_local_report
         self.original_video_path = video_path
@@ -102,7 +107,21 @@ class IngestionPipeline:
     async def run(self):
         """Main ingestion pipeline method using the new PipelineRunner."""
         try:
-            pipeline_config = get_default_ingestion_config()
+            pipeline_config = None
+            if self.pipeline_config_path:
+                try:
+                    pipeline_config = load_pipeline_config(self.pipeline_config_path)
+                    self.logger.info(
+                        f"Successfully loaded custom pipeline config from {self.pipeline_config_path}"
+                    )
+                except Exception as e:
+                    self.logger.warning(
+                        f"Failed to load custom pipeline config from {self.pipeline_config_path}: {e}"
+                    )
+                    self.logger.info("Falling back to default ingestion config")
+
+            if pipeline_config is None:
+                pipeline_config = get_default_ingestion_config()
 
             # Calculate parent video metadata
             if not self.video_id:
