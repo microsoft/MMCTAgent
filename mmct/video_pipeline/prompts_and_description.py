@@ -13,14 +13,20 @@ class VideoSourceInfo(BaseModel):
     video_id: str = Field(..., description="Hash video ID from get_context")
     blob_url: str = Field(..., description="Blob storage URL for the video file")
     url: str = Field(..., description="YouTube URL from get_context")
-    timestamps: List[TimestampPair] = Field(..., description=(
-        "List of timestamp pairs with start and end times"
-    ))
+    timestamps: List[TimestampPair] = Field(
+        ..., description=("List of timestamp pairs with start and end times")
+    )
+
 
 class TokenInfo(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    input_token: int = Field(..., description="Total input tokens consumed across all video sources")
-    output_token: int = Field(..., description="Total output tokens generated across all video sources")
+    input_token: int = Field(
+        ..., description="Total input tokens consumed across all video sources"
+    )
+    output_token: int = Field(
+        ..., description="Total output tokens generated across all video sources"
+    )
+
 
 class VideoAgentResponse(BaseModel):
     """Pydantic model for structured video agent responses.
@@ -49,46 +55,28 @@ class VideoAgentResponse(BaseModel):
         }
     """
     model_config = ConfigDict(extra="forbid")
-    
+
     response: str = Field(
-        ..., 
+        ...,
         description=(
             "Markdown-formatted response to the user query. Uses proper Markdown syntax "
             "(bullets, numbered lists, line breaks) for readability. Excludes timestamps related information."
             "information as this is handled separately in the source field."
-        )
+        ),
     )
-    
+
     answer_found: bool = Field(
-        ...,
-        description="Indicates whether the provided context fully answers the user query"
+        ..., description="Indicates whether the provided context fully answers the user query"
     )
-    
+
     source: List[VideoSourceInfo] = Field(
-        ..., 
-        description="List of video sources with associated metadata and timestamps"
+        ..., description="List of video sources with associated metadata and timestamps"
     )
-    
+
     tokens: TokenInfo = Field(
-        ...,
-        description="Token usage information aggregated across all video sources"
+        ..., description="Token usage information aggregated across all video sources"
     )
 
-class SimpleTokenInfo(BaseModel):
-    """Simple token usage information for VideoAgentV2"""
-    model_config = ConfigDict(extra="forbid")
-
-    input: Optional[int] = None
-    output: Optional[int] = None
-
-class VideoAgentV2Response(BaseModel):
-    """
-    Simplified response model for VideoAgentV2 output
-    """
-    model_config = ConfigDict(extra="forbid")
-
-    result: str = Field(..., description="Markdown-formatted direct answer to the query")
-    tokens: Optional[SimpleTokenInfo] = None
 
 """
 Prompts for various LLM calls
@@ -104,7 +92,7 @@ Use for: Video discovery, high-level video understanding, scene overview, can be
 
 TOOL_GET_OBJECT_COLLECTION = """
 Tool: get_object_collection -> List[Dict[str, Any]]:
-Description: Retrieves object collection data including object descriptions, counts, and first_seen timestamps. REQUIRES valid video_id or url before calling. Use for object counting, tracking, and appearance details.
+Description: Retrieves object collection data including object descriptions, counts, and first_seen timestamps. REQUIRES valid video_id or url before calling. Accepts a list of probable object names related to the query to filter the collection. Use for object counting, tracking, and appearance details.
 Use for: object identification, counts, tracking patterns, object appearance details
 Requirement: MUST have valid video_id or url (obtain from get_video_summary if not provided)
 """
@@ -357,9 +345,9 @@ You are the Planner agent in a Video Q&A system. Answer user questions by orches
 Choose based on query type:
 - **Whole video summary questions** -> get_video_summary
 - **Need full video context** -> get_video_summary
-- **Object/count/tracking questions** -> get_object_collection (relevant fields only, semantic query based on video summary)
+- **Object/count/tracking questions** -> get_object_collection (provide list of potential object names, `first_seen` and other metadata related to the query)
 - **Narrative/dialogue/event questions** -> get_context (relevant fields only)
-- **Visual detail questions** -> get_context or get_object_collection for timestamps then query_frame
+- **Visual detail questions** -> get_context or get_object_collection for timestamps (first_seen) then query_frame
 - **Unknown timestamps then ** - get_relevant_frames then query_frame
 
 ### Phase 2: Information Refinement
@@ -458,7 +446,7 @@ You are the Planner agent in a Video Q&A system. Answer user questions by orches
 **video_id/hash_video_id/url available:**
 Choose based on query type:
 - **Whole video summary questions** - get_video_summary (relevant fields only)
-- **Object/count/tracking questions** - get_object_collection (relevant fields only, semantic query based on video summary)
+- **Object/count/tracking questions** - get_object_collection (relevant fields only, provide list of potential object names related to the query)
 - **Narrative/dialogue/event questions** - get_context (relevant fields only)
 - **Visual detail questions** - get_context or get_object_collection for timestamps - query_frame
 - **Unknown location** - get_relevant_frames - query_frame
@@ -556,7 +544,8 @@ async def get_critic_tool_system_prompt() -> str:
     return SYSTEM_PROMPT_CRITIC_TOOL
 
 
-if __name__=="__main__":
+if __name__ == "__main__":
     import asyncio
+
     prompt = asyncio.run(get_planner_system_prompt())
     print(prompt)

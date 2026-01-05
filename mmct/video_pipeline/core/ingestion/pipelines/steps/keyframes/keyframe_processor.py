@@ -132,5 +132,7 @@ class KeyframeProcessor:
         with open(json_file_path, "w", encoding="utf-8") as f:
             json.dump(collection.model_dump(), f, indent=2, ensure_ascii=False)
 
-        logger.info(f"Saved keyframe metadata for {len(keyframe_metadata_objects)} frames to {json_file_path}")
+        logger.info(
+            f"Saved keyframe metadata for {len(keyframe_metadata_objects)} frames to {json_file_path}"
+        )
         return json_file_path

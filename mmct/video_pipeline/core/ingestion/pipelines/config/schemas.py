@@ -2,6 +2,7 @@
 
 import os
 import yaml
+from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -76,64 +77,11 @@ def get_default_ingestion_config() -> PipelineConfig:
     Get default ingestion pipeline configuration.
 
     Returns:
-        PipelineConfig with default ingestion steps
+        PipelineConfig with default ingestion steps from YAML
     """
-    return PipelineConfig(
-        name="default_ingestion",
-        mode="sequential",
-        steps=[
-            StepConfig(
-                id="pre_validation",
-                type="ingestion.pre_validation",
-                params={
-                    "skip_if_exists": True,
-                    "require_audio_when_no_transcript": True,
-                },
-            ),
-            StepConfig(
-                id="compress",
-                type="ingestion.compress",
-                params={"max_size_mb": 500, "target_size_mb": 500},
-            ),
-            StepConfig(
-                id="keyframes",
-                type="ingestion.keyframes",
-                params={"source_step": "compress", "apply_time_offset": False},
-            ),
-            StepConfig(
-                id="transcribe",
-                type="ingestion.transcribe",
-                params={"video_step": "compress", "apply_time_offset": False},
-            ),
-            StepConfig(
-                id="chapters",
-                type="ingestion.chapters",
-                params={
-                    "transcript_step": "transcribe",
-                    "keyframes_step": "keyframes",
-                },
-            ),
-            StepConfig(
-                id="embeddings",
-                type="ingestion.embeddings",
-                params={
-                    "chapters_step": "chapters",
-                    "keyframes_step": "keyframes",
-                },
-            ),
-            StepConfig(
-                id="upload",
-                type="ingestion.upload",
-                params={
-                    "chapters_step": "chapters",
-                    "keyframes_step": "keyframes",
-                    "embeddings_step": "embeddings",
-                },
-            ),
-            StepConfig(
-                id="cleanup",
-                type="ingestion.cleanup",
-                params={"keep_keyframes": False},
-            ),
-        ],
-    )
+
+    current_dir = Path(__file__).parent.resolve()
+    # Go up to 'ingestion' directory (../../) then into 'experiments'
+    config_path = current_dir.parent.parent / "experiments" / "default_ingestion.yaml"
+
+    return load_pipeline_config(str(config_path))

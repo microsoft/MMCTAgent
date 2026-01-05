@@ -48,7 +48,6 @@ class VideoCompressor:
         self.video_codec, self.use_gpu = self._detect_gpu_codec(video_codec)
         self.duration = self._get_duration()
         self.video_bitrate = self._calculate_video_bitrate()
-        print(self.input_path, self.output_path)
 
     # ------------------------------------------------------------------
     # GPU detection utilities

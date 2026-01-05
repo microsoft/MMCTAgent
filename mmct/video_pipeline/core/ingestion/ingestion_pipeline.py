@@ -45,25 +45,47 @@ class IngestionPipeline:
             Optional[str],
             "Path to an existing transcript file (.srt); skips transcription if provided",
         ] = None,
+        pipeline_config_path: Annotated[
+            Optional[str],
+            "Optional path to a custom pipeline configuration YAML file",
+        ] = None,
         disable_console_log: Annotated[
-            bool, "Boolean flag to disable console logs during ingestion"
+            bool,
+            "Boolean flag to disable console logs during ingestion (Deprecated, use verbosity=0)",
         ] = False,
         frame_stacking_grid_size: Annotated[
             int, "Grid size for frame horizontal stacking (>1 enables stacking, 1 disables)"
         ] = 4,
         save_local_report: Annotated[bool, "Whether to save the pipeline report locally"] = False,
+        verbosity: Annotated[int, "Logging verbosity: 0=Progress Bar Only, 1=Info, 2=Debug"] = 0,
     ):
         try:
-            logger.info("Successfully retrieved the MMCT config")
+            # We delay config fetching logging until we set up the logger level
+            pass
         except Exception as e:
+            # Fallback logger if config fails immediately
             logger.exception(f"Exception occurred while fetching the MMCT config: {e}")
             raise Exception(f"Exception occurred while fetching the MMCT config: {e}")
 
-        if disable_console_log == False:
-            log_manager.enable_console()
-        else:
+        # Determine log level
+        log_level = "WARNING"
+        if verbosity == 1:
+            log_level = "INFO"
+        elif verbosity >= 2:
+            log_level = "DEBUG"
+
+        # Handle legacy disable_console_log if True, effectively silence or keep generic
+        if disable_console_log:
             log_manager.disable_console()
+        else:
+            # Reset console to ensure level is correct
+            log_manager.disable_console()
+            log_manager.enable_console(level=log_level)
+
         self.logger = log_manager.get_logger()
+        self.logger.info(
+            "Successfully retrieved the MMCT config"
+        )  # Will only show if verbosity >= 1
 
         # Validate that language is provided if transcript_path is not provided
         if not transcript_path and not language:
@@ -74,17 +96,37 @@ class IngestionPipeline:
         self.provider = provider
         self.language = language
         self.url = url
+        self.video_id = video_id
         self.transcript_path = transcript_path
+        self.pipeline_config_path = pipeline_config_path
         self.frame_stacking_grid_size = frame_stacking_grid_size
         self.save_local_report = save_local_report
         self.original_video_path = video_path
+        self.verbosity = verbosity
 
     async def run(self):
         """Main ingestion pipeline method using the new PipelineRunner."""
         try:
-            pipeline_config = get_default_ingestion_config()
+            pipeline_config = None
+            if self.pipeline_config_path:
+                try:
+                    pipeline_config = load_pipeline_config(self.pipeline_config_path)
+                    self.logger.info(
+                        f"Successfully loaded custom pipeline config from {self.pipeline_config_path}"
+                    )
+                except Exception as e:
+                    self.logger.warning(
+                        f"Failed to load custom pipeline config from {self.pipeline_config_path}: {e}"
+                    )
+                    self.logger.info("Falling back to default ingestion config")
+
+            if pipeline_config is None:
+                pipeline_config = get_default_ingestion_config()
 
             # Calculate parent video metadata
+            if not self.video_id:
+                self.video_id = await get_file_hash(self.video_path)
+
             # Use original path for duration to be safe, or provided path
             video_duration = await get_video_duration(self.video_path)
 
@@ -106,6 +148,7 @@ class IngestionPipeline:
                     "frame_stacking_grid_size": self.frame_stacking_grid_size,
                 },
                 save_local_report=self.save_local_report,
+                verbosity=self.verbosity,
             )
 
             # Instantiate PipelineRunner

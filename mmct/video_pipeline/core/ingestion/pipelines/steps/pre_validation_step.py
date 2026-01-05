@@ -27,13 +27,13 @@ class PreValidationStep(PipelineStep):
         skip_if_exists = self.get_param("skip_if_exists", context, default=True)
         require_audio = self.get_param("require_audio_when_no_transcript", context, default=True)
 
-        context.logger.info("Running pre-validation checks...")
+        context.logger.debug("Running pre-validation checks...")
 
         # ============================================================
         # CHECK 1: Early Ingestion Check
         # ============================================================
         try:
-            context.logger.info("1. Checking if video already ingested...")
+            context.logger.debug("1. Checking if video already ingested...")
             video_hash_id = await get_file_hash(context.video_path)
 
             is_already_ingested = await check_video_already_ingested(
@@ -58,7 +58,7 @@ class PreValidationStep(PipelineStep):
                     artifacts=[],
                 )
 
-            context.logger.info("✓ Video not found in index, proceeding...")
+            context.logger.debug("✓ Video not found in index, proceeding...")
 
         except Exception as e:
             context.logger.exception(f"Early check failed: {e}")
@@ -72,21 +72,25 @@ class PreValidationStep(PipelineStep):
 
         # Only validate if transcript not provided
         if context.transcript_path:
-            context.logger.info("2. Transcript provided, skipping audio validation")
+            context.logger.debug("2. Transcript provided, skipping audio validation")
             audio_check_skipped = True
         elif not require_audio:
-            context.logger.info("2. Audio validation not required")
+            context.logger.debug("2. Audio validation not required")
             audio_check_skipped = True
         else:
-            context.logger.info("2. Validating video has audio stream...")
+            context.logger.debug("2. Validating video has audio stream...")
             try:
                 # Check for audio stream using ffprobe
                 process = await asyncio.create_subprocess_exec(
                     "ffprobe",
-                    "-v", "error",
-                    "-select_streams", "a:0",
-                    "-show_entries", "stream=codec_type",
-                    "-of", "default=noprint_wrappers=1:nokey=1",
+                    "-v",
+                    "error",
+                    "-select_streams",
+                    "a:0",
+                    "-show_entries",
+                    "stream=codec_type",
+                    "-of",
+                    "default=noprint_wrappers=1:nokey=1",
                     context.video_path,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
@@ -105,7 +109,7 @@ class PreValidationStep(PipelineStep):
                     context.logger.error(error_msg)
                     raise ValueError(error_msg)
 
-                context.logger.info("✓ Video has audio stream")
+                context.logger.debug("✓ Video has audio stream")
 
             except ValueError:
                 raise
@@ -114,7 +118,7 @@ class PreValidationStep(PipelineStep):
                 # Assume has audio if check fails
                 has_audio = True
 
-        context.logger.info("✓ All pre-validation checks passed")
+        context.logger.debug("✓ All pre-validation checks passed")
 
         return StepResult(
             step_id=self.step_id,

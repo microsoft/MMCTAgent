@@ -21,7 +21,7 @@ class CleanupStep(PipelineStep):
         """Execute cleanup."""
         keep_keyframes = self.get_param("keep_keyframes", context, default=False)
 
-        context.logger.info(f"Starting cleanup for video: {context.video_id}")
+        context.logger.debug(f"Starting cleanup for video: {context.video_id}")
 
         try:
             # Create cleanup manager
@@ -30,7 +30,7 @@ class CleanupStep(PipelineStep):
             # Clean up
             await cleanup_manager.cleanup(context.video_id)
 
-            context.logger.info("Cleanup completed successfully")
+            context.logger.debug("Cleanup completed successfully")
 
             return StepResult(
                 step_id=self.step_id,

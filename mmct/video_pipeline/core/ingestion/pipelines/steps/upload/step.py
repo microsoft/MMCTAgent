@@ -21,7 +21,7 @@ class UploadStep(PipelineStep):
 
     async def run(self, context: StepContext) -> StepResult:
         """Execute upload and indexing."""
-        context.logger.info(f"Starting upload and indexing for video: {context.video_id}")
+        context.logger.debug(f"Starting upload and indexing for video: {context.video_id}")
 
         try:
             # Get blob manager
@@ -47,7 +47,7 @@ class UploadStep(PipelineStep):
                 keyframe_blob_url=keyframe_blob_url,
             )
 
-            context.logger.info("Upload and indexing completed successfully")
+            context.logger.debug("Upload and indexing completed successfully")
 
             return StepResult(
                 step_id=self.step_id,

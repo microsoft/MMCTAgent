@@ -20,7 +20,7 @@ class EmbeddingGenerationStep(PipelineStep):
 
     async def run(self, context: StepContext) -> StepResult:
         """Execute embedding generation."""
-        context.logger.info(f"Starting embedding generation for video: {context.video_id}")
+        context.logger.debug(f"Starting embedding generation for video: {context.video_id}")
 
         try:
             # Create orchestrator
@@ -32,7 +32,7 @@ class EmbeddingGenerationStep(PipelineStep):
             # Generate all embeddings in parallel
             await orchestrator.generate_all_embeddings(context.video_id)
 
-            context.logger.info("All embeddings generated successfully")
+            context.logger.debug("All embeddings generated successfully")
 
             return StepResult(
                 step_id=self.step_id,

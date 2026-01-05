@@ -129,7 +129,6 @@ class QueryFrameTool:
         logger.info(f"Processing {len(frame_filenames)} frames directly from storage provider")
 
         # Prepare blob paths
-        folder_name = "keyframes"
         file_paths = [f"{j.split('_')[0]}/{j}" for j in frame_filenames if j is not None]
 
         # Download and encode images directly from storage provider (no disk I/O)
@@ -138,7 +137,9 @@ class QueryFrameTool:
         # Process blobs concurrently - direct blob to base64
         tasks = [
             self.download_and_encode_blob(
-                file_name=file_name, folder_name=folder_name, save_locally=save_frames_locally
+                file_name=file_name,
+                folder_name=self.storage_provider.keyframe_container_name,
+                save_locally=save_frames_locally,
             )
             for file_name in file_paths
         ]

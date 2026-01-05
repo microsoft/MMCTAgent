@@ -17,7 +17,6 @@ class TranscriptionStep(PipelineStep):
 
     Params:
         video_step: Step ID containing video_path (default: "compress")
-        apply_time_offset: Whether to apply time offset for split videos (default: True)
     """
 
     step_type = "ingestion.transcribe"
@@ -32,7 +31,7 @@ class TranscriptionStep(PipelineStep):
         if not video_path:
             video_path = context.video_path
 
-        context.logger.info(f"Transcription step for video: {context.video_id}")
+        context.logger.debug(f"Transcription step for video: {context.video_id}")
 
         try:
             transcript = None
@@ -40,14 +39,16 @@ class TranscriptionStep(PipelineStep):
 
             if context.transcript_path:
                 # Use existing transcript as-is
-                context.logger.info(f"Using provided transcript: {context.transcript_path}")
+                context.logger.debug(f"Using provided transcript: {context.transcript_path}")
                 transcript = await load_srt(context.transcript_path)
                 transcript_path = context.transcript_path
 
             else:
                 # Generate transcription using provider
                 transcription_provider = context.provider.transcription_provider
-                context.logger.info(f"Transcribing with {transcription_provider.__class__.__name__}")
+                context.logger.debug(
+                    f"Transcribing with {transcription_provider.__class__.__name__}"
+                )
 
                 output_dir = await get_media_folder()
 
@@ -67,15 +68,15 @@ class TranscriptionStep(PipelineStep):
                     response_format="srt",
                 )
 
-                context.logger.info("Transcription generated successfully")
-                
+                context.logger.debug("Transcription generated successfully")
+
                 # Extract transcript path from local_paths
                 if transcript and not transcript_path:
-                     # Check if it's in local_paths
-                     for path in local_paths:
-                         if path.endswith(".srt"):
-                             transcript_path = path
-                             break
+                    # Check if it's in local_paths
+                    for path in local_paths:
+                        if path.endswith(".srt"):
+                            transcript_path = path
+                            break
 
             return StepResult(
                 step_id=self.step_id,

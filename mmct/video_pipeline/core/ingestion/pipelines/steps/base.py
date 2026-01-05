@@ -20,6 +20,7 @@ class StepContext:
     url: Optional[str] = None
     transcript_path: Optional[str] = None
     save_local_report: bool = False
+    verbosity: int = 0
 
     # Runtime state
     output_dir: str = ""

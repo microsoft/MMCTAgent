@@ -1,6 +1,7 @@
 import sys
 from loguru import logger
 
+
 class LoggerManager:
     def __init__(self):
         self.console_sink_id = None
@@ -8,9 +9,9 @@ class LoggerManager:
         # Always remove the default handler
         logger.remove()
 
-    def enable_console(self):
+    def enable_console(self, level="INFO"):
         if self.console_sink_id is None:
-            self.console_sink_id = logger.add(sys.stdout, level="INFO", colorize=True)
+            self.console_sink_id = logger.add(sys.stdout, level=level, colorize=True)
 
     def disable_console(self):
         if self.console_sink_id is not None:
@@ -19,5 +20,6 @@ class LoggerManager:
 
     def get_logger(self):
         return logger
+
 
 log_manager = LoggerManager()

@@ -130,7 +130,7 @@ include = ["mmct*", "mcp_server*"]
 exclude = ["tests", "tests.*", "*.tests", "*.tests.*"]
 
 [tool.setuptools.package-data]
-mmct = ["py.typed"]
+mmct = ["py.typed", "**/*.yaml"]
 
 [tool.setuptools.exclude-package-data]
 "*" = ["tests", "tests.*", "*.tests", "*.tests.*"]

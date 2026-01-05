@@ -36,19 +36,27 @@ class CleanupManager:
         Args:
             video_id: Unique identifier for the video
         """
-        logger.info(f"Starting cleanup for video {video_id}")
+        logger.debug(f"Starting cleanup for video {video_id}")
 
         media_folder = await get_media_folder()
 
         # Delete metadata JSON files
-        await self._delete_file(os.path.join(media_folder, "keyframes", video_id, f"keyframe_metadata_{video_id}.json"))
+        await self._delete_file(
+            os.path.join(media_folder, "keyframes", video_id, f"keyframe_metadata_{video_id}.json")
+        )
         await self._delete_file(os.path.join(media_folder, "chapters", f"chapters_{video_id}.json"))
-        await self._delete_file(os.path.join(media_folder, "object_collections", f"object_collection_{video_id}.json"))
+        await self._delete_file(
+            os.path.join(media_folder, "object_collections", f"object_collection_{video_id}.json")
+        )
         await self._delete_file(os.path.join(media_folder, f"transcript_{video_id}.srt"))
 
         # Delete audio files (created during transcription - both .wav and .mp3)
-        await self._delete_file(os.path.join(media_folder, f"{video_id}.wav"))  # CloudTranscription/Azure STT
-        await self._delete_file(os.path.join(media_folder, f"{video_id}.mp3"))  # WhisperTranscription
+        await self._delete_file(
+            os.path.join(media_folder, f"{video_id}.wav")
+        )  # CloudTranscription/Azure STT
+        await self._delete_file(
+            os.path.join(media_folder, f"{video_id}.mp3")
+        )  # WhisperTranscription
 
         # Delete copied video file (video renamed to hash_id during processing)
         await self._delete_file(os.path.join(media_folder, f"{video_id}.mp4"))
@@ -57,7 +65,7 @@ class CleanupManager:
         if not self.keep_keyframes:
             await remove_file(video_id)
 
-        logger.info(f"Cleanup completed for video {video_id}")
+        logger.debug(f"Cleanup completed for video {video_id}")
 
     async def _delete_file(self, file_path: str) -> None:
         """
@@ -69,7 +77,7 @@ class CleanupManager:
         try:
             if os.path.exists(file_path):
                 os.remove(file_path)
-                logger.info(f"Deleted file: {file_path}")
+                logger.debug(f"Deleted file: {file_path}")
             else:
                 logger.debug(f"File not found: {file_path}")
         except Exception as e:
