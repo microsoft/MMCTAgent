@@ -41,7 +41,7 @@ class ChunkWorkItem:
         return max(0.0, self.end - self.start)
 
 
-class SceneLLMChapterGenerationStep:  # Removed PipelineStep inheritance
+class SceneLLMChapterGenerationStep:
     """Generates structured chapters by fusing chunk transcripts with frame evidence."""
 
     description = (
@@ -141,16 +141,6 @@ class SceneLLMChapterGenerationStep:  # Removed PipelineStep inheritance
         except Exception as e:
             logger.error(f"Failed to load keyframe metadata: {e}")
             return []
-
-    def _resolve_frame_path(self, video_id: str, filename: str) -> Optional[Path]:
-        """Resolve absolute path for a keyframe filename."""
-        # Simple/fast resolution logic without excessive checks if possible,
-        # but robust enough to find the file.
-        # We assume base_dir is constant for the process usually?
-        # But helper requires async... wait, helper is async 'get_media_folder'.
-        # We can't call async in sync _prepare_work_items.
-        # We should resolve base_dir in run_direct and pass it down.
-        return None
 
     def _prepare_work_items(
         self,
