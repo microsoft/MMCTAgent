@@ -68,7 +68,7 @@ class WindowSummaryResponse(BaseModel):
     )
 
 
-class ChapterTimelineSummaryStep:  # Removed PipelineStep inheritance for direct usage in wrapper
+class ChapterTimelineSummarizer:  # Removed PipelineStep inheritance for direct usage in wrapper
     """Creates an overlapping, timestamped global summary from detailed chapters."""
 
     description = "Aggregates chapter summaries into ~10 minute windows and crafts a 4k-token global narrative."

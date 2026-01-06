@@ -41,7 +41,7 @@ class ChunkWorkItem:
         return max(0.0, self.end - self.start)
 
 
-class SceneLLMChapterGenerationStep:
+class SceneLLMChapterGenerator:
     """Generates structured chapters by fusing chunk transcripts with frame evidence."""
 
     description = (
@@ -342,9 +342,7 @@ class SceneLLMChapterGenerationStep:
             "produce an exhaustive ChapterCreationResponse describing everything in English."
         )
         if collect_object_collection:
-            system_prompt += (
-                " Track actions, visible text, and every object with detailed appearance/identity."
-            )
+            system_prompt += " Track actions and physical objects with detailed appearance/identity. Capture visible text primarily for the 'text_from_scene' field, NOT as objects."
         else:
             system_prompt += (
                 " Focus on the narrative summary and actions; objects SHOULD be omitted."
@@ -352,7 +350,7 @@ class SceneLLMChapterGenerationStep:
 
         frame_timeline = self._format_frame_timeline(item.frames)
         object_instruction = (
-            "- Populate object_collection with every identifiable entity, including people, objects, text, and background items."
+            "- Populate object_collection ONLY with physical entities (people, animals, distinct objects). EXCLUDE on-screen text, subtitles, and generic background elements (e.g. 'background', 'wall', 'sky') unless critical to the action."
             if collect_object_collection
             else "- Set object_collection to an empty list or null if no structured tracking is needed."
         )

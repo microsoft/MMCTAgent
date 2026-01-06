@@ -4,8 +4,8 @@ from typing import Any, Dict, List, Optional
 from loguru import logger
 from ..base import PipelineStep, StepContext, StepResult
 from ..registry import register_step
-from .llm_scene import SceneLLMChapterGenerationStep
-from .timeline_summary import ChapterTimelineSummaryStep
+from .llm_scene import SceneLLMChapterGenerator
+from .timeline_summary import ChapterTimelineSummarizer
 
 
 @register_step("ingestion.chapters")
@@ -61,7 +61,7 @@ class ChapterGenerationStep(PipelineStep):
             )
 
         # --- 1. Scene LLM Chapter Generation ---
-        scene_llm = SceneLLMChapterGenerationStep(step_id=self.step_id)
+        scene_llm = SceneLLMChapterGenerator(step_id=self.step_id)
 
         step_params = {
             "max_parallel_requests": max_concurrent_requests,
@@ -82,7 +82,7 @@ class ChapterGenerationStep(PipelineStep):
         if collect_object_collection:
             # --- 2. Timeline Summary Generation ---
             logger.debug("Generating timeline summary.")
-            timeline_summary_step = ChapterTimelineSummaryStep()
+            timeline_summary_step = ChapterTimelineSummarizer()
 
             timeline_summary_result = await timeline_summary_step.run_direct(
                 chapters=raw_chapters,

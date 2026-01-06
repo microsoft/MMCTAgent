@@ -52,7 +52,7 @@ class ObjectEnrichmentConfig:
     min_chunk_occurrences: int
 
 
-class ChapterContextEnrichmentStep:  # Removed PipelineStep inheritance
+class ChapterContextEnricher:  # Removed PipelineStep inheritance
     """Enriches per-chunk chapters using limited prior context."""
 
     description = "Sequentially refines chapter summaries/actions using a sliding contextual window from prior chapters."
@@ -153,7 +153,6 @@ class ChapterContextEnrichmentStep:  # Removed PipelineStep inheritance
         if isinstance(obj_params, dict):
             if not str(obj_params.get("enabled", "true")).lower() == "true":
                 return None
-
 
         return ObjectEnrichmentConfig(
             llm_request_options=dict(obj_params.get("llm_request_options", {}) or {}),
