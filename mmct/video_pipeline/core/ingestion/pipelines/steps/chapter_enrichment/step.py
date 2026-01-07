@@ -17,9 +17,9 @@ from mmct.video_pipeline.utils.helper import get_media_folder
 
 from .context_enricher import (
     ChapterRecord,
-    ChapterContextEnrichmentStep,
+    ChapterContextEnricher,
 )
-from .segmented_context_enricher import SegmentedChapterContextEnrichmentStep
+from .segmented_context_enricher import SegmentedChapterContextEnricher
 
 
 @register_step("ingestion.chapter_enrichment")
@@ -88,14 +88,14 @@ class ChapterEnrichmentStep(PipelineStep):
                 logger.debug(
                     f"Using Segmented Enrichment (segments={segmented_config.get('segment_count')})"
                 )
-                enricher = SegmentedChapterContextEnrichmentStep()
+                enricher = SegmentedChapterContextEnricher()
                 enriched_chapters_payload, object_payload = await enricher.run_direct(
                     records=enrichment_records,
                     llm_provider=context.provider.llm_provider,
                     params=step_params,
                 )
             else:
-                enricher = ChapterContextEnrichmentStep()
+                enricher = ChapterContextEnricher()
                 enriched_chapters_payload, object_payload = await enricher.run_direct(
                     records=enrichment_records,
                     llm_provider=context.provider.llm_provider,

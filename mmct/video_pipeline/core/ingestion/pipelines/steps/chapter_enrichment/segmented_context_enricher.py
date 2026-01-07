@@ -14,7 +14,7 @@ from mmct.providers.base.llm_provider import BaseLLMProvider
 from mmct.video_pipeline.core.ingestion.models import ChapterCreationResponse
 
 from .context_enricher import (
-    ChapterContextEnrichmentStep,
+    ChapterContextEnricher,
     ChapterRecord,
     ObjectEnrichmentConfig,
 )
@@ -45,7 +45,7 @@ class SegmentResult:
     chapters: List[EnrichedChapterData]
 
 
-class SegmentedChapterContextEnrichmentStep(ChapterContextEnrichmentStep):
+class SegmentedChapterContextEnricher(ChapterContextEnricher):
     """Runs enrichment in parallel segments, then smooths boundaries."""
 
     description = (

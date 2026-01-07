@@ -41,7 +41,7 @@ class ChunkWorkItem:
         return max(0.0, self.end - self.start)
 
 
-class SceneLLMChapterGenerationStep:  # Removed PipelineStep inheritance
+class SceneLLMChapterGenerator:
     """Generates structured chapters by fusing chunk transcripts with frame evidence."""
 
     description = (
@@ -141,16 +141,6 @@ class SceneLLMChapterGenerationStep:  # Removed PipelineStep inheritance
         except Exception as e:
             logger.error(f"Failed to load keyframe metadata: {e}")
             return []
-
-    def _resolve_frame_path(self, video_id: str, filename: str) -> Optional[Path]:
-        """Resolve absolute path for a keyframe filename."""
-        # Simple/fast resolution logic without excessive checks if possible,
-        # but robust enough to find the file.
-        # We assume base_dir is constant for the process usually?
-        # But helper requires async... wait, helper is async 'get_media_folder'.
-        # We can't call async in sync _prepare_work_items.
-        # We should resolve base_dir in run_direct and pass it down.
-        return None
 
     def _prepare_work_items(
         self,
@@ -352,9 +342,7 @@ class SceneLLMChapterGenerationStep:  # Removed PipelineStep inheritance
             "produce an exhaustive ChapterCreationResponse describing everything in English."
         )
         if collect_object_collection:
-            system_prompt += (
-                " Track actions, visible text, and every object with detailed appearance/identity."
-            )
+            system_prompt += " Track actions and physical objects with detailed appearance/identity. Capture visible text primarily for the 'text_from_scene' field, NOT as objects."
         else:
             system_prompt += (
                 " Focus on the narrative summary and actions; objects SHOULD be omitted."
@@ -362,7 +350,7 @@ class SceneLLMChapterGenerationStep:  # Removed PipelineStep inheritance
 
         frame_timeline = self._format_frame_timeline(item.frames)
         object_instruction = (
-            "- Populate object_collection with every identifiable entity, including people, objects, text, and background items."
+            "- Populate object_collection ONLY with physical entities (people, animals, distinct objects). EXCLUDE on-screen text, subtitles, and generic background elements (e.g. 'background', 'wall', 'sky') unless critical to the action."
             if collect_object_collection
             else "- Set object_collection to an empty list or null if no structured tracking is needed."
         )

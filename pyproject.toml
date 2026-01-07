@@ -97,6 +97,7 @@ video-agent = [
     "azure-monitor-opentelemetry-exporter>=1.0.0b33",
     "azure-eventhub>=5.14.0,<6.0.0",
     "azure-eventhub-checkpointstoreblob-aio",
+    "scenedetect>=0.6.0,<1.0.0",
 ]
 
 # Complete installation (all features including MCP server)

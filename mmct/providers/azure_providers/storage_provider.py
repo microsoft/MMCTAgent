@@ -9,6 +9,7 @@ from typing import Dict, Any, Union, Optional
 from mmct.providers.base import BaseStorageProvider
 from azure.core.credentials import AzureKeyCredential
 from azure.core.credentials_async import AsyncTokenCredential
+from azure.core.exceptions import ResourceExistsError
 from mmct.utils.error_handler import handle_exceptions, convert_exceptions
 from mmct.utils.error_handler import ProviderException, ConfigurationException
 
@@ -139,8 +140,11 @@ class AzureStorageProvider(BaseStorageProvider):
             container_client = self.service_client.get_container_client(folder_name)
             if not await container_client.exists():
                 logger.info(f"Container {folder_name} does not exist. Creating it...")
-                await container_client.create_container()
-                logger.info(f"Successfully created container: {folder_name}")
+                try:
+                    await container_client.create_container()
+                    logger.info(f"Successfully created container: {folder_name}")
+                except ResourceExistsError:
+                    logger.info(f"Container {folder_name} already exists.")
 
             client = self.service_client.get_blob_client(container=folder_name, blob=file_name)
             async with aiofiles.open(src_file_path, "rb") as f:
