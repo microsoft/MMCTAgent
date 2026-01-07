@@ -32,7 +32,6 @@ class PreValidationStep(PipelineStep):
         # ============================================================
         try:
             context.logger.debug("1. Checking if video already ingested...")
-            # User request: strictly use context.video_id, no internal generation
 
             is_already_ingested = await check_video_already_ingested(
                 hash_id=context.video_id,
