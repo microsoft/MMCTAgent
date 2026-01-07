@@ -3,7 +3,6 @@
 import asyncio
 from .base import PipelineStep, StepContext, StepResult
 from .registry import register_step
-from mmct.video_pipeline.utils.helper import get_file_hash
 from mmct.video_pipeline.core.ingestion.utils.helper import check_video_already_ingested
 
 
@@ -15,7 +14,6 @@ class PreValidationStep(PipelineStep):
     2. Validates audio stream exists (if needed)
 
     Params:
-        skip_if_exists: Skip processing if video already exists (default: True)
         require_audio_when_no_transcript: Require audio when transcript not provided (default: True)
     """
 
@@ -24,7 +22,7 @@ class PreValidationStep(PipelineStep):
 
     async def run(self, context: StepContext) -> StepResult:
         """Execute pre-validation checks."""
-        skip_if_exists = self.get_param("skip_if_exists", context, default=True)
+
         require_audio = self.get_param("require_audio_when_no_transcript", context, default=True)
 
         context.logger.debug("Running pre-validation checks...")
@@ -34,16 +32,16 @@ class PreValidationStep(PipelineStep):
         # ============================================================
         try:
             context.logger.debug("1. Checking if video already ingested...")
-            video_hash_id = await get_file_hash(context.video_path)
+            # User request: strictly use context.video_id, no internal generation
 
             is_already_ingested = await check_video_already_ingested(
-                hash_id=video_hash_id,
+                hash_id=context.video_id,
                 search_provider=context.provider.vectordb_chapter,
             )
 
-            if is_already_ingested and skip_if_exists:
+            if is_already_ingested:
                 context.logger.info(
-                    f"Video {video_hash_id} already ingested. Pipeline will be skipped."
+                    f"Video {context.video_id} already ingested. Pipeline will be skipped."
                 )
                 # Return early with should_continue=False to gracefully end pipeline
                 return StepResult(
