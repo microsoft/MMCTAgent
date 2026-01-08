@@ -67,9 +67,6 @@ pipeline:
         chapters_step: "chapters"
         collect_object_collection:
           enabled: false
-          min_screen_time_seconds: 5.0
-          max_active_context: 20
-          min_chunk_occurrences: 1
         segmented_enrichment: #Enable for long videos
           enabled: false
           segment_count: 5
