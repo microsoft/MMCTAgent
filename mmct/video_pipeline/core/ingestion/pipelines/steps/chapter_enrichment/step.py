@@ -135,7 +135,9 @@ class ChapterEnrichmentStep(PipelineStep):
 
             # Serialize object_collection if present
             obj_json = "[]"
-            if chap_model.object_collection:
+            if not collect_object_collection:
+                obj_json = "object collection for this video is not available"
+            elif chap_model.object_collection:
                 try:
                     obj_json = json.dumps([o.model_dump() for o in chap_model.object_collection])
                 except Exception:
@@ -176,7 +178,8 @@ class ChapterEnrichmentStep(PipelineStep):
 
         # Save Object Collection
         object_collection_path = None
-        if object_payload:
+        # Persist object collection file if objects or video summary are present.
+        if object_payload or video_summary:
             object_collections_dir = os.path.join(media_folder, "object_collections")
             os.makedirs(object_collections_dir, exist_ok=True)
             object_collection_path = os.path.join(
@@ -184,7 +187,11 @@ class ChapterEnrichmentStep(PipelineStep):
             )
 
             raw_objects = object_payload.get("object_collection", [])
-            objects_json_str = json.dumps(raw_objects) if raw_objects else "[]"
+
+            if not collect_object_collection:
+                objects_json_str = "object collection for this video is not available"
+            else:
+                objects_json_str = json.dumps(raw_objects) if raw_objects else "[]"
 
             metadata_dict = {
                 "video_id": context.video_id,
