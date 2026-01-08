@@ -1,0 +1,94 @@
+pipeline:
+  name: "no_object_collection_ingestion"
+  mode: "sequential"
+
+  steps:
+    # Step 1: Pre-validation (early check + audio validation combined)
+    - id: "pre_validation"
+      type: "ingestion.pre_validation"
+      params:
+        skip_if_exists: true
+        require_audio_when_no_transcript: true
+
+    # Step 2: Compress video
+    - id: "compress"
+      type: "ingestion.compress"
+      params:
+        max_size_mb: 500
+        target_size_mb: 500
+        device: "cuda"
+
+    # Step 3: Transcribe video or use provided transcript
+    - id: "transcribe"
+      type: "ingestion.transcribe"
+      params:
+        video_step: "compress" # Explicitly state input source
+
+
+    # Step 4: Video Chunking
+    # "transcript" strategy performs inline semantic clustering
+    # "scene" strategy uses scene detection
+    - id: "video_chunking"
+      type: "ingestion.video_chunking"
+      params:
+        chunking_strategy: "transcript"
+        transcript_step: "transcribe"
+        compress_step: "compress"
+        scene_settings: # these are the scene detection parameters
+          min_scene_length: 50.0  # Minimum length of a scene in seconds
+          threshold: 60.0        # Scene detection threshold (higher = fewer scenes)
+          max_scene_length: 600.0 # Maximum scene length (prevents artificial splitting)
+
+    # Step 6: Extract keyframes from full compressed video
+    - id: "keyframes"
+      type: "ingestion.keyframes"
+      params:
+        source_step: "compress"
+        motion_threshold: 1.5
+        max_frame_width: 800
+        sample_fps: 2
+        device: "cuda"
+
+    # Step 7: Generate chapters from transcript and keyframes per chunk
+    - id: "chapters"
+      type: "ingestion.chapters"
+      params:
+        transcript_step: "transcribe"
+        keyframes_step: "keyframes"
+        video_chunking_step: "video_chunking"
+        max_concurrent_requests: 3
+        collect_object_collection: false
+        max_frames_per_chapter: 14
+
+    # Step 8: Enrich chapters and generate summaries
+    - id: "chapter_enrichment"
+      type: "ingestion.chapter_enrichment"
+      params:
+        chapters_step: "chapters"
+        collect_object_collection:
+          enabled: false
+        segmented_enrichment: #Enable for long videos
+          enabled: false
+          segment_count: 5
+          boundary_window: 2
+
+    # Step 9: Generate embeddings
+    - id: "embeddings"
+      type: "ingestion.embeddings"
+      params:
+        chapters_step: "chapter_enrichment"
+        keyframes_step: "keyframes"
+
+    # Step 10: Upload files and index data
+    - id: "upload"
+      type: "ingestion.upload"
+      params:
+        chapters_step: "chapter_enrichment"
+        keyframes_step: "keyframes"
+        embeddings_step: "embeddings"
+
+    # Step 10: Cleanup temporary files
+    - id: "cleanup"
+      type: "ingestion.cleanup"
+      params:
+        keep_keyframes: false

@@ -4,18 +4,22 @@ from dotenv import load_dotenv, find_dotenv
 
 load_dotenv(find_dotenv())
 
+
 class GetVideoSummaryTool:
-    def __init__(self, vectordb_object_registry:BaseObjectCollectionVectorDBProvider, embed_provider:BaseEmbeddingProvider):
+    def __init__(
+        self,
+        vectordb_object_registry: BaseObjectCollectionVectorDBProvider,
+        embed_provider: BaseEmbeddingProvider,
+    ):
         self.vectordb_object_registry = vectordb_object_registry
         self.embed_provider = embed_provider
-        
+
     async def get_video_summary(
         self,
         query: Annotated[str, "query to search for related video summaries"],
-        index_name: Annotated[str, "name of the search index provided in the user query"],
         video_id: Annotated[Optional[str], "unique identifier for the video aka hash Id"] = None,
         url: Annotated[Optional[str], "url of the video"] = None,
-        top: Annotated[Optional[int], "number of top results to retrieve (max 3)"] = 3
+        top: Annotated[Optional[int], "number of top results to retrieve (max 3)"] = 3,
     ) -> List[Dict[str, Any]]:
         """
         Description:
@@ -30,7 +34,7 @@ class GetVideoSummaryTool:
 
         Input Parameters:
             - query (str): query to search for related video summaries, this is mandatory field
-            - index_name (str): Name of the search index
+
             - video_id (Optional[str]): Unique identifier for the video (use if available, otherwise omit)
             - url (Optional[str]): URL of the video (use if available, otherwise omit)
             - top: Number of top results to retrieve
@@ -47,9 +51,9 @@ class GetVideoSummaryTool:
             # Build filter conditions
             filter_conditions = dict()
             if url:
-                filter_conditions['url'] = {'eq': url}
+                filter_conditions["url"] = {"eq": url}
             elif video_id:
-                filter_conditions['video_id'] = {'eq': video_id}
+                filter_conditions["video_id"] = {"eq": video_id}
 
             # Search for video summary matching the filter
             results = await self.vectordb_object_registry.search(
@@ -58,20 +62,19 @@ class GetVideoSummaryTool:
                 filter=filter_conditions,
                 query_type="semantic",
                 top=top,
-                embedding=embedding
+                embedding=embedding,
             )
 
-            fields_to_retrieve=['video_summary','video_id','url']
+            fields_to_retrieve = ["video_summary", "video_id", "url"]
             results_with_scores = []
             for document, score in results:
                 doc_dict = document.model_dump()
 
                 # Only include fields specified by the user
                 filtered_dict = {
-                    field: doc_dict.get(field) for field in fields_to_retrieve
-                    if field in doc_dict
+                    field: doc_dict.get(field) for field in fields_to_retrieve if field in doc_dict
                 }
-                filtered_dict['@search.score'] = score
+                filtered_dict["@search.score"] = score
                 results_with_scores.append(filtered_dict)
 
             return results_with_scores
@@ -89,15 +92,13 @@ if __name__ == "__main__":
 
     async def main():
         # Example usage
-        index_name = "<index-name>"
+
         video_id = "<hash-video-id>"
         query = "<sample-query>"
         get_video_summary_tool_object = GetVideoSummaryTool()
         print(f"Fetching video summary for video_id: {video_id}")
         summary = await get_video_summary_tool_object.get_video_summary(
-            query=query,
-            index_name=index_name,
-            video_id=video_id
+            query=query, video_id=video_id
         )
         print(summary)
 

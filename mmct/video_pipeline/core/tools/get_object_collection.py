@@ -63,6 +63,10 @@ class GetObjectCollection:
 
                 # Parse the object_collection JSON string
                 object_collection_str = doc_dict.get("object_collection", "[]")
+
+                if object_collection_str == "object collection for this video is not available":
+                    return [{"error": "object collection for this video is not available"}]
+
                 try:
                     object_collection = json.loads(object_collection_str)
                 except json.JSONDecodeError:
