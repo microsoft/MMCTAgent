@@ -25,6 +25,7 @@ dependencies = [
     # Web Framework & API
     "fastapi>=0.115.0,<1.0.0",
     "uvicorn[standard]>=0.32.0,<1.0.0",
+    "oss2==2.19.1",
     "python-multipart>=0.0.20,<1.0.0",
 
     # Data Validation & Configuration
@@ -127,7 +128,7 @@ docs = [
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["mmct*", "mcp_server*"]
+include = ["mmct*", "mcp_server*", "app*"]
 exclude = ["tests", "tests.*", "*.tests", "*.tests.*"]
 
 [tool.setuptools.package-data]
