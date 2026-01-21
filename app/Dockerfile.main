@@ -12,9 +12,12 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONPATH=/app:/app/app
 
-# Create non-root user for security
-RUN groupadd -r appuser && useradd -r -g appuser appuser
+# Create non-root user for security (ensure home directory is created)
+RUN groupadd -r appuser && useradd -r -g appuser -m -d /home/appuser appuser
 RUN chown -R appuser:appuser /app /app/media /app/logs
+
+# Set HOME explicitly to ensure cache directories work correctly
+ENV HOME=/home/appuser
 USER appuser
 
 # Health check
