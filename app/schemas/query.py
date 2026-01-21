@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field, field_validator
 from mmct.image_pipeline import ImageQnaTools
+from typing import Optional
 
 class ImageQueryRequest(BaseModel):
     query: str = Field(..., min_length=1, example="Describe the image")
@@ -47,9 +48,29 @@ class ImageQueryRequest(BaseModel):
     }
 
 class VideoQueryRequest(BaseModel):
-    query: str
-    index_name: str
-    top_n: int = Field(..., ge=1)
-    use_computer_vision_tool: bool
-    use_critic_agent: bool
-    stream: bool
+    """Request schema for video query operations."""
+    query: str = Field(..., min_length=1, description="Natural language query about the video")
+    video_id: Optional[str] = Field(None, description="Optional unique identifier for the video")
+    url: Optional[str] = Field(None, description="URL of the video (YouTube URL or other video source)")
+    use_critic_agent: bool = Field(default=True, description="Enable critic agent for response validation")
+    stream: bool = Field(default=False, description="Enable streaming response")
+    cache: bool = Field(default=False, description="Enable caching for faster repeated queries")
+    
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "summary": "Simple video query",
+                    "description": "Query a YouTube video",
+                    "value": {
+                        "query": "What is the main topic of this video?",
+                        "video_id": "dQw4w9WgXcQ",
+                        "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                        "use_critic_agent": True,
+                        "stream": False,
+                        "cache": False
+                    }
+                }
+            ]
+        }
+    }
