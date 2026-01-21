@@ -10,8 +10,8 @@ router = APIRouter()
     description="Upload an image and specify which tools to run. Tools: object_detection, ocr, recog, vit.",
 )
 async def query_images(file: UploadFile = File(...), data: ImageQueryRequest = Depends()):
-    return {"result": await process_image_query(file, data.model_dump())}
+    return await process_image_query(file, data.model_dump())
 
 @router.post("/query-on-videos")
 async def query_videos(data: VideoQueryRequest = Depends()):
-    return {"result": await process_video_query(data.model_dump())}
+    return await process_video_query(data.model_dump())
