@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, UploadFile, File
-from schemas.ingestion import IngestionRequest
-from services.ingestion_services import ingest_direct, ingest_queue
+from app.schemas.ingestion import IngestionRequest
+from app.services.ingestion_services import ingest_direct, ingest_queue
 
 router = APIRouter()
 

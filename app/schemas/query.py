@@ -74,3 +74,27 @@ class VideoQueryRequest(BaseModel):
             ]
         }
     }
+
+class UnifiedQueryRequest(BaseModel):
+    """Request schema for V2 unified query operations."""
+    query: str = Field(..., min_length=1, description="Natural language query")
+    video_id: Optional[str] = Field(None, description="Optional video ID")
+    url: Optional[str] = Field(None, description="Optional video URL")
+    use_critic_agent: bool = Field(default=True, description="Enable critic agent")
+    stream: bool = Field(default=False, description="Enable streaming")
+    cache: bool = Field(default=False, description="Enable caching")
+    
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "summary": "Unified query",
+                    "value": {
+                        "query": "What is in this video/image?",
+                        "video_id": "123",
+                        "use_critic_agent": True
+                    }
+                }
+            ]
+        }
+    }

@@ -3,9 +3,9 @@ from fastapi import HTTPException, UploadFile
 from loguru import logger
 from mmct.video_pipeline import IngestionPipeline
 from mmct.video_pipeline.utils.helper import get_file_hash, remove_file
-from utilities.event_hub_handler import EventHubHandler
+from app.utilities.event_hub_handler import EventHubHandler
 from dotenv import load_dotenv
-from config import get_ingestion_provider
+from app.config import get_ingestion_provider
 
 load_dotenv(override=True)
 

@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
-from routers import query, ingestion
+from app.routers import query, ingestion
 
 app = FastAPI(
     title="MMCT Agent API",
