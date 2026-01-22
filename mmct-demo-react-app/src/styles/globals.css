@@ -1,0 +1,164 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Base styles */
+:root {
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  @apply bg-slate-950 text-slate-200;
+  min-height: 100vh;
+}
+
+/* Custom animations */
+@keyframes dash-flow {
+  0% {
+    stroke-dashoffset: 20;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+.animate-dash-flow {
+  animation: dash-flow 0.8s linear infinite;
+}
+
+@keyframes fade-in-up {
+  0% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.4s ease-out forwards;
+}
+
+@keyframes scale-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-scale-in {
+  animation: scale-in 0.2s ease-out forwards;
+}
+
+@keyframes slide-in-right {
+  0% {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 0.25s ease-out forwards;
+}
+
+/* Prose styling for markdown */
+.prose {
+  @apply leading-relaxed;
+}
+
+.prose p {
+  @apply mb-3;
+}
+
+.prose strong {
+  @apply font-semibold text-white;
+}
+
+.prose ul, .prose ol {
+  @apply pl-5 mb-3;
+}
+
+.prose li {
+  @apply mb-1;
+}
+
+.prose code {
+  @apply bg-white/10 px-1.5 py-0.5 rounded text-sm font-mono text-purple-300;
+}
+
+.prose pre {
+  @apply bg-slate-900/80 text-slate-100 p-4 rounded-xl overflow-x-auto mb-4 border border-white/10;
+}
+
+.prose pre code {
+  @apply bg-transparent p-0;
+}
+
+/* Dark prose variant for chat */
+.prose-invert strong {
+  @apply text-white;
+}
+
+.prose-invert code {
+  @apply bg-white/10 text-purple-300;
+}
+
+.prose-invert a {
+  @apply text-purple-400 hover:text-purple-300;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-slate-800/50 rounded-full;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-slate-600 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-slate-500;
+}
+
+/* Focus styles */
+input:focus, button:focus, textarea:focus {
+  @apply outline-none;
+}
+
+/* Selection */
+::selection {
+  @apply bg-purple-500/30;
+}
+
+/* Fade in animation variant */
+@keyframes fade-in {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out forwards;
+}
