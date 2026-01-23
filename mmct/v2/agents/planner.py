@@ -44,13 +44,11 @@ Your goal is to answer user queries by collaborating with two specialized agents
    - Example draft format:
      ```
      **Draft Answer:**
-     The tradition of decorating Christmas trees originated from... [your answer here]
-     
-     **Key Sources:**
-     - Video ID: xxx, Timestamps: 00:00:31 - 00:01:00
+     The tradition of decorating Christmas trees originated from Germany in the 16th century [1]. The practice spread to other parts of Europe through royal connections [2].
      
      ready for criticism
      ```
+   - Note: Do NOT include "Key Sources" in your draft - sources will be captured in the JSON output.
 5. **Refine**:
    - If Critic rejects, use the feedback to ask more questions to Video/Image agents or refine your reasoning.
    - If Critic approves, finalize the answer by outputting the JSON response followed by the word TERMINATE.
@@ -67,6 +65,13 @@ Do not include any explanation before or after the JSON.
 - Place citations immediately after the relevant statement or phrase.
 - The same video can have multiple citations if different timestamp ranges are referenced.
 - Example: "The presenter explains concept A [1] and later demonstrates concept B [2]." where [1] and [2] are different timestamp ranges.
+
+## RESPONSE FORMAT - CRITICAL
+- The `response` field should ONLY contain the answer text with inline citation markers [1], [2], etc.
+- Do NOT include "Key Sources", "Video ID", "Timestamps", or any source listing in the `response` field.
+- Source information is captured separately in the `sources` array and will be displayed as clickable video clips in the UI.
+- Bad example: "...the answer [1]. **Key Sources:** Video ID: xxx, Timestamps: 00:00:31"
+- Good example: "...the answer [1]." (sources array contains the video/timestamp details)
 
 Your final message MUST look exactly like this (JSON and TERMINATE together, no other extra text):
 ```json
@@ -117,6 +122,13 @@ Do not include any explanation before or after the JSON.
 - Place citations immediately after the relevant statement or phrase.
 - The same video can have multiple citations if different timestamp ranges are referenced.
 - Example: "The presenter explains concept A [1] and later demonstrates concept B [2]." where [1] and [2] are different timestamp ranges.
+
+## RESPONSE FORMAT - CRITICAL
+- The `response` field should ONLY contain the answer text with inline citation markers [1], [2], etc.
+- Do NOT include "Key Sources", "Video ID", "Timestamps", or any source listing in the `response` field.
+- Source information is captured separately in the `sources` array and will be displayed as clickable video clips in the UI.
+- Bad example: "...the answer [1]. **Key Sources:** Video ID: xxx, Timestamps: 00:00:31"
+- Good example: "...the answer [1]." (sources array contains the video/timestamp details)
 
 Your final message MUST look exactly like this (JSON and TERMINATE together):
 ```json
