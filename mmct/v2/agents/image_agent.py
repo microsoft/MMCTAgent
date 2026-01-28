@@ -12,13 +12,43 @@ from mmct.providers.base import BaseStorageProvider
 from loguru import logger
 
 IMAGE_WORKER_SYSTEM_PROMPT = """
-You are an Image Analysis Agent. Your goal is to analyze specific images or video frames provided by the Planner.
-You have access to tools for visual analysis, object detection, OCR, and recognition.
+You are the **ImageAgent** in a multi-agent Video QA system. The Planner delegates image/frame analysis to you.
 
-When answering:
-1. Analyze the image at the provided path (can be a local path or blob path like "video_id/frame_name.jpg").
-2. Answer the specific question asked about the image.
-3. Be precise and factual.
+# CAPABILITIES
+- `analyze_image_with_vit`: Answer visual questions about an image (PRIMARY TOOL)
+- `detect_objects`: Detect and list objects in the image
+- `perform_ocr`: Extract text from the image
+- `recognize_entities`: Recognize specific entities/details
+
+# WORKFLOW
+
+## Step 1: Receive Task
+You will receive blob URLs from Planner along with a specific question.
+
+## Step 2: Call Tools (Batch ALL in ONE response)
+- For visual questions → `analyze_image_with_vit`
+- For text extraction → `perform_ocr`
+- For object listing → `detect_objects`
+- **Call tools for ALL images in a SINGLE response**
+
+## Step 3: Summarize & Handoff (CRITICAL)
+After receiving ALL tool results, provide ONE concise summary:
+```
+**Visual Analysis Results:**
+- [Finding from image 1]
+- [Finding from image 2]
+
+**Answer:** [Direct answer to Planner's question]
+```
+Then IMMEDIATELY handoff to planner.
+
+# RULES - CRITICAL
+1. **ONE analysis per image** - NEVER re-analyze the same image with the same tool
+2. **Batch tool calls** - Call tools for ALL images in ONE response
+3. **Handoff immediately** - After summarizing, handoff to planner. Do NOT call more tools.
+4. **NO LOOPS** - If you have already analyzed an image, do NOT analyze it again
+5. **Be concise** - Summarize findings briefly and answer Planner's question directly
+6. **Single response** - After tool results, give ONE summary then handoff. No iterating.
 """
 
 class ImageAgent:
@@ -137,7 +167,7 @@ class ImageAgent:
 
     def _create_tool_wrappers(self):
         
-        async def analyze_image_with_vit(image_path: Annotated[str, "Path to the image/frame (local path or blob path like 'video_id/frame.jpg')"], query: Annotated[str, "Question about the image"]) -> str:
+        async def analyze_image_with_vit(image_path: Annotated[str, "Path to the image/frame (local path or blob path"], query: Annotated[str, "Question about the image"]) -> str:
             """
             Analyzes an image using Vision Transformer (ViT) to answer a specific query.
             Downloads the frame from blob storage if needed.
@@ -183,6 +213,6 @@ class ImageAgent:
             description="Agent that can analyze images using Vision tools.",
             system_message=IMAGE_WORKER_SYSTEM_PROMPT,
             tools=self.tools,
-            reflect_on_tool_use=True,
+            reflect_on_tool_use=False,  # Wait for ALL batch results before responding
             handoffs=["planner"],
         )

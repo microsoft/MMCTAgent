@@ -29,6 +29,60 @@ VIDEO_AGENT_BUFFER_SIZE = 12  # Needs context for tool selection
 IMAGE_AGENT_BUFFER_SIZE = 10  # Needs context for image analysis
 
 _TERMINATE_STRING = "TERMINATE"
+_MAX_MESSAGES_TO_SEARCH = 3  # Maximum messages to search backwards for JSON
+
+
+def _extract_json_content_from_messages(messages: list, max_search: int = _MAX_MESSAGES_TO_SEARCH) -> str | None:
+    """
+    Search backwards through recent messages to find JSON content.
+    
+    The planner sometimes sends JSON and TERMINATE in separate messages,
+    or includes preamble text before the JSON block.
+    This function searches backwards (up to max_search messages) to find
+    a message containing valid JSON content and extracts just the JSON.
+    
+    Args:
+        messages: List of messages from the task result
+        max_search: Maximum number of messages to search backwards
+        
+    Returns:
+        The JSON content string if found, None otherwise
+    """
+    if not messages:
+        return None
+    
+    # Search backwards through the last N messages
+    search_range = min(max_search, len(messages))
+    
+    for i in range(1, search_range + 1):
+        msg = messages[-i]
+        content = getattr(msg, 'content', '')
+        if not content or not isinstance(content, str):
+            continue
+        
+        cleaned = content.strip()
+        
+        # Check for ```json code block (may have text before/after)
+        if '```json' in cleaned:
+            # Extract content between ```json and ```
+            start_idx = cleaned.find('```json') + len('```json')
+            end_idx = cleaned.find('```', start_idx)
+            if end_idx != -1:
+                json_str = cleaned[start_idx:end_idx].strip()
+                return json_str
+        
+        # Check for raw JSON object (starts with { somewhere in the content)
+        brace_idx = cleaned.find('{')
+        if brace_idx != -1:
+            # Find the matching closing brace
+            potential_json = cleaned[brace_idx:]
+            # Remove any TERMINATE at the end
+            potential_json = potential_json.rstrip().rstrip(_TERMINATE_STRING).rstrip()
+            if potential_json.endswith('}'):
+                return potential_json
+    
+    return None
+
 
 async def process_query_v2(
     query: str,
@@ -129,8 +183,14 @@ async def process_query_v2(
         image_agent_wrapper.cleanup()
         
         if final_result:
+            # Search backwards through messages to find JSON content
+            json_content = _extract_json_content_from_messages(final_result.messages)
+            if json_content is None:
+                logger.warning("Could not find JSON content in last {} messages".format(_MAX_MESSAGES_TO_SEARCH))
+                json_content = "Error: Could not find valid JSON response in agent messages"
+            
             return {
-                "content": final_result.messages[-1].content.strip(_TERMINATE_STRING),
+                "content": json_content,
                 "token_usage": {
                     "prompt_tokens": total_prompt_tokens,
                     "completion_tokens": total_completion_tokens
@@ -151,8 +211,14 @@ async def process_query_v2(
             total_prompt_tokens += msg.models_usage.prompt_tokens
             total_completion_tokens += msg.models_usage.completion_tokens
     
+    # Search backwards through messages to find JSON content
+    json_content = _extract_json_content_from_messages(result.messages)
+    if json_content is None:
+        logger.warning("Could not find JSON content in last {} messages".format(_MAX_MESSAGES_TO_SEARCH))
+        json_content = "Error: Could not find valid JSON response in agent messages"
+    
     return {
-        "content": result.messages[-1].content.strip(_TERMINATE_STRING),
+        "content": json_content,
         "token_usage": {
             "prompt_tokens": total_prompt_tokens,
             "completion_tokens": total_completion_tokens
