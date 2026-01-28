@@ -5,6 +5,8 @@ from datetime import datetime
 from fastapi import HTTPException, UploadFile
 from mmct.image_pipeline import ImageAgent, ImageQnaTools
 from mmct.video_pipeline import VideoAgent
+from mmct.v2.schemas import V2AgentResponse
+from pydantic import ValidationError
 from loguru import logger
 from app.config import get_video_agent_provider, get_image_agent_provider
 from autogen_agentchat.base import TaskResult
@@ -189,6 +191,54 @@ async def process_video_query(body: dict):
         raise HTTPException(500, f"Video processing failed: {str(e)}")
 
 
+def _create_error_response(error_message: str) -> dict:
+    """Create a standardized error response using V2AgentResponse model."""
+    return V2AgentResponse(
+        response=error_message,
+        answer_found=False,
+        sources=[]
+    ).model_dump()
+
+
+def _clean_json_content(content: str) -> str:
+    """Remove markdown code blocks and TERMINATE from JSON content."""
+    return content.replace("```json", "").replace("```", "").replace("TERMINATE", "").strip()
+
+
+def _parse_final_result(final_result: dict) -> dict:
+    """Parse the final result content into V2AgentResponse format."""
+    content = final_result.get("content", "")
+    if not content:
+        return _create_error_response("No content in final result")
+    
+    try:
+        # Handle case where content is already a dict (pre-parsed)
+        if isinstance(content, dict):
+            parsed_dict = content
+        else:
+            # Content is a string, clean and parse it
+            clean_content = _clean_json_content(content)
+            parsed_dict = json.loads(clean_content)
+        
+        return V2AgentResponse(**parsed_dict).model_dump()
+    except (json.JSONDecodeError, ValidationError, Exception) as e:
+        logger.warning(f"Could not parse final result JSON: {e}")
+        # Handle error case - content might be dict or string
+        if isinstance(content, dict):
+            # If content is already a valid V2AgentResponse-like dict, return it
+            if "response" in content and isinstance(content.get("response"), str):
+                return content
+            error_msg = content.get("response", str(content)) if isinstance(content.get("response"), str) else str(content)
+        else:
+            error_msg = str(content)
+        
+        return V2AgentResponse(
+            response=error_msg,
+            answer_found=False,
+            sources=[]
+        ).model_dump()
+
+
 async def process_query_v2_stream(body: dict):
     """
     Stream V2 query agent logs as Server-Sent Events (SSE).
@@ -196,38 +246,52 @@ async def process_query_v2_stream(body: dict):
     """
     from mmct.v2.orchestrator import process_query_v2
     
-    video_provider = get_video_agent_provider()
-    image_provider = get_image_agent_provider()
-    
+    # Extract request parameters
     query = body.get("query")
     video_id = body.get("video_id")
     url = body.get("url")
     image_path = body.get("image_path")
+    use_critic = body.get("use_critic_agent", True)
+    cache = body.get("cache", False)
+    
+    # Get provider configurations
+    video_provider = get_video_agent_provider()
+    image_provider = get_image_agent_provider()
     
     def format_sse(event_type: str, data: dict) -> str:
         """Format data as SSE event."""
         return f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
     
+    # Setup logging
+    logs_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "logs")
+    os.makedirs(logs_dir, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    log_file = os.path.join(logs_dir, f"query_{timestamp}.json")
+    
+    events: list[dict] = []
+    final_result: dict | None = None
+    
+    def emit_and_log(event_type: str, data: dict) -> str:
+        """Emit SSE event and add to events log."""
+        events.append({"type": event_type, **data})
+        return format_sse(event_type, data)
+    
+    def save_events():
+        """Save all collected events to JSON file."""
+        if events:
+            with open(log_file, "w") as f:
+                json.dump(events, f, indent=2, default=str)
+            logger.info(f"Query events saved to {log_file} ({len(events)} events)")
+    
     try:
         # Yield initial connection event
-        yield format_sse("connected", {
+        yield emit_and_log("connected", {
             "message": "Stream connected",
             "query": query,
             "timestamp": datetime.now().isoformat()
         })
         
-        # Orchestrator returns dict stream when stream=True, use_console=False
-        # Create logs directory if it doesn't exist
-        logs_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "logs")
-        os.makedirs(logs_dir, exist_ok=True)
-        
-        # Create unique filename for this query
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-        log_file = os.path.join(logs_dir, f"query_{timestamp}.json")
-        
-        # Collect all events for saving
-        events = []
-        
+        # Initialize orchestrator stream
         dict_stream = await process_query_v2(
             query=query,
             video_provider=video_provider,
@@ -235,35 +299,73 @@ async def process_query_v2_stream(body: dict):
             video_id=video_id,
             url=url,
             image_path=image_path,
-            use_critic=body.get("use_critic_agent", True),
+            use_critic=use_critic,
             stream=True,
-            cache=body.get("cache", False),
+            cache=cache,
             use_console=True
         )
         
-        # Stream is already dict-formatted from orchestrator
+        # Process stream events
         async for event_data in dict_stream:
             events.append(event_data)
             yield format_sse(event_data["type"], event_data)
+            
+            if event_data.get("type") == "result":
+                final_result = event_data
+                
+    except (RuntimeError, Exception) as e:
+        logger.error(f"V2 streaming failed: {e}")
+        error_data = {
+            "message": "Query processing failed",
+            "timestamp": datetime.now().isoformat(),
+            "result": _create_error_response(f"An error occurred while processing your query: {e}"),
+            "error": str(e)
+        }
+        yield emit_and_log("complete", error_data)
+        save_events()
+        return
+    
+    # Parse and return final result
+    if not final_result:
+        complete_data = {
+            "message": "Query processing incomplete",
+            "timestamp": datetime.now().isoformat(),
+            "result": _create_error_response("No result received from agents")
+        }
+        yield emit_and_log("complete", complete_data)
+        save_events()
+        return
+    
+    try:
+        parsed_response = _parse_final_result(final_result)
         
-        # Save all events to JSON file
-        with open(log_file, "w") as f:
-            json.dump(events, f, indent=2, default=str)
+        # Extract metadata from final result
+        metadata = {
+            k: final_result[k] 
+            for k in ("token_usage", "duration_seconds", "message_count") 
+            if final_result.get(k)
+        }
         
-        logger.info(f"Query events saved to {log_file}")
-        
-        # Yield completion event
-        yield format_sse("complete", {
+        complete_data = {
             "message": "Query processing complete",
-            "timestamp": datetime.now().isoformat()
-        })
+            "timestamp": datetime.now().isoformat(),
+            "result": parsed_response,
+            **metadata
+        }
+        yield emit_and_log("complete", complete_data)
         
     except Exception as e:
-        logger.error(f"V2 streaming failed: {e}")
-        yield format_sse("error", {
-            "message": str(e),
-            "timestamp": datetime.now().isoformat()
-        })
+        logger.error(f"Error parsing final result: {e}")
+        error_data = {
+            "message": "Query processing failed",
+            "timestamp": datetime.now().isoformat(),
+            "result": _create_error_response(f"Failed to parse agent response: {e}"),
+            "error": str(e)
+        }
+        yield emit_and_log("complete", error_data)
+    
+    # Save all events including the complete event
+    save_events()
 
 
 async def process_query_v2_endpoint(body: dict):
