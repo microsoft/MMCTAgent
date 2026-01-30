@@ -101,7 +101,7 @@ class GetRelevantFrames:
                     # keep the filename (right-most segment) for downstream consumers
                     response.append(
                         {
-                            "file_name": keyframe_filename.split("_")[-1],
+                            "file_name": f"{video_id}/{keyframe_filename}",
                             "timestamps": timestamp_seconds,
                         }
                     )

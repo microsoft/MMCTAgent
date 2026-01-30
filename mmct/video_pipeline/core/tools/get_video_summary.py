@@ -43,7 +43,6 @@ class GetVideoSummaryTool:
         Output:
             List of dictionaries containing requested fields, including video_id for use in other tools
         """
-
         # embedding the query
         embedding = await self.embed_provider.embedding(query)
 

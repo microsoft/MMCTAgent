@@ -58,6 +58,7 @@ You retrieve text-based information from videos:
 | Procedural/How-to | `get_context` + `get_relevant_frames` |
 | Visual Details | `get_context` + `get_relevant_frames` |
 
+
 ## Step 3: Evaluate & Retrieve Frames if Needed
 
 After initial tool calls, if text-based results are **insufficient** OR the query is procedural/visual:

@@ -160,6 +160,7 @@ class ImageAgent:
         
         # If storage provider is available, try to download from blob
         if self.storage_provider is not None:
+            
             return await self._download_frame_from_blob(image_path)
         
         # No storage provider and file doesn't exist locally
@@ -167,41 +168,45 @@ class ImageAgent:
 
     def _create_tool_wrappers(self):
         
-        async def analyze_image_with_vit(image_path: Annotated[str, "Path to the image/frame (local path or blob path"], query: Annotated[str, "Question about the image"]) -> str:
+        async def analyze_image_with_vit(image_path: Annotated[str, "Path to the image/frame (local path or blob path"], query: Annotated[str, "Question about the image"], metadata: Optional[Annotated[dict, "Metadata for the frame (e.g., timestamp and related attributes). This is provided by get_relevant_frame tool."]]) -> str:
             """
             Analyzes an image using Vision Transformer (ViT) to answer a specific query.
             Downloads the frame from blob storage if needed.
             """
             local_path = await self._resolve_image_path(image_path)
             tool_instance = VitTool(llm_provider=self.provider.llm_provider, img_path=local_path)
-            return await tool_instance.vit_tool(query)
+            result = await tool_instance.vit_tool(query)
+            return f"{metadata}\n\n" + result if metadata else result
 
-        async def detect_objects(image_path: Annotated[str, "Path to the image/frame (local path or blob path like 'video_id/frame.jpg')"]) -> str:
+        async def detect_objects(image_path: Annotated[str, "Path to the image/frame (local path or blob path like 'video_id/frame.jpg')"], metadata: Optional[Annotated[dict, "Metadata for the frame (e.g., timestamp and related attributes). This is provided by get_relevant_frame tool."]]) -> str:
             """
             Detects objects in the image.
             Downloads the frame from blob storage if needed.
             """
             local_path = await self._resolve_image_path(image_path)
             tool_instance = ObjectDetectTool(img_path=local_path)
-            return await tool_instance.object_detect_tool()
+            result = await tool_instance.object_detect_tool()
+            return f"{metadata}\n\n" + result if metadata else result
 
-        async def perform_ocr(image_path: Annotated[str, "Path to the image/frame (local path or blob path like 'video_id/frame.jpg')"]) -> str:
+        async def perform_ocr(image_path: Annotated[str, "Path to the image/frame (local path or blob path like 'video_id/frame.jpg')"], metadata: Optional[Annotated[dict, "Metadata for the frame (e.g., timestamp and related attributes). This is provided by get_relevant_frame tool."]]) -> str:
             """
             Extracts text from the image using OCR.
             Downloads the frame from blob storage if needed.
             """
             local_path = await self._resolve_image_path(image_path)
             tool_instance = OcrTool(img_path=local_path)
-            return await tool_instance.ocr_tool()
+            result = await tool_instance.ocr_tool()
+            return f"{metadata}\n\n" + result if metadata else result
 
-        async def recognize_entities(image_path: Annotated[str, "Path to the image/frame (local path or blob path like 'video_id/frame.jpg')"]) -> str:
+        async def recognize_entities(image_path: Annotated[str, "Path to the image/frame (local path or blob path like 'video_id/frame.jpg')"], metadata: Optional[Annotated[dict, "Metadata for the frame (e.g., timestamp and related attributes). This is provided by get_relevant_frame tool."]]) -> str:
             """
             Recognizes specific entities or details in the image using RecogTool.
             Downloads the frame from blob storage if needed.
             """
             local_path = await self._resolve_image_path(image_path)
             tool_instance = RecogTool(img_path=local_path)
-            return await tool_instance.recog_tool()
+            result = await tool_instance.recog_tool()
+            return f"{metadata}\n\n" + result if metadata else result
 
         return [analyze_image_with_vit, detect_objects, perform_ocr, recognize_entities]
 
