@@ -58,6 +58,7 @@ class AzureStorageProvider(BaseStorageProvider):
         self.storage_account_name = storage_account_name
         self.keyframe_container_name = keyframe_container_name
         self.storage_account_url = f"https://{self.storage_account_name}.blob.core.windows.net/"
+        self._keyframe_container_ensured = False
         self.service_client = self._initialize()
 
     def _initialize(self):
@@ -84,8 +85,50 @@ class AzureStorageProvider(BaseStorageProvider):
             logger.exception(f"Failed to initialize Azure Blob Storage client: {e}")
             raise ProviderException(f"Failed to initialize Azure Blob Storage client: {e}")
 
+    async def _ensure_keyframe_container_exists(self):
+        """
+        Ensure the keyframe container exists in Azure Blob Storage.
+        Creates it if it doesn't exist. Only runs once per provider instance.
+        """
+        if self._keyframe_container_ensured:
+            return
+
+        container_client = None
+        try:
+            container_client = self.service_client.get_container_client(
+                self.keyframe_container_name
+            )
+            # Attempt to get container properties to check existence
+            await container_client.get_container_properties()
+            logger.info(f"Keyframe container '{self.keyframe_container_name}' already exists.")
+        except Exception as ex:
+            if "ContainerNotFound" in str(ex):
+                try:
+                    await container_client.create_container()
+                    logger.info(
+                        f"Keyframe container '{self.keyframe_container_name}' created successfully."
+                    )
+                except ResourceExistsError:
+                    # Race condition safety — another process may have created it
+                    logger.info(
+                        f"Keyframe container '{self.keyframe_container_name}' was created by another process."
+                    )
+            else:
+                logger.exception(
+                    f"Failed to verify keyframe container '{self.keyframe_container_name}': {ex}"
+                )
+                raise ProviderException(
+                    f"Failed to verify keyframe container '{self.keyframe_container_name}': {ex}"
+                )
+        finally:
+            if container_client:
+                await container_client.close()
+
+        self._keyframe_container_ensured = True
+
     async def load_file_to_memory(self, folder: str, file_name: str) -> bytes:
         """Load a file's content into memory as bytes."""
+        await self._ensure_keyframe_container_exists()
 
         client = None
         try:
@@ -106,6 +149,7 @@ class AzureStorageProvider(BaseStorageProvider):
         """
         Generate a URL for a file that doesn't yet exist in storage.
         """
+        await self._ensure_keyframe_container_exists()
         try:
             folder_name = self.keyframe_container_name
             # Use service client URL if available, otherwise fall back to config
@@ -130,6 +174,7 @@ class AzureStorageProvider(BaseStorageProvider):
     @convert_exceptions({Exception: ProviderException})
     async def upload_file(self, file_name: str, src_file_path: str, **kwargs) -> str:
         """Upload a local file to blob storage."""
+        await self._ensure_keyframe_container_exists()
         client = None
         container_client = None
         try:
