@@ -1,5 +1,6 @@
 from mmct.image_pipeline import ImageAgent, ImageQnaTools
 from mcp_server.server import mcp
+from mcp_server.config import get_image_agent_provider
 from typing import Annotated
 import os
 import uuid
@@ -23,7 +24,7 @@ This tool internally handles:
 ## Input Schema
 
 - image_url (string, required) → Publicly accessible image URL to analyze.
-- query (string, required) → Natural language question about the image (e.g., “What text is written on the board?”).
+- query (string, required) → Natural language question about the image (e.g., "What text is written on the board?").
 - use_critic_agent (boolean, required) → Whether to enable critic agent for improved reasoning depth.
 - tools (list of strings, required) → List of image analysis tools to use. Supported values:
     - vit → Visual Transformer for image embeddings.
@@ -40,7 +41,7 @@ A structured answer to the query about the image, which may include:
 - Extracted text (ocr results).
 - Scene or content recognition.
 - Refined reasoning (if critic agent is enabled).
-"""
+""",
 )
 async def image_agent_tool(
     image_url: Annotated[str, "Image URL"],
@@ -65,9 +66,10 @@ async def image_agent_tool(
         image_agent = ImageAgent(
             image_path=save_path,
             query=query,
+            provider=get_image_agent_provider(),
             use_critic_agent=use_critic_agent,
             stream=stream,
-            tools=[ImageQnaTools[name.upper()] for name in tools],
+            tools=[ImageQnaTools[name.lower()] for name in tools],
             disable_console_log=disable_console_log,
         )
         return await image_agent()
