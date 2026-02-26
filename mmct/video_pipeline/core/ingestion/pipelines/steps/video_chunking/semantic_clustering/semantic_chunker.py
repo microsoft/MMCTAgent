@@ -379,8 +379,8 @@ class SemanticChunker:
             return segments
 
         result = []
-        # Initialize prev_end_time to first segment's start_time to avoid incorrect gaps for Part B
-        prev_end_time = segments[0].start_time
+        # Start from 0.0 so first chapter covers video start even if transcript starts later
+        prev_end_time = 0.0
 
         for segment in segments:
             # Check if there's a gap between previous segment and current

@@ -78,14 +78,19 @@ class TranscriptionStep(PipelineStep):
                             transcript_path = path
                             break
 
+            # Calculate word count from transcript text
+            word_count = len(transcript.split()) if transcript else 0
+
             return StepResult(
                 step_id=self.step_id,
                 outputs={
                     "transcript": transcript,
                     "transcript_path": transcript_path,
+                    "word_count": word_count,
                 },
                 metrics={
                     "transcript_length": len(transcript) if transcript else 0,
+                    "word_count": word_count,
                 },
                 artifacts=[transcript_path] if transcript_path else [],
             )
