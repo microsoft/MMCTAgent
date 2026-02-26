@@ -123,7 +123,7 @@ class AISearchKeyframesProvider(BaseKeyframesVectorDBProvider):
 
             if embedding and top and not vector_queries:
                 vector_query = VectorizedQuery(
-                    vector=embedding, k_nearest_neighbors=top, fields=embedding_field_name
+                    vector=embedding, k=top, fields=embedding_field_name
                 )
                 vector_queries = [vector_query]
 

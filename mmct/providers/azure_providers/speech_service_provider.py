@@ -111,14 +111,14 @@ class AzureSpeechServiceProvider(BaseTranscriptionProvider):
 
             # Define callbacks
             def _on_session_started(evt):
-                logger.debug("Transcription session started")
+                logger.info("Transcription session started")
 
             def _on_session_stopped(evt):
-                logger.debug("Transcription session stopped")
+                logger.info("Transcription session stopped")
                 _stop_cb(evt)
 
             def _on_canceled(evt):
-                logger.warning("Transcription canceled")
+                logger.info("Transcription canceled")
                 _stop_cb(evt)
 
             def _on_transcribed(evt: speechsdk.SpeechRecognitionEventArgs):

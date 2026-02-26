@@ -21,22 +21,11 @@ class GetObjectCollection:
         url: Annotated[Optional[str], "url of the video"] = None,
     ) -> List[Dict[str, Any]]:
         """
-        Description:
-            Retrieve specific object details from the object collection.
+        Retrieve specific object details (bounding boxes, descriptions, first/last seen times) from the object collection.
 
-            This tool fetches the object collection for a video and filters it to return only objects matching any of the provided `object_names`.
-
-            IMPORTANT: This tool REQUIRES a valid video_id or URL before calling.
-            - If video_id/URL is not provided in the instruction, call get_video_summary first to obtain it.
-            - Use this tool for: Specific object queries, finding details about particular objects.
-
-        Input Parameters:
-            - object_names (List[str]): REQUIRED - A exhaustive list of possible object names to look for.
-            - video_id (str): REQUIRED - Unique identifier for the video (obtain from get_video_summary if not provided)
-            - url (str): REQUIRED if video_id not available - URL of the video
-
-        Output:
-            List of dictionaries containing details of the matching objects.
+        IMPORTANT: This tool REQUIRES a valid video_id or URL. 
+        If these are not known, call 'get_video_summary' first.
+        Use this tool for: Specific object queries, finding details about particular objects mentioned in the video.
         """
 
         try:

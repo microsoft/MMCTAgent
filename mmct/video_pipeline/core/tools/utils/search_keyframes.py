@@ -70,7 +70,7 @@ class KeyframeSearcher:
             # Create vector query for search
             vector_query = VectorizedQuery(
                 vector=query_embedding,
-                k_nearest_neighbors=top_k,
+                k=top_k,
                 fields="embeddings"
             )
 

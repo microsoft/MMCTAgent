@@ -7,6 +7,10 @@ __pycache__/
 *.so
 media/
 
+#Custom Ignore
+*/test/*
+mmct/video_pipeline/core/tools/test/
+
 # Distribution / packaging
 .Python
 build/

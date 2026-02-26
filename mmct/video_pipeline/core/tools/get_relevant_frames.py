@@ -23,25 +23,13 @@ class GetRelevantFrames:
         self,
         query: Annotated[str, "query to be look for frames"],
         video_id: Annotated[str, "video id"],
-        index_name: Annotated[str, "search index name"],
         top_k: Annotated[int, "number of relevant frames to fetch"] = 5,
     ) -> List[str]:
         """
-        Discover relevant frame IDs  based on visual queries when timestamps are unknown. get_relevant_frames tools is last resort of planner.
-
-        Description:
-            Searches keyframe index to find relevant frames based on visual embeddings.
-            Returns frame IDs that can be passed to query_frame.
-
-        Input Parameters:
-            - query (str): [Mandatory] Visual description of what to search for (e.g., "frames showing person exercising")
-            - video_id (str): [Mandatory] Video identifier to filter frames
-            - index_name (str): [Mandatory] Search index name for keyframe search
-            - top_k (int): [Mandatory] Number of relevant frames to retrieve (default: 10)
-
-        Output:
-            List of dictionary containing keyframe filenames (strings) and timestamps that can be passed to query_frame for visual analysis
-
+        Discover relevant frame IDs based on visual queries when specific timestamps are unknown. 
+        
+        This tool is a 'last resort' for the planner when object tracking or context summarized times are insufficient.
+        Returns a list of frame objects (path and timestamp) that can be passed to 'query_frame' for visual analysis.
         """
         try:
             # If there is a FAISS index directory in examples/ (e.g. from exported indices), prefer it
@@ -101,7 +89,7 @@ class GetRelevantFrames:
                     # keep the filename (right-most segment) for downstream consumers
                     response.append(
                         {
-                            "file_name": keyframe_filename.split("_")[-1],
+                            "frame_path": f"{keyframe_filename}",
                             "timestamps": timestamp_seconds,
                         }
                     )
@@ -118,7 +106,7 @@ if __name__ == "__main__":
     async def main():
         get_relevant_frame_object = GetRelevantFrames()
         res = await get_relevant_frame_object.get_relevant_frames(
-            query="user-query", video_id="hash-video-id", index_name="index-name", top_k=10
+            query="user-query", video_id="hash-video-id",top_k=10
         )
 
         print("get_relevant_frames result:", res)

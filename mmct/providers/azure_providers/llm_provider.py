@@ -8,6 +8,7 @@ from mmct.utils.error_handler import ProviderException, ConfigurationException
 from typing import Dict, Any, List, Union, Optional
 from mmct.utils.error_handler import handle_exceptions, convert_exceptions
 from autogen_ext.models.openai import AzureOpenAIChatCompletionClient
+from agent_framework.azure import AzureOpenAIChatClient
 
 
 class AzureLLMProvider(BaseLLMProvider):
@@ -190,6 +191,29 @@ class AzureLLMProvider(BaseLLMProvider):
                 )
         except Exception as e:
             raise ProviderException(f"Failed to create Azure OpenAI autogen client: {e}")
+
+    def get_agent_framework_client(self, **kwargs):
+        """Get agent-framework compatible client for Azure OpenAI."""
+        try:
+            if self.credentials is not None:
+                return AzureOpenAIChatClient(
+                    deployment_name=self.deployment_name,
+                    endpoint=self.endpoint,
+                    api_version=self.api_version,
+                    credential=self.credentials,
+                    **kwargs,
+                )
+            else:
+                return AzureOpenAIChatClient(
+                    deployment_name=self.deployment_name,
+                    endpoint=self.endpoint,
+                    api_version=self.api_version,
+                    api_key=self.api_key,
+                    **kwargs,
+                )
+        except Exception as e:
+            raise ProviderException(f"Failed to create Azure OpenAI agent framework client: {e}")
+
 
     async def close(self):
         """Close the LLM client and cleanup resources."""

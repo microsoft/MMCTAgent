@@ -23,38 +23,15 @@ class GetContextTool:
         top: Annotated[Optional[int], "number of top results to retrieve"] = 3,
     ) -> str:
         """
-        Description:
-            Retrieves relevant video chapters containing transcript chunk, visual summaries, actions,
-            and text from scenes.
+        Retrieves relevant video chapters containing transcripts, summaries, and actions.
 
-        Input Parameters:
-            - query (str): query for which chapter documents need to be fetched.
-            - index_name (str): Vector index name for search
-            - video_id (Optional[str]): Video identifier (use from get_video_summary or get_object_collection if available)
-            - url (Optional[str]): Video URL (alternative to video_id)
-            - start_time (Optional[float]): Start time in seconds to filter documents (returns docs with overlapping time range)
-            - end_time (Optional[float]): End time in seconds to filter documents (returns docs with overlapping time range)
-            - fields_to_retrieve - Available fields:
-                * chapter_transcript: Transcript with timestamps for this segment
-                * detailed_summary: Visual summary of what happens in the chapter
-                * action_taken: Specific actions performed or demonstrated
-                * text_from_scene: Text visible in video (signs, captions, etc.)
-                * start_time: Chapter start time in seconds
-                * end_time: Chapter end time in seconds
-                * hash_video_id: Video identifier
-                * url: Video URL
-            - top: Number of top results to retrieve
-
-        Output:
-            List of chapter documents, each containing fields based on fields_to_retrieve:
-            - chapter_transcript (str): Transcript with timestamps for this segment
-            - detailed_summary (str): Visual summary of what happens in the chapter
-            - action_taken (str): Specific actions performed or demonstrated
-            - text_from_scene (str): Text visible in video (signs, captions, etc.)
-            - start_time (float): Chapter start time in seconds
-            - end_time (float): Chapter end time in seconds
-            - hash_video_id (str): Video identifier
-            - url (str): Video URL
+        Available fields to retrieve in 'fields_to_retrieve':
+        - chapter_transcript: Dialogue with timestamps.
+        - detailed_summary: Visual summary of the chapter.
+        - action_taken: Specific actions demonstrated.
+        - text_from_scene: OCR text visible in video.
+        - start_time / end_time: Segment boundaries in seconds.
+        - hash_video_id / url: Identifiers.
         """
 
         # embedding the query

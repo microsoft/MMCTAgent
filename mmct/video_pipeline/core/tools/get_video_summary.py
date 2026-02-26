@@ -22,28 +22,14 @@ class GetVideoSummaryTool:
         top: Annotated[Optional[int], "number of top results to retrieve (max 3)"] = 3,
     ) -> List[Dict[str, Any]]:
         """
-        Description:
-            Retrieve high-level video summaries of relevant videos.
+        Retrieve high-level video summaries.
 
-            This tool is used for:
-            1. Video discovery: Call WITHOUT video_id/URL to find relevant videos matching the query
-            2. Specific video summary: Call WITH video_id/URL to get summary of a specific video
+        Use this tool for:
+        1. Video discovery: Call WITHOUT video_id/URL to find relevant videos matching the query.
+        2. Specific video summary: Call WITH video_id/URL to get the summary of a specific video.
 
-            IMPORTANT: If video_id or URL is not provided in the instruction, always call this tool
-            first to discover relevant videos and obtain their video_ids for subsequent tool calls.
-
-        Input Parameters:
-            - query (str): query to search for related video summaries, this is mandatory field
-
-            - video_id (Optional[str]): Unique identifier for the video (use if available, otherwise omit)
-            - url (Optional[str]): URL of the video (use if available, otherwise omit)
-            - top: Number of top results to retrieve
-
-
-        Output:
-            List of dictionaries containing requested fields, including video_id for use in other tools
+        IMPORTANT: If video_id or URL is not available, always call this tool first to discover relevant videos and obtain their IDs for other tools.
         """
-
         # embedding the query
         embedding = await self.embed_provider.embedding(query)
 

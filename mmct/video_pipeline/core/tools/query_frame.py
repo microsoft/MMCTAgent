@@ -53,28 +53,12 @@ class QueryFrameTool:
         end_time: Annotated[Optional[float], "end time in seconds"] = None,
     ) -> str:
         """
-        Analyze specific video frames using vision models for visual verification.
+        Analyze specific video frames using vision models to extract visual information and answer detailed queries.
 
-        Description:
-            Uses vision models to analyze video frames and extract visual information.
-            Can work with either specific frame IDs or timestamp ranges.
-
-        Input Parameters:
-            - query (str): Detailed description of what to look for in frames
-                        (e.g., "Count people doing exercises", "What color shirt is the person wearing?")
-            - frame_ids (Optional[list]): List of specific frame filenames to analyze (from get_relevant_frames)
-            - video_id (Optional[str]): Video identifier (required if using start_time/end_time)
-            - start_time (Optional[float]): Start time in seconds (use from get_context or object's first_seen in get_object_collection output.)
-            - end_time (Optional[float]): End time in seconds (start_time + 5 seconds, if start_time is from the get_objection_collection tool else use what is)
-
-        Output:
-            String containing visual analysis results including:
-            - Detailed observations about visible content
-            - Object positions, counts, and spatial relationships
-            - Actions, poses, gestures, expressions
-            - Colors, appearances, visual attributes
-            - Text visible in frames
-            - Any other visual details relevant to query
+        Usage:
+        - Analyze specific frames found via 'get_relevant_frames' by passing their filenames as 'frame_ids'.
+        - Analyze a segment by passing 'video_id', 'start_time', and 'end_time'.
+        - Use this tool for: Counts, colors, OCR text, spatial relationships, and specific visual attributes.
         """
 
         save_frames_locally = False  # variable to debug the frames
@@ -116,7 +100,7 @@ class QueryFrameTool:
         else:
             # Use provided frame_ids
             frame_filenames = [
-                f"{video_id}_{frame_id}" for frame_id in frame_ids if frame_id is not None
+                f"{frame_id}" for frame_id in frame_ids if frame_id is not None
             ]
 
         # Make frame_filenames unique
