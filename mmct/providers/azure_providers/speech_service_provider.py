@@ -118,7 +118,8 @@ class AzureSpeechServiceProvider(BaseTranscriptionProvider):
                 _stop_cb(evt)
 
             def _on_canceled(evt):
-                logger.info("Transcription canceled")
+                cancellation = evt.result.cancellation_details
+                logger.warning(f"Transcription canceled: reason={cancellation.reason}, error_details={cancellation.error_details}")
                 _stop_cb(evt)
 
             def _on_transcribed(evt: speechsdk.SpeechRecognitionEventArgs):
@@ -289,15 +290,21 @@ class AzureSpeechServiceProvider(BaseTranscriptionProvider):
             from mmct.video_pipeline.core.ingestion.models import TranslationResponse
 
             to_translate = json.dumps([e["text"] for e in batch], ensure_ascii=False)
-            logger.info(f"Translating batch of {len(batch)} entries (retry {current_retry}/{max_retries})")
+            batch_size = len(batch)
+            logger.info(f"Translating batch of {batch_size} entries (retry {current_retry}/{max_retries})")
 
             prompt = f"""You are a highly skilled translator. Your task is to translate the provided JSON array of text from {source_language} to English with utmost accuracy.
 
 # Instructions:
-- Translate each line of the input text exactly as it is, without adding, omitting, or altering any information.
-- The input text may include different dialects of {source_language}; translate them carefully while preserving the original meaning.
+- The input is a JSON array with EXACTLY {batch_size} text entries.
+- You MUST return EXACTLY {batch_size} translations in the same order.
+- Translate each entry independently - do NOT merge, skip, or combine entries.
+- Even if two consecutive entries are similar or identical, translate them separately.
+- If an entry is empty or contains only whitespace, return an empty string for that entry.
 - Do not hallucinate or introduce any new information that is not present in the input text.
-- If a term or phrase is unclear, translate it as closely as possible to its original meaning without making assumptions.
+- The input text may include different dialects of {source_language}; translate them carefully while preserving the original meaning.
+
+CRITICAL: Your response MUST contain exactly {batch_size} translations.
 """
 
             messages = [
@@ -485,7 +492,9 @@ class AzureSpeechServiceProvider(BaseTranscriptionProvider):
 
             # Step 4: Translate if needed and LLM provider is available
             translate_to_english = kwargs.get("translate_to_english", True)
-            if translate_to_english and language != "en-IN" and self.llm_provider:
+            # Skip translation if source language is any English variant
+            is_english = language.startswith("en-")
+            if translate_to_english and not is_english and self.llm_provider:
                 # Extract language name from code (e.g., "hi-IN" -> "Hindi")
                 source_language_name = kwargs.get("source_language_name")
                 if not source_language_name:
