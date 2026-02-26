@@ -1,7 +1,18 @@
+import sys
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
-from app.routers import query, ingestion
+from loguru import logger
+from app.routers import query, ingestion, graph_ingestion
+
+# Configure loguru to output to stderr (uvicorn compatible)
+logger.remove()  # Remove default handler
+logger.add(
+    sys.stderr,
+    format="<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan> - <level>{message}</level>",
+    level="INFO",
+    colorize=True,
+)
 
 app = FastAPI(
     title="MMCT Agent API",
@@ -22,6 +33,7 @@ app.add_middleware(
 
 app.include_router(query.router)
 app.include_router(ingestion.router)
+app.include_router(graph_ingestion.router)
 
 
 def custom_openapi():

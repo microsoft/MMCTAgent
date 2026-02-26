@@ -4,6 +4,8 @@ from app.schemas.query import ImageQueryRequest, VideoQueryRequest
 from app.services.query_services import process_image_query, process_video_query
 from app.schemas.query import UnifiedQueryRequest
 from app.services.query_services import process_query_v2_endpoint, process_query_v2_stream
+from app.schemas.v4_query import V4QueryRequest, V4QueryResponse
+from app.services.v4_query_service import process_v4_query, process_v4_query_stream
 
 router = APIRouter()
 
@@ -67,5 +69,60 @@ async def query_unified_stream(
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",  # Disable nginx buffering
+        }
+    )
+
+
+# =============================================================================
+# V4 Query Endpoints (Neo4j Graph Backend)
+# =============================================================================
+
+@router.post(
+    "/v4/query",
+    summary="V4 Query (Neo4j Graph)",
+    description="""
+Query videos using the V4 pipeline with Neo4j graph backend.
+
+Features:
+- Multi-granularity search (ChapterGroup, Chapter, Event, Object, Keyframe)
+- Cross-video discovery
+- HNSW vector search for low latency
+- Citations with video_id and timestamps
+
+The response includes:
+- `answer`: Markdown text with inline citations [1], [2], etc.
+- `sources`: List of citation sources with video_id, timestamps, and type
+""",
+    response_model=V4QueryResponse,
+)
+async def query_v4(data: V4QueryRequest = Depends()):
+    """Process a V4 query against the Neo4j knowledge graph."""
+    return await process_v4_query(data.model_dump())
+
+
+@router.post(
+    "/v4/query/stream",
+    summary="Streaming V4 Query (Neo4j Graph)",
+    description="""
+Streaming V4 query endpoint using Server-Sent Events (SSE).
+
+Events:
+- `connected`: Initial connection confirmation
+- `agent_message`: Intermediate agent messages (planner, video, image, critic)
+- `complete`: Final result with answer and sources
+- `error`: Error message if processing fails
+""",
+)
+async def query_v4_stream(data: V4QueryRequest = Depends()):
+    """Process a V4 query with streaming output."""
+    body = data.model_dump()
+    
+    return StreamingResponse(
+        process_v4_query_stream(body),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
         }
     )
