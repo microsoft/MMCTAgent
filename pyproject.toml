@@ -78,6 +78,7 @@ video-agent = [
     "torch",
     "torchvision",
     "transformers>=4.30.0,<5.0.0",
+    "fastembed>=0.3.0,<1.0.0",
     # Video-specific libraries
     "opencv-python-headless>=4.8.0.0,<5.0.0",
     "ffmpeg-python",
@@ -89,6 +90,10 @@ video-agent = [
     "faiss-cpu",
     "datasets>=2.20.0,<3.0.0",
     "accelerate==1.10.1",
+    # Graph visualization
+    "pyvis>=0.3.0,<1.0.0",
+    # Graph database
+    "neo4j>=5.0.0,<6.0.0",
     # Azure providers (for cloud-based transcription, search, storage)
     "azure-identity>=1.19.0,<2.0.0",
     "azure-core>=1.32.0,<2.0.0",
