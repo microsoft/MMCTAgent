@@ -1,7 +1,7 @@
 """Pydantic configuration models for provider dependency injection."""
 
 from pydantic import BaseModel, Field, field_validator
-from typing import Dict, Type
+from typing import Dict, Type, Optional
 
 from mmct.providers.base import (
     BaseLLMProvider,
@@ -9,10 +9,20 @@ from mmct.providers.base import (
     BaseStorageProvider,
     BaseTranscriptionProvider,
     BaseImageEmbeddingProvider,
+    BaseGraphDBProvider,
+    BaseGraphStoreProvider,
 )
 from mmct.providers.base.chapter_vector_db_provider import BaseChapterVectorDBProvider
 from mmct.providers.base.keyframes_vector_db_provider import BaseKeyframesVectorDBProvider
 from mmct.providers.base.object_collection_vector_db_provider import BaseObjectCollectionVectorDBProvider
+
+# Sprint 2: New provider base classes
+from mmct.providers.base.synopsis_vector_db_provider import BaseSynopsisVectorDBProvider
+from mmct.providers.base.temporal_vector_db_provider import BaseTemporalVectorDBProvider
+
+# Sprint 1: Event and object vector DB providers
+from mmct.providers.base.event_vector_db_provider import BaseEventVectorDBProvider
+from mmct.providers.base.object_vector_db_provider import BaseObjectVectorDBProvider
 
 
 # All valid provider base classes
@@ -25,6 +35,14 @@ PROVIDER_TYPES: Dict[str, Type] = {
     "BaseChapterVectorDBProvider": BaseChapterVectorDBProvider,
     "BaseKeyframesVectorDBProvider": BaseKeyframesVectorDBProvider,
     "BaseObjectCollectionVectorDBProvider": BaseObjectCollectionVectorDBProvider,
+    # Sprint 2: New provider types
+    "BaseSynopsisVectorDBProvider": BaseSynopsisVectorDBProvider,
+    "BaseTemporalVectorDBProvider": BaseTemporalVectorDBProvider,
+    # Sprint 1: Graph and vector DB provider types
+    "BaseGraphDBProvider": BaseGraphDBProvider,
+    "BaseGraphStoreProvider": BaseGraphStoreProvider,
+    "BaseEventVectorDBProvider": BaseEventVectorDBProvider,
+    "BaseObjectVectorDBProvider": BaseObjectVectorDBProvider,
 }
 
 
@@ -80,6 +98,32 @@ class VideoAgentProviderConfig(ProviderConfigBase):
     vectordb_object_registry: BaseObjectCollectionVectorDBProvider = Field(...)
     vectordb_keyframes: BaseKeyframesVectorDBProvider = Field(...)
     storage_provider: BaseStorageProvider = Field(...)
+    
+    # Sprint 2: Optional new providers (backward compatible)
+    vectordb_synopsis: Optional[BaseSynopsisVectorDBProvider] = Field(default=None)
+    vectordb_temporal: Optional[BaseTemporalVectorDBProvider] = Field(default=None)
+    llm_config: Optional[Dict] = Field(default=None)
+
+
+# Sprint 1: Temporal Graph Provider Config
+class TemporalGraphProviderConfig(ProviderConfigBase):
+    """Configuration for temporal graph providers.
+    
+    Supports graph-based storage and vector search for events and objects
+    in video temporal knowledge graphs.
+    """
+    graph_db_provider: BaseGraphDBProvider = Field(
+        ..., description="Graph database provider for node/edge operations"
+    )
+    event_vector_provider: Optional[BaseEventVectorDBProvider] = Field(
+        default=None, description="Optional event vector search provider"
+    )
+    object_vector_provider: Optional[BaseObjectVectorDBProvider] = Field(
+        default=None, description="Optional object vector search provider"
+    )
+    embedding_provider: Optional[BaseEmbeddingProvider] = Field(
+        default=None, description="Optional embedding provider for vector generation"
+    )
 
 
 # IngestionPipeline Provider Config
@@ -92,4 +136,14 @@ class IngestionProviderConfig(ProviderConfigBase):
     vectordb_keyframes: BaseKeyframesVectorDBProvider = Field(...)
     storage_provider: BaseStorageProvider = Field(...)
     transcription_provider: BaseTranscriptionProvider = Field(...)
+    
+    # Graph store provider for uploading graphs to Neo4j or other stores
+    graph_store_provider: Optional[BaseGraphStoreProvider] = Field(
+        default=None, description="Graph store provider for uploading graphs"
+    )
+    
+    # Sprint 2: Optional new providers (backward compatible)
+    vectordb_synopsis: Optional[BaseSynopsisVectorDBProvider] = Field(default=None)
+    vectordb_temporal: Optional[BaseTemporalVectorDBProvider] = Field(default=None)
+    llm_config: Optional[Dict] = Field(default=None)
    
