@@ -8,16 +8,15 @@ from dotenv import load_dotenv
 from typing import Optional, Dict, Any
 from loguru import logger
 
-# Suppress autogen internal logging
+# Suppress autogen internal logging (kept for any transitive dependencies)
 logging.getLogger("autogen").setLevel(logging.WARNING)
 logging.getLogger("autogen_agentchat").setLevel(logging.WARNING)
 
 from typing import Annotated
-from autogen_agentchat.agents import AssistantAgent
-from autogen_agentchat.ui import Console
-from autogen_agentchat.teams import Swarm, RoundRobinGroupChat
-from autogen_agentchat.conditions import MaxMessageTermination, TextMentionTermination
-from autogen_agentchat.base import TaskResult
+from agent_framework import Agent, WorkflowBuilder, Workflow, AgentResponse
+from agent_framework._tools import FunctionTool
+from mmct.video_pipeline.core.tools.custom_middleware import LoggingAgentMiddleware, LoggingChatMiddleware, LoggingFunctionMiddleware, TerminationMiddleware
+
 from mmct.video_pipeline.core.tools.get_context import GetContextTool
 from mmct.video_pipeline.core.tools.get_relevant_frames import GetRelevantFrames
 from mmct.video_pipeline.core.tools.query_frame import QueryFrameTool
@@ -31,9 +30,6 @@ from mmct.video_pipeline.prompts_and_description import (
     CRITIC_DESCRIPTION,
 )
 
-from autogen_ext.models.cache import ChatCompletionCache, CHAT_CACHE_VALUE_TYPE
-from autogen_ext.cache_store.diskcache import DiskCacheStore
-from diskcache import Cache as DiskCache
 from mmct.config.providers import VideoAgentProviderConfig
 
 load_dotenv(override=True)
@@ -42,6 +38,7 @@ load_dotenv(override=True)
 def parse_response_to_dict(content: str) -> Dict[str, Any]:
     """
     Fast JSON extractor with minimal scanning.
+    Supports code-fenced JSON blocks and raw JSON objects.
     """
 
     def try_parse_json(s: str):
@@ -80,43 +77,70 @@ def parse_response_to_dict(content: str) -> Dict[str, Any]:
         return {"answer": "Error parsing response", "source": [], "videos": []}
 
 
+def _extract_last_text(output_events) -> str:
+    """Pull the final text content from workflow output events."""
+    if not output_events:
+        return ""
+    if isinstance(output_events, list):
+        last = output_events[-1]
+    else:
+        last = output_events
+    return getattr(last, "text", str(last))
+
+
+def _is_terminated(conversation) -> bool:
+    """Termination condition: last message contains TERMINATE."""
+    return len(conversation) > 0 and "TERMINATE" in getattr(
+        conversation[-1], "text", str(conversation[-1])
+    )
+
+
 class VideoQnA:
     """
-    VideoQnA with comprehensive multi-tool support for video analysis using Swarm orchestration.
+    VideoQnA using Microsoft agent_framework WorkflowBuilder-based orchestration.
 
-    This class uses dependency injection via VideoAgentProviderConfig to access:
-    - llm_provider: For LLM-based reasoning and response generation
-    - vectordb_chapter: For retrieving video context and transcripts
-    - vectordb_object_registry: For retrieving video summaries and object collections
-    - vectordb_keyframes: For searching relevant video frames
-    - embedding_provider: For generating embeddings for semantic search
-    - storage_provider: For accessing stored video frames
+    Replaces autogen Swarm / RoundRobinGroupChat with WorkflowBuilder + add_edge.
+    The Planner orchestrates tool calls; the optional Critic reviews the draft
+    before the Planner finalises.
 
-    MMCT consists of:
-    - **Planner Agent**: Has access to five tools for comprehensive video analysis:
-      1. get_video_summary: Retrieves high-level video summaries (can be called without video_id for discovery)
-      2. get_object_collection: Retrieves object descriptions with counts (requires video_id/url, semantic query based on video summary)
-      3. get_context: Retrieves transcript chunks and visual summary chapter documents (requires video_id/url)
-      4. get_relevant_frames: Gets specific frame names based on visual queries
-      5. query_frame: Analyzes downloaded frames with vision models or fetch frames on filter criteria and then analyze them.
-    - **Critic Agent**: Validates the planner's output.
+    Topology (with critic):
+        planner ──► critic  (condition: "ready for criticism" in last message)
+        critic  ──► planner (always, after evaluating)
+        planner ──► END     (condition: "TERMINATE" in last message)
 
-    Workflow:
-    1. If video_id/url NOT provided → Call get_video_summary first to discover relevant videos
-    2. For object-related queries → Use get_object_collection with video_id (semantic query based on summary)
-    3. For narrative/dialogue queries → Use get_context with video_id
-    4. For visual verification → Use query_frame
+    Topology (without critic):
+        planner ──► END     (condition: "TERMINATE" in last message)
+
+    Provider dependencies (injected via VideoAgentProviderConfig):
+    - llm_provider            : LLM client for agent reasoning
+    - vectordb_chapter        : Video context / transcript retrieval
+    - vectordb_object_registry: Video summaries and object collections
+    - vectordb_keyframes      : Keyframe-level semantic search
+    - embedding_provider      : Text embedding for semantic search
+    - image_embedding_provider: Image embedding for frame search
+    - storage_provider        : Blob storage access for frames
+
+    Tools available to the Planner:
+    1. get_video_summary    – High-level summaries; video discovery
+    2. get_object_collection– Object counts, tracking, appearances
+    3. get_context          – Transcript chunks + chapter visual summaries
+    4. get_relevant_frames  – Frame discovery by visual query
+    5. query_frame          – Vision-model analysis of frames / timestamps
 
     Args:
-        query (str): The natural language question to be answered based on the video content.
-        provider (VideoAgentProviderConfig): Provider configuration containing all required providers.
-        video_id (Optional[str]): The unique identifier of the video.
-        url (Optional[str]): URL of the video to filter search results.
-        use_critic_agent (bool, optional): Whether to use the critic agent for answer refinement. Defaults to True.
-        cache (bool, optional): Whether to enable caching for model responses. Defaults to True.
-        use_console (bool, optional):
-            Use Console for output display. Defaults to True.
+        query (str): Natural-language question about the video.
+        provider (VideoAgentProviderConfig): Injected provider configuration.
+        video_id (Optional[str]): Hash video ID to scope the search.
+        url (Optional[str]): Video URL to scope the search.
+        use_critic_agent (bool): Enable Critic review loop. Default True.
+        verbose (bool): Whether to enable console logs. Default True.
+        cache (bool): Whether to enable caching for model responses. Default False.
     """
+
+    @staticmethod
+    def _wrap(fn) -> FunctionTool:
+        """Wrap a callable into a FunctionTool for agent_framework JSON schema."""
+        return FunctionTool(name=fn.__name__, description=fn.__doc__ or "", func=fn)
 
     def __init__(
         self,
@@ -125,18 +149,19 @@ class VideoQnA:
         video_id: Optional[str] = None,
         url: Optional[str] = None,
         use_critic_agent: bool = True,
-        cache: bool = True,
-        use_console: bool = True,
+        verbose: bool = True,
+        cache: bool = False,
     ):
         self.query = query
         self.video_id = video_id
-        self.use_critic_agent = use_critic_agent
         self.url = url
+        self.use_critic_agent = use_critic_agent
+        self.verbose = verbose
         self.cache = cache
-        self.use_console = use_console
         self.provider = provider
-        self.model_client = self.provider.llm_provider.get_autogen_client()
+        self.model_client = self.provider.llm_provider.get_agent_framework_client()
 
+        # ── Tool instantiation ────────────────────────────────────────────
         get_context_tool_object = GetContextTool(
             embed_provider=self.provider.embedding_provider,
             vectordb_chapter=self.provider.vectordb_chapter,
@@ -159,261 +184,229 @@ class VideoQnA:
             image_embedding_provider=self.provider.image_embedding_provider,
         )
 
-        # Only enable caching if cache parameter is True
-        if self.cache:
-            use_cache_backend = os.getenv("AUTOGEN_CACHE_BACKEND", "disk")  # "disk" or "redis"
-            if use_cache_backend.lower() == "redis":
-                # Shared cache across processes
-                from autogen_ext.cache_store.redis import RedisStore
-                import redis
-
-                redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-                redis_client = redis.from_url(redis_url)
-                store = RedisStore[CHAT_CACHE_VALUE_TYPE](redis_client)  # type: ignore
-            else:
-                # Local persistent cache
-                cache_dir = os.getenv("AUTOGEN_DISK_CACHE_DIR", "./.autogen_ext_cache")
-                store = DiskCacheStore[CHAT_CACHE_VALUE_TYPE](DiskCache(cache_dir))  # type: ignore
-
-            # Wrap the base model client so AgentChat uses the cached client everywhere
-            self.model_client = ChatCompletionCache(self.model_client, store)
-
         self.tools = [
-            get_video_summary_object.get_video_summary,
-            get_object_collection_object.get_object_collection,
-            get_context_tool_object.get_context,
-            get_relevant_frames_object.get_relevant_frames,
-            query_frame_object.query_frame,
+            self._wrap(get_video_summary_object.get_video_summary),
+            self._wrap(get_object_collection_object.get_object_collection),
+            self._wrap(get_context_tool_object.get_context),
+            self._wrap(get_relevant_frames_object.get_relevant_frames),
+            self._wrap(query_frame_object.query_frame),
         ]
-        self.planner_agent = None
-        self.critic_agent = None
-        self.team = None
 
+        # Task string passed to the workflow
         self.task = (
             f"query:{self.query}."
             + (f"\nInstruction:video id:{self.video_id}" if self.video_id is not None else "")
             + (f"\nurl:{self.url}" if self.url is not None else "")
         )
 
-    async def _initialize_agents(self):
-        # system prompt for video planner agent with comprehensive tool access
+        self.workflow: Optional[Workflow] = None
+
+    # ── Workflow construction ─────────────────────────────────────────────
+
+    async def _build_workflow(self) -> None:
+        """Build the WorkflowBuilder graph with planner (+ optional critic)."""
         planner_system_prompt = await get_planner_system_prompt(
             use_critic_agent=self.use_critic_agent,
         )
 
-        # Define Planner agent
-        self.planner = AssistantAgent(
-            name="planner",
-            model_client=self.model_client,
-            model_client_stream=False,
-            description=PLANNER_DESCRIPTION,
-            system_message=(f"""{planner_system_prompt}"""),
-            tools=self.tools,
-            reflect_on_tool_use=True,
-            max_tool_iterations=15,  # Reduced from 100 to 15 for faster response
-            handoffs=["critic"] if self.use_critic_agent else [],
-        )
+        # ── Middlewares ───────────────────────────────────────────────────
+        middleware = []
+        if self.verbose:
+            middleware.extend([
+                LoggingAgentMiddleware(),
+                LoggingFunctionMiddleware(),
+                LoggingChatMiddleware(),
+            ])
+        middleware.append(TerminationMiddleware())
 
-        text_mention_termination = TextMentionTermination("TERMINATE")
-        # max_messages_termination = MaxMessageTermination(max_messages=20)
-        termination = text_mention_termination
+        # NOTE: agent_framework v1.0.0b260130 uses `chat_client=`
+        planner = Agent(
+            client=self.model_client,
+            instructions=planner_system_prompt,
+            name="planner",
+            description=PLANNER_DESCRIPTION,
+            tools=self.tools,
+            middleware=middleware
+        )
 
         if self.use_critic_agent:
             critic_tool_object = CriticTool(llm_provider=self.provider.llm_provider)
-            self.critic = AssistantAgent(
+            critic = Agent(
+                client=self.model_client,
+                instructions=CRITIC_AGENT_SYSTEM_PROMPT,
                 name="critic",
-                model_client=self.model_client,
-                model_client_stream=False,
                 description=CRITIC_DESCRIPTION,
-                system_message=(f"{CRITIC_AGENT_SYSTEM_PROMPT}"),
-                tools=[critic_tool_object.critic_tool],
-                reflect_on_tool_use=False,
-                handoffs=["planner"],
+                tools=[self._wrap(critic_tool_object.critic_tool)],
+                middleware=middleware
             )
 
-            self.team = Swarm(
-                participants=[self.planner, self.critic], termination_condition=termination
+            def _planner_ready_for_criticism(resp) -> bool:
+                """
+                Edge condition: route to critic when planner's last message
+                contains 'ready for criticism'.
+                resp is AgentExecutorResponse with:
+                  .agent_response.messages  — list[Message] from this turn
+                  .full_conversation        — full history list[Message]
+                Each Message has a .text property for plain-text content.
+                """
+                messages = (
+                    (resp.agent_response.messages if resp.agent_response else None)
+                    or resp.full_conversation
+                    or []
+                )
+                if not messages:
+                    return False
+                last_text = getattr(messages[-1], "text", "") or ""
+                return "ready for criticism" in last_text.lower()
+
+            self.workflow = (
+                WorkflowBuilder(start_executor=planner)
+                .add_edge(planner, critic, condition=_planner_ready_for_criticism)
+                .add_edge(critic, planner)   # critic always returns to planner
+                .build()
             )
         else:
-            self.team = RoundRobinGroupChat(
-                participants=[self.planner], termination_condition=termination
-            )
+            # No critic — planner runs to TERMINATE on its own
+            self.workflow = WorkflowBuilder(start_executor=planner).build()
 
-    async def setup(self):
-        await self._initialize_agents()
+    # ── Execution helpers ─────────────────────────────────────────────────
 
-    async def calculate_total_tokens(self, messages) -> dict:
+    async def run(self) -> Dict[str, Any]:
         """
-        Calculates total input (prompt_tokens) and output (completion_tokens) tokens
-        from a list of message objects from TaskResult containing `models_usage`.
-
-        Args:
-            messages (list): List of message objects, each possibly containing `models_usage`.
+        Run the VideoQnA workflow (non-streaming).
 
         Returns:
-            dict: {'total_input': int, 'total_output': int}
+            dict with keys:
+              - result : parsed answer dict  (answer, source, videos)
+              - tokens : best-effort token usage dict
         """
-        total_input = 0
-        total_output = 0
+        await self._build_workflow()
 
-        for message in messages:
-            usage = getattr(message, "models_usage", None)
-            if usage:
-                total_input += getattr(usage, "prompt_tokens", 0) or 0
-                total_output += getattr(usage, "completion_tokens", 0) or 0
+        events = await self.workflow.run(self.task)
+        output_events = events.get_outputs()
 
-        return {"total_input": total_input, "total_output": total_output}
+        last_content = _extract_last_text(output_events)
+        parsed_result = parse_response_to_dict(last_content)
 
-    async def run(self):
-        """
-        Run the video QnA workflow and return structured response.
+        # Aggregate tokens from all workflow events
+        total_usage = {}
+        for event in events:
+            if event.type in ["data", "output"]:
+                # Check for AgentResponse which contains usage_details
+                if isinstance(event.data, AgentResponse) and event.data.usage_details:
+                    for k, v in event.data.usage_details.items():
+                        if v is not None:
+                            total_usage[k] = total_usage.get(k, 0) + v
 
-        Returns:
-            Dict containing:
-            - result: Parsed response dict with answer, source, and videos
-            - tokens: Token usage information
-        """
-        await self.setup()
-
-        result = await self.team.run(task=self.task)
-        tokens = await self.calculate_total_tokens(result.messages)
-
-        # Extract and parse the last message content
-        last_message = result.messages[-1].content if result.messages else ""
-        parsed_result = parse_response_to_dict(last_message)
-
-        return {"result": parsed_result, "tokens": tokens}
+        return {"result": parsed_result, "tokens": total_usage}
 
     async def run_stream(self):
-        await self.setup()
-        return self.team.run_stream(task=self.task)
+        """
+        Run the VideoQnA workflow in streaming mode.
 
+        Returns:
+            ResponseStream of workflow events (iterate with `async for`).
+        """
+        await self._build_workflow()
+        # In agent_framework v1.0.0b260212, streaming is done via
+        # workflow.run(stream=True) which returns a ResponseStream directly.
+        return self.workflow.run(self.task, stream=True)
+
+
+# ── Public API ────────────────────────────────────────────────────────────────
 
 async def video_qna(
     query: Annotated[str, "The question to be answered based on the content of the video."],
-    video_id: Annotated[str, "The unique identifier of the video."] = None,
-    url: Annotated[str, "The URL of the video to filter out the search results"] = None,
+    video_id: Annotated[Optional[str], "The unique identifier of the video."] = None,
+    url: Annotated[Optional[str], "The URL of the video to filter out the search results"] = None,
     use_critic_agent: Annotated[
         bool, "Set to True to enable a critic agent that validates the response."
     ] = True,
     stream: Annotated[bool, "Set to True to return the response as a stream."] = False,
+    verbose: Annotated[bool, "Set to True to enable console logs."] = True,
+    cache: Annotated[bool, "Set to True to enable caching."] = False,
     provider: VideoAgentProviderConfig = None,
-    cache: Annotated[bool, "Set to True to enable cache for model responses."] = True,
-    use_console: Annotated[bool, "Set to True to use Console for streaming output."] = True,
-):
+) -> Any:
     """
-    Video QnA with comprehensive multi-tool support for video analysis using Swarm orchestration.
+    Answer a user query about a video using WorkflowBuilder-based multi-agent orchestration.
 
-    This function uses dependency injection via VideoAgentProviderConfig to access all required providers
-    for video analysis including LLM, vector databases, embeddings, and storage.
+    Uses Microsoft's agent_framework (v1.0.0b260212+) with WorkflowBuilder:
+    - Planner orchestrates five video-analysis tools to build an answer.
+    - Critic (optional) reviews the draft on "ready for criticism" handoff.
+    - Workflow terminates when Planner emits TERMINATE.
 
-    Answers a user query based on the content of a specified video using five complementary tools:
-    1. get_video_summary: Retrieves high-level video summary and context (can be called without video_id for discovery)
-    2. get_object_collection: Retrieves object descriptions with counts (requires video_id, semantic query based on summary)
-    3. get_context: Retrieves transcript and visual summary documents (requires video_id)
-    4. get_relevant_frames: Gets specific frame names based on visual queries
-    5. query_frame: Analyzes downloaded frames with vision models
-
-    The planner intelligently combines textual and visual information for comprehensive responses.
-    With Swarm orchestration, agents can dynamically hand off tasks for better collaboration.
-
-    Workflow: If video_id not provided, get_video_summary is called first to discover relevant videos.
+    Tools available:
+    1. get_video_summary    – High-level summaries; video discovery
+    2. get_object_collection– Object counts, tracking, appearances
+    3. get_context          – Transcript chunks + chapter visual summaries
+    4. get_relevant_frames  – Frame discovery by visual query
+    5. query_frame          – Vision-model analysis of frames / timestamps
 
     Args:
-        query (str): The question to be answered based on the content of the video.
-        video_id (Optional[str]): The unique identifier of the video.
-        url (Optional[str]): The URL of the video to filter out the search results.
-        use_critic_agent (bool): Set to True to enable a critic agent that validates the response. Defaults to True.
-        stream (bool): Set to True to return the response as a stream. Defaults to False.
-        providers (VideoAgentProviderConfig): Provider configuration containing all required providers.
-        cache (bool): Set to True to enable cache for model responses. Defaults to True.
-        use_console (bool): Set to True to use Console for streaming output. Defaults to True.
+        query (str): The question to answer based on video content.
+        video_id (Optional[str]): Hash video ID to scope the search.
+        url (Optional[str]): Video URL to scope the search.
+        use_critic_agent (bool): Enable Critic review loop. Default True.
+        stream (bool): Return an async generator of events. Default False.
+        provider (VideoAgentProviderConfig): Injected provider configuration.
 
     Returns:
-        Dict containing:
-        - result: Parsed response dict with answer, source, and videos
-        - tokens: Token usage information
-        OR
-        AsyncGenerator if stream=True and use_console=False
+        Non-streaming: dict with 'result' (answer, source, videos) and 'tokens'.
+        Streaming    : async generator of workflow events.
     """
-
-    video_qna_instance = VideoQnA(
+    instance = VideoQnA(
+        query=query,
         video_id=video_id,
         url=url,
-        query=query,
         use_critic_agent=use_critic_agent,
-        provider=provider,
+        verbose=verbose,
         cache=cache,
-        use_console=use_console,
+        provider=provider,
     )
+
     if stream:
-        response_generator = await video_qna_instance.run_stream()
-        
-        if not use_console:
-            return response_generator
-            
-        messages = await Console(response_generator)
+        return await instance.run_stream()
 
-        # Return the final result in consistent format
-        if messages:
-            if isinstance(messages, list):
-                last_message = messages[-1]
-            else:
-                last_message = messages
-            if isinstance(last_message, TaskResult):
-                final_content = last_message.messages[-1].content if last_message.messages else ""
-            else:
-                final_content = getattr(last_message, "content", str(last_message))
+    return await instance.run()
 
-            # Parse the response into structured format
-            parsed_result = parse_response_to_dict(final_content)
 
-            # Calculate tokens from all messages
-            if isinstance(messages, TaskResult):
-                tokens = await video_qna_instance.calculate_total_tokens(
-                    last_message.messages if isinstance(last_message, TaskResult) else []
-                )
-            elif isinstance(messages, list) and messages and isinstance(messages[0], TaskResult):
-                tokens = await video_qna_instance.calculate_total_tokens(messages)
-            else:
-                tokens = await video_qna_instance.calculate_total_tokens(
-                    last_message.messages if isinstance(last_message, TaskResult) else []
-                )
-
-            return {"result": parsed_result, "tokens": tokens}
-
-        return {
-            "result": {"answer": "No response generated", "source": [], "videos": []},
-            "tokens": {"total_input": 0, "total_output": 0},
-        }
-    else:
-        return await video_qna_instance.run()
-
+# ── Local smoke test ──────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    # Example usage - replace with your actual values
-    query = "<placeholder for query>"
-    # video_id = "<placeholder for hash video Id>" #Optional
-    # url = "<placeholder for url to filter out the results>" #Optional
-    use_critic_agent = True
-    stream = True
-    use_console = True  # Enable console for local run
+    # ── Replace placeholders with real values before running ──
+    from mmct.config.providers import VideoAgentProviderConfig
 
-    result = asyncio.run(
-        video_qna(
-            query=query,
-            # video_id=video_id, #Optional
-            # url=url, #Optional
-            use_critic_agent=use_critic_agent,
-            stream=stream,
-            cache=False,
-            use_console=use_console,
+    provider = VideoAgentProviderConfig(...)   # supply your provider config here
+
+    query = "<placeholder for query>"
+    # video_id = "<placeholder for hash video Id>"  # Optional
+    # url = "<placeholder for url to filter out the results>"  # Optional
+    use_critic_agent = True
+    stream = False
+
+    if stream:
+        async def _run_stream():
+            gen = await video_qna(
+                query=query,
+                # video_id=video_id,
+                # url=url,
+                use_critic_agent=use_critic_agent,
+                stream=True,
+                provider=provider,
+            )
+            async for event in gen:
+                print(event)
+
+        asyncio.run(_run_stream())
+    else:
+        result = asyncio.run(
+            video_qna(
+                query=query,
+                # video_id=video_id,
+                # url=url,
+                use_critic_agent=use_critic_agent,
+                stream=False,
+                provider=provider,
+            )
         )
-    )
-    
-    if stream and not use_console:
-        # If user chooses to handle stream iteration manually
-        async def iterate():
-             async for chunk in result:
-                 print(chunk)
-        asyncio.run(iterate())
+        print(result)

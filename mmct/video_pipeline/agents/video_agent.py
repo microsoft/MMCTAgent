@@ -18,7 +18,7 @@ load_dotenv(override=True)
 
 class VideoAgent:
     """
-    MMCT's Video question answering agent using Swarm orchestration.
+    MMCT's Video question answering agent.
     
     This agent uses VideoAgentProviderConfig for dependency injection to access:
     - llm_provider: For LLM-based reasoning and structured response generation
@@ -29,7 +29,7 @@ class VideoAgent:
     - storage_provider: For accessing stored video frames
 
     This agent provides a clean interface that:
-    1. Calls video_qna (with Swarm orchestration) with the provided parameters
+    1. Calls video_qna with the provided parameters
     2. Formats the response using LLM with structured output
     3. Returns a properly structured VideoAgentResponse
 
@@ -39,7 +39,7 @@ class VideoAgent:
         video_id (Optional[str]): Specific video ID to query. Defaults to None.
         url (Optional[str]): URL to filter the search results for that particular video. Defaults to None.
         use_critic_agent (bool): Whether to use the critic agent for validation. Defaults to True.
-        stream (bool): Whether to stream the response output. Defaults to False.
+        verbose (bool): Whether to enable console logs. Defaults to True.
         cache (bool): Whether to enable caching for model responses. Defaults to False.
 
     Example:
@@ -106,7 +106,7 @@ class VideoAgent:
         video_id: Optional[str] = None,
         url: Optional[str] = None,
         use_critic_agent: Optional[bool] = True,
-        stream: bool = False,
+        verbose: bool = True,
         cache: Optional[bool] = False
     ):
         # Store parameters
@@ -114,14 +114,14 @@ class VideoAgent:
         self.video_id = video_id
         self.url = url
         self.use_critic_agent = use_critic_agent
-        self.stream = stream
+        self.verbose = verbose
         self.cache = cache
         self.provider = provider
 
 
     async def __call__(self) -> VideoAgentResponse:
         """
-        Main execution method for the VideoAgent using Swarm orchestration.
+        Main execution method for the VideoAgent.
 
         Returns:
             VideoAgentResponse: Structured response containing the answer to the query.
@@ -129,12 +129,14 @@ class VideoAgent:
         try:
             # Call the video_qna function
             # Get response from video_qna with Swarm orchestration
+            # Get response from video_qna
             video_qna_response = await video_qna(
                 query=self.query,
                 video_id=self.video_id,
                 url=self.url,
                 use_critic_agent=self.use_critic_agent,
-                stream=self.stream,
+                stream=False,
+                verbose = self.verbose,
                 provider = self.provider,
                 cache = self.cache
             )
@@ -164,12 +166,25 @@ class VideoAgent:
             messages = self._prepare_messages(context_text)
 
             # Get structured response from LLM
-            response = await self.provider.llm_provider.chat_completion(
+            response_dict = await self.provider.llm_provider.chat_completion(
                 messages=messages,
                 temperature=0.0,  # Use default temperature
                 response_format=VideoAgentResponse
             )
-            return response
+            
+            final_response = response_dict["content"]
+            
+            # Combine usage from video_qna and this formatting call
+            qna_tokens = video_qna_response.get("tokens", {})
+            formatting_usage = response_dict.get("usage", {})
+            
+            # Update tokens in final response
+            # qna_tokens keys: input_token_count, output_token_count
+            # formatting_usage keys: prompt_tokens, completion_tokens
+            final_response.tokens.input_token += qna_tokens.get("input_token_count", 0) + formatting_usage.get("prompt_tokens", 0)
+            final_response.tokens.output_token += qna_tokens.get("output_token_count", 0) + formatting_usage.get("completion_tokens", 0)
+            
+            return final_response
 
         except Exception as e:
             return self._create_error_response(f"Error generating final answer: {str(e)}")
@@ -206,20 +221,14 @@ if __name__ == "__main__":
             query=query,
             url=url,
             use_critic_agent=True,
-            stream=stream,
+            verbose=True,
             cache = cache
         )
 
         results = await video_agent()
-        if stream:
-            messages = await Console(results)
-            # if isinstance(messages, TaskResult):
-            #     return messages.messages[-1]
-            # return messages
-        else:
-            print("-" * 60)
-            print(f"Query: {query}")
-            print("-" * 60)
-            print(results)
+        print("-" * 60)
+        print(f"Query: {query}")
+        print("-" * 60)
+        print(results)
 
     asyncio.run(main())
