@@ -10,11 +10,6 @@ class BaseLLMProvider(ABC):
         pass
 
     @abstractmethod
-    def get_autogen_client(self, **kwargs):
-        """Get autogen-compatible client for the LLM provider."""
-        pass
-
-    @abstractmethod
     def get_agent_framework_client(self, **kwargs):
         """Get agent-framework compatible client."""
         pass

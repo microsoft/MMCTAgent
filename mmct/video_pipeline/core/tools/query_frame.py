@@ -198,9 +198,8 @@ class QueryFrameTool:
 
         response = await self.llm_provider.chat_completion(
             messages=payload["messages"],
-            temperature=payload["temperature"],
-            # top_p=payload['top_p'],
-            max_tokens=500,
+            #temperature=payload["temperature"],
+            # top_p=payload['top_p']
         )
 
         # Clean up memory after LLM call

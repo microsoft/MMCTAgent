@@ -7,7 +7,6 @@ from azure.core.credentials_async import AsyncTokenCredential
 from mmct.utils.error_handler import ProviderException, ConfigurationException
 from typing import Dict, Any, List, Union, Optional
 from mmct.utils.error_handler import handle_exceptions, convert_exceptions
-from autogen_ext.models.openai import AzureOpenAIChatCompletionClient
 from agent_framework.azure import AzureOpenAIChatClient
 
 
@@ -101,8 +100,8 @@ class AzureLLMProvider(BaseLLMProvider):
         """Generate chat completion using Azure OpenAI."""
         try:
 
-            temperature = kwargs.get("temperature",0)
-            max_tokens = kwargs.get("max_tokens",4000)
+            # temperature = kwargs.get("temperature",0)
+            # max_tokens = kwargs.get("max_tokens",4000)
             response_format = kwargs.get("response_format")
 
             # Remove temperature, max_tokens, and response_format from kwargs to avoid duplicate arguments
@@ -123,8 +122,8 @@ class AzureLLMProvider(BaseLLMProvider):
                 response = await self.client.chat.completions.parse(
                     model=self.deployment_name,
                     messages=messages,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
+                    # temperature=temperature,
+                    # max_tokens=max_tokens,
                     response_format=response_format,
                     **filtered_kwargs,
                 )
@@ -140,8 +139,8 @@ class AzureLLMProvider(BaseLLMProvider):
                 completion_kwargs = {
                     "model": self.deployment_name,
                     "messages": messages,
-                    "temperature": temperature,
-                    "max_tokens": max_tokens,
+                    # "temperature": temperature,
+                    # "max_tokens": max_tokens,
                     **filtered_kwargs,
                 }
 
@@ -160,37 +159,6 @@ class AzureLLMProvider(BaseLLMProvider):
             logger.error(f"Azure OpenAI chat completion failed: {e}")
             raise ProviderException(f"Azure OpenAI chat completion failed: {e}")
 
-    def get_autogen_client(self, **kwargs):
-        """Get autogen-compatible client for Azure OpenAI."""
-        try:
-            temperature = kwargs.get("temperature", 0)
-
-            if self.credentials is not None:
-                # Use credentials with token-based authentication
-                token_provider = get_bearer_token_provider(
-                    self.credentials, "https://cognitiveservices.azure.com/.default"
-                )
-                return AzureOpenAIChatCompletionClient(
-                    azure_deployment=self.deployment_name,
-                    model=self.model_name if self.model_name else self.deployment_name,
-                    api_version=self.api_version,
-                    azure_endpoint=self.endpoint,
-                    azure_ad_token_provider=token_provider,
-                    timeout=self.timeout,
-                    temperature=temperature,
-                )
-            else:
-                return AzureOpenAIChatCompletionClient(
-                    azure_deployment=self.deployment_name,
-                    model=self.model_name if self.model_name else self.deployment_name,
-                    api_version=self.api_version,
-                    azure_endpoint=self.endpoint,
-                    api_key=self.api_key,
-                    timeout=self.timeout,
-                    temperature=temperature,
-                )
-        except Exception as e:
-            raise ProviderException(f"Failed to create Azure OpenAI autogen client: {e}")
 
     def get_agent_framework_client(self, **kwargs):
         """Get agent-framework compatible client for Azure OpenAI."""

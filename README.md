@@ -52,7 +52,8 @@ MMCTAgent is inspired by human cognitive processes and integrates a structured r
   Generates an initial response using relevant tools for visual or multi-modal input.
 
 - **Critic**:  
-  Evaluates the Planner’s response and provides feedback to improve accuracy and decision-making. 
+  Evaluates the Planner’s response and provides feedback to improve accuracy and decision-making.
+
 ---
 
 ### **Modular Agents**
@@ -83,11 +84,11 @@ It supports a configurable set of tools via the `ImageQnaTools` enum:
 
 Optimized for deep video understanding:
 
-**Video Question Answering**  
+**Video Question Answering**
 
 [![](docs/multimedia/video-agent.png)](https://arxiv.org/abs/2405.18358)
 
-   Applies a fixed toolchain orchestrated by the Planner:
+Applies a fixed toolchain orchestrated by the Planner:
 
 - `GET_VIDEO_SUMMARY` – Retrieves the most relevant video for the query, along with its summary.
 - `GET_OBJECT_COLLECTION` – Retrieves the most relevant video for the query, along with its detected objects.
@@ -100,8 +101,9 @@ Optimized for deep video understanding:
 For more details, refer to the full research article:
 
 **[MMCTAgent: Multi-modal Critical Thinking Agent
- Framework for Complex Visual Reasoning](https://arxiv.org/abs/2405.18358)**  
+Framework for Complex Visual Reasoning](https://arxiv.org/abs/2405.18358)**  
 Published on **arXiv** – [arxiv.org/abs/2405.18358](https://arxiv.org/abs/2405.18358)
+
 </details>
 
 ---
@@ -116,6 +118,7 @@ Published on **arXiv** – [arxiv.org/abs/2405.18358](https://arxiv.org/abs/2405
 - [Citations](#citation)
 - [License](#license)
 - [Support](#support)
+
 ---
 
 ## **Getting Started**
@@ -123,21 +126,23 @@ Published on **arXiv** – [arxiv.org/abs/2405.18358](https://arxiv.org/abs/2405
 ### **Installation**
 
 1. **Clone the Repository**
+
    ```bash
    git clone https://github.com/microsoft/MMCTAgent.git
    cd MMCTAgent
    ```
 
 2. **System Dependencies**
-    
+
    Install FFmpeg
 
    **Linux/Ubuntu:**
+
    ```bash
    sudo apt-get update
    sudo apt-get install ffmpeg libsm6 libxext6 -y
    ```
-   
+
    **Windows:**
    - Download FFmpeg from [ffmpeg.org](https://ffmpeg.org/download.html)
    - Add the `bin` folder to your system PATH
@@ -145,12 +150,14 @@ Published on **arXiv** – [arxiv.org/abs/2405.18358](https://arxiv.org/abs/2405
 3. **Python Environment Setup**
 
    **Option A: Using Conda (Recommended)**
+
    ```bash
    conda create -n mmct-agent python=3.11
    conda activate mmct-agent
    ```
 
    **Option B: Using venv**
+
    ```bash
    python -m venv mmct-agent
    # Linux/Mac
@@ -164,18 +171,21 @@ Published on **arXiv** – [arxiv.org/abs/2405.18358](https://arxiv.org/abs/2405
    Choose the installation option based on your needs:
 
    **Option A: Image Pipeline**
+
    ```bash
    pip install --upgrade pip
    pip install ".[image-agent]"
    ```
 
    **Option B: Video Pipeline**
+
    ```bash
    pip install --upgrade pip
    pip install ".[video-agent]"
    ```
 
    **Option C: All Features (Image + Video + MCP Server)**
+
    ```bash
    pip install --upgrade pip
    pip install ".[all]"
@@ -211,7 +221,7 @@ image_agent = ImageAgent(
     image_path="path/to/your/image.jpg",
     tools=[ImageQnaTools.object_detection, ImageQnaTools.ocr, ImageQnaTools.vit],
     use_critic_agent=True,  # Enable critical thinking
-    stream=False,
+    verbose=True,
     provider = provider
 )
 
@@ -302,6 +312,7 @@ await ingestion.run()
 ```
 
 Perform Q&A through MMCT's Video Agent.
+
 ```python
 from mmct.video_pipeline import VideoAgent
 from mmct.config.providers import VideoAgentProviderConfig
@@ -390,12 +401,12 @@ MMCTAgent now features a **modular provider system** that allows you to seamless
 
 #### **Supported Providers**
 
-| Service Type | Supported Providers | Use Cases |
-|--------------|--------------------|-----------|
-| **LLM** | Azure OpenAI, OpenAI, **+ Custom** | Text generation, chat completion |
-| **Search** | Azure AI Search, FAISS | Document search and retrieval |
-| **Transcription** | Azure Speech Services, OpenAI Whisper | Audio-to-text conversion |
-| **Storage** | Azure Blob Storage, Local Storage | File storage and management |
+| Service Type      | Supported Providers                   | Use Cases                        |
+| ----------------- | ------------------------------------- | -------------------------------- |
+| **LLM**           | Azure OpenAI, OpenAI, **+ Custom**    | Text generation, chat completion |
+| **Search**        | Azure AI Search, FAISS                | Document search and retrieval    |
+| **Transcription** | Azure Speech Services, OpenAI Whisper | Audio-to-text conversion         |
+| **Storage**       | Azure Blob Storage, Local Storage     | File storage and management      |
 
 > **Note**: All provider types support custom implementations. See the [Custom LLM Provider Example](examples/image_agent.ipynb) (Anthropic Claude) or read the [Providers Guide](mmct/providers/README.md) for implementation details.
 
@@ -408,11 +419,13 @@ For detailed configuration instructions, see our [Provider Configuration Guide](
 ### System Requirements for CLIP embeddings ([openai/clip-vit-base-patch32](https://huggingface.co/openai/clip-vit-base-patch32))
 
 Minimum (development / small-scale):
+
 - CPU: 4-core modern i5/i7, ~8 GB RAM
 - Disk: ~500 MB caching model + image/text data
 - GPU: none (works but slow)
 
 Recommended (for decent speed / batching):
+
 - CPU: 8+ cores, 16 GB RAM
 - GPU: NVIDIA with ≥ 4-6 GB VRAM (e.g. RTX 2060/3060)
 - PyTorch + CUDA installed, with mixed precision support
@@ -431,9 +444,9 @@ Below is the project structure highlighting the key entry-point scripts for runn
 
 ```sh
 MMCTAgent
-| 
+|
 ├── infra
-|   └── INFRA_DEPLOYMENT_GUIDE.md    # Guide for deployment of Azure Infrastructure 
+|   └── INFRA_DEPLOYMENT_GUIDE.md    # Guide for deployment of Azure Infrastructure
 ├── app                              # contains the FASTAPI application over the mmct pipelines.
 ├── mcp_server
 │   ├── main.py                      # you need to run main.py to start MCP server
@@ -463,8 +476,7 @@ This project welcomes contributions and suggestions. Most contributions require 
 When you submit a pull request, a CLA-bot will automatically determine whether you need to provide a CLA and decorate the PR appropriately (e.g., label, comment). Simply follow the instructions provided by the bot. You will only need to do this once across all repositories using our CLA.
 This project has adopted the [Microsoft Open Source Code of Conduct](https://opensource.microsoft.com/codeofconduct/). For more information see the [Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/) or contact opencode@microsoft.com with any additional questions or comments.
 
-
-> *Note:* This project is currently under active research and continuous development. While contributions are encouraged, please note that the codebase may evolve as the project matures.
+> _Note:_ This project is currently under active research and continuous development. While contributions are encouraged, please note that the codebase may evolve as the project matures.
 
 ## **Citation**
 
@@ -484,13 +496,10 @@ If you find MMCTAgent useful in your research, please cite our paper:
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-
-
 ## **Support**
 
 - [Documentation](docs/)
 - [Report Issues](https://github.com/microsoft/MMCTAgent/issues)
 - [Discussions](https://github.com/microsoft/MMCTAgent/discussions)
+
 ---
-
-

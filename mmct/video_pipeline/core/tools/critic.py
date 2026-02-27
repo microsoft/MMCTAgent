@@ -66,9 +66,7 @@ class CriticTool:
                             {"type": "text", "text": f"These are the logs: {logs_json}"}
                         ]
                     },
-                ],
-            "temperature": 0,
-            "top_p": 0.1,
+                ]
             }
 
             retry_intervals = [10, 15]
@@ -76,8 +74,8 @@ class CriticTool:
                 try:
                     result = await self.llm_provider.chat_completion(
                         messages=payload["messages"],
-                        temperature=payload["temperature"],
-                        top_p=payload["top_p"]
+                        # temperature=payload["temperature"],
+                        # top_p=payload["top_p"]
                     )
                     response = type('obj', (object,), {
                         'choices': [type('obj', (object,), {

@@ -24,18 +24,15 @@ The planner supports the following tools via the `ImageQnaTools` enum:
 - `ImageQnaTools.recog` – This tool recognise the objects in the image.
 - `ImageQnaTools.vit` – for high-level visual understanding using vision transformers.
 
-Users can pass a list of tools via the `tools` parameter to override the defaults.
----
+## Users can pass a list of tools via the `tools` parameter to override the defaults.
 
 ## **Tool Workflow**
 
 1. **Input Processing**
-
    - The user provides an image input along with a query.
    - The system is initialized with a set of tools (default or user-defined) and an optional critic agent.
 
 2. **Planner Agent Execution**
-
    - The **Planner** is the core agent that first analyzes the input.
    - It selects appropriate tools from the `ImageQnaTools` enum based on the task:
      - `object_detection`: Detects objects in the image.
@@ -45,7 +42,6 @@ Users can pass a list of tools via the `tools` parameter to override the default
    - The planner generates an initial response based on these tools.
 
 3. **Critic Agent Feedback (Optional)**
-
    - If `use_critic_agent=True` (default), the **Critic** reviews the planner’s output.
    - It evaluates the quality and correctness of the response.
    - If needed, it provides feedback, prompting the planner to revise its output.
@@ -115,7 +111,7 @@ from mmct.image_pipeline import ImageAgent, ImageQnaTools
 
 # Your custom LLM provider implementation
 class CustomLLMProvider(BaseLLMProvider):
-    # Implement required methods: chat_completion() and get_autogen_client()
+    # Implement required methods: chat_completion() and get_agent_framework_client()
     pass
 
 # Use your custom provider

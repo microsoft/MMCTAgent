@@ -19,9 +19,10 @@ Ensure to install the requirements from the `requirements.txt` present in the ba
 python main.py
 ```
 
-Server runs on `http://0.0.0.0:8000` by default on `streamable-http` transport. 
+Server runs on `http://0.0.0.0:8000` by default on `streamable-http` transport.
 
 Learn more about the [MCP transport configuration](https://deepwiki.com/jlowin/fastmcp/7.1-transport-protocols).
+
 </details>
 
 <details>
@@ -33,6 +34,7 @@ You can test out individual tool using the `client.py`.
 ```bash
 python client.py
 ```
+
 </details>
 
 <details>
@@ -131,11 +133,11 @@ python client.py
 
 ### Search Modes
 
-| Mode | Description | Use Case |
-|------|-------------|----------|
-| `full` | Keyword-based search | Exact term matching |
-| `vector` | Embedding similarity | Semantic similarity |
-| `semantic` | Natural language understanding | Complex queries |
+| Mode       | Description                    | Use Case            |
+| ---------- | ------------------------------ | ------------------- |
+| `full`     | Keyword-based search           | Exact term matching |
+| `vector`   | Embedding similarity           | Semantic similarity |
+| `semantic` | Natural language understanding | Complex queries     |
 
 </details>
 
@@ -173,17 +175,18 @@ mcp_server/
 
 ## **Integration with Agents**
 
-Integration of `AutoGen` Agent with MCP server has been provided in the `notebooks/autogen_mcp_example.ipynb`. You can understand the connection setup with the AutoGen.
-Below are the links which showcase the integration of MCP server tools with agents.
-- [AutoGen Docs](https://microsoft.github.io/autogen/stable/reference/python/autogen_ext.tools.mcp.html#module-autogen_ext.tools.mcp)
-- [MCP tools integration in Semantic Kernel](https://valentinaalto.medium.com/leverage-mcp-tools-with-semantic-kernel-agents-36120136832d)
+Integration of agents with MCP server is demonstrated in the `notebooks/` directory.
+Below are links relevant to MCP integration with various agent frameworks.
 
+- [agent_framework Docs](https://github.com/microsoft/agent_framework)
+- [MCP tools integration in Semantic Kernel](https://valentinaalto.medium.com/leverage-mcp-tools-with-semantic-kernel-agents-36120136832d)
 
 ## **Deployment of Resources & MCP server**
 
-For the deployment of MCP server you can visit the `MMCT Infrastructure Deployment Guide` present in the `infra` folder. 
+For the deployment of MCP server you can visit the `MMCT Infrastructure Deployment Guide` present in the `infra` folder.
 
 Required Resources are on Azure Cloud:
+
 1. Azure Storage Account
 2. Azure AI Search Service
 3. Azure Speech Service/Azure OpenAI Whisper
@@ -195,7 +198,7 @@ You can utilize any service to deploy the MCP server such as Azure App Service, 
 
 This section covers the way to authorize the MCP server so it can access the respective client's resources when receiving the incoming request.
 
-  The OBO (On-Behalf-Of) flow describes the scenario of a web API using an identity other than its own to call another web API. Referred to as delegation in OAuth, the intent is to pass a user's identity and permissions through the request chain. [[source]](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-on-behalf-of-flow)
+The OBO (On-Behalf-Of) flow describes the scenario of a web API using an identity other than its own to call another web API. Referred to as delegation in OAuth, the intent is to pass a user's identity and permissions through the request chain. [[source]](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-on-behalf-of-flow)
 
 For our MCP server the OBO Flow Auth representation is below:
 
@@ -204,24 +207,20 @@ For our MCP server the OBO Flow Auth representation is below:
 </p>
 
 The following configuration steps must be performed:
+
 1. **MCP App Registration (in MCP Tenant)**
-    - Create an App Registration for the MCP Server in its own tenant.
-    - This app registration represents the MCP Server’s identity in Azure AD.
-    - Ensure a **Service Principal** is created for it in the MCP Tenant.
+   - Create an App Registration for the MCP Server in its own tenant.
+   - This app registration represents the MCP Server’s identity in Azure AD.
+   - Ensure a **Service Principal** is created for it in the MCP Tenant.
 2. **Enable Multi-Tenant Access**
-    - In the MCP App Registration, set the app to **multi-tenant** so that it can accept tokens from other tenants (e.g., the client’s tenant).
-    - This allows the MCP app to be consented/used outside its home tenant.
+   - In the MCP App Registration, set the app to **multi-tenant** so that it can accept tokens from other tenants (e.g., the client’s tenant).
+   - This allows the MCP app to be consented/used outside its home tenant.
 3. **Create Service Principal in Client Tenant**
-    - When the Agentic Client first requests access, an **MCP App Service Principal** (an instance of the MCP App Registration) is created in the **Client’s Tenant**.
-    - This requires **admin consent** in the client’s tenant.
+   - When the Agentic Client first requests access, an **MCP App Service Principal** (an instance of the MCP App Registration) is created in the **Client’s Tenant**.
+   - This requires **admin consent** in the client’s tenant.
 4. **Grant Required API Permissions**
-    - Assign the correct API permissions / role assignments in the client’s tenant for the MCP Service Principal.
-    - For example, allow it to access Azure resources (Key Vault, AI Search, Blob, OpenAI) on behalf of the user.
-    - Ensure proper whitelisting / RBAC setup in the client’s Azure AD.
-5. **Consistent Resource Access via Key Vault**
-    - Resource names (endpoints) may vary across tenants, e.g.:
-      - `AZURE_OPENAI_ENDPOINT`
-      - `AZURE_SEARCH_ENDPOINT` 
-    - To standardize, the **MCP Server reads all endpoints/secrets from a Key Vault**, where environment variable keys are always consistent.
-    - This ensures that, regardless of client tenant naming differences, the MCP Server always looks up the same variable name to access the correct resource endpoint.
+   - Assign the correct API permissions / role assignments in the client’s tenant for the MCP Service Principal.
+   - For example, allow it to access Azure resources (Key Vault, AI Search, Blob, OpenAI) on behalf of the user.
+   - Ensure proper whitelisting / RBAC setup in the client’s Azure AD.
+5. **Consistent Resource Access via Key Vault** - Resource names (endpoints) may vary across tenants, e.g.: - `AZURE_OPENAI_ENDPOINT` - `AZURE_SEARCH_ENDPOINT` - To standardize, the **MCP Server reads all endpoints/secrets from a Key Vault**, where environment variable keys are always consistent. - This ensures that, regardless of client tenant naming differences, the MCP Server always looks up the same variable name to access the correct resource endpoint.
 </details>

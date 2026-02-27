@@ -26,10 +26,10 @@ The `base/` folder contains abstract base classes that define the interface for 
 
 ### Azure Providers
 
-The `azure_providers/` module contains ready-to-use implementations of all base providers using Azure services. These serve as reference implementations and can be used directly in your projects.
----
+## The `azure_providers/` module contains ready-to-use implementations of all base providers using Azure services. These serve as reference implementations and can be used directly in your projects.
 
 ## 🔌 Implementing Custom Provider
+
 Here is the implementation plan for custom LLM Provider
 
 MMCTAgent's provider system is fully extensible. You can implement custom LLM providers in your own codebase to support any LLM vendor (e.g., Anthropic, Cohere, Hugging Face, etc.).
@@ -38,13 +38,13 @@ MMCTAgent's provider system is fully extensible. You can implement custom LLM pr
 
 All LLM providers must implement two abstract methods from `BaseLLMProvider`:
 
-1. **`async chat_completion(messages: List[Dict], **kwargs) -> Dict[str, Any]`**
+1. **`async chat_completion(messages: List[Dict], **kwargs) -> Dict[str, Any]`\*\*
    - Generates chat completions using the LLM
    - Must return a dict with: `content`, `usage`, `model`, `finish_reason`
 
-2. **`get_autogen_client(**kwargs)`**
-   - Returns an autogen-compatible client for the LLM
-   - Required for integration with autogen-based agents (ImageAgent, VideoAgent, IngestionPipeline)
+2. **`get_agent_framework_client(**kwargs)`\*\*
+   - Returns an agent_framework-compatible client for the LLM
+   - Required for integration with agent-based agents (ImageAgent, VideoAgent)
 
 ### Implementation Steps
 
@@ -84,25 +84,16 @@ class AnthropicLLMProvider(BaseLLMProvider):
         # See examples/image_agent.ipynb for complete implementation
         pass
 
-    def get_autogen_client(self, **kwargs):
-        """Get autogen-compatible client for Anthropic."""
+    def get_agent_framework_client(self, **kwargs):
+        """Get agent_framework-compatible client for Anthropic."""
         try:
-            from autogen_ext.models.anthropic import AnthropicChatCompletionClient
+            # temperature = kwargs.get("temperature", 1.0)
+            # max_tokens = kwargs.get("max_tokens", 4096)
 
-            temperature = kwargs.get("temperature", 1.0)
-            max_tokens = kwargs.get("max_tokens", 4096)
-
-            return AnthropicChatCompletionClient(
-                model=self.model_name,
-                api_key=self.api_key,
-                temperature=temperature,
-                max_tokens=max_tokens,
-            )
+            # return YourAgentFrameworkClient(...)
+            pass
         except ImportError:
-            raise Exception(
-                "autogen_ext.models.anthropic is not available. "
-                "Install with: pip install 'autogen-ext[anthropic]'"
-            )
+            raise Exception("agent_framework is not available.")
 
     async def close(self):
         """Close the Anthropic client and cleanup resources."""
@@ -173,9 +164,10 @@ await ingestion.run()
    - Anthropic: System messages are a separate parameter
    - Your provider should handle these conversions internally
 
-2. **Error Handling**: Implement robust error handling, especially in `get_autogen_client()` for cases where autogen-ext doesn't support your vendor yet
+2. **Error Handling**: Implement robust error handling, especially in `get_agent_framework_client()` for cases where the framework doesn't support your vendor yet
 
 3. **Response Format**: Ensure `chat_completion()` returns a consistent format:
+
    ```python
    {
        "content": str,           # The response text
@@ -265,6 +257,7 @@ Simply instantiate and use your provider directly in your code. Follow the same 
 ## 🔧 Using Custom Providers
 
 Custom providers are used via direct instantiation. See the usage examples in the sections above:
+
 - For LLM providers: See [Implementing Custom LLM Providers](#-implementing-custom-llm-providers)
 - For other providers: Follow the same pattern - instantiate your provider and pass it to the appropriate agent config
 

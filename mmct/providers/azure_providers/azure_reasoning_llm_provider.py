@@ -8,7 +8,6 @@ from mmct.utils.error_handler import ProviderException, ConfigurationException
 from typing import Dict, Any, List, Union, Optional
 from mmct.utils.error_handler import handle_exceptions, convert_exceptions
 
-from autogen_ext.models.openai import AzureOpenAIChatCompletionClient
 
 
 class AzureReasoningLLMProvider(BaseLLMProvider):
@@ -180,42 +179,6 @@ class AzureReasoningLLMProvider(BaseLLMProvider):
             logger.error(f"Azure OpenAI reasoning model chat completion failed: {e}")
             raise ProviderException(f"Azure OpenAI reasoning model chat completion failed: {e}")
 
-    def get_autogen_client(self, **kwargs):
-        """Get autogen-compatible client for Azure OpenAI reasoning models.
-
-        Note: This method does not pass temperature or other unsupported parameters
-        to the autogen client for reasoning models.
-        """
-        try:
-            if self.credentials is not None:
-                # Use credentials with token-based authentication
-                token_provider = get_bearer_token_provider(
-                    self.credentials,
-                    "https://cognitiveservices.azure.com/.default"
-                )
-                return AzureOpenAIChatCompletionClient(
-                    azure_deployment=self.deployment_name,
-                    model=self.model_name if self.model_name else self.deployment_name,
-                    api_version=self.api_version,
-                    azure_endpoint=self.endpoint,
-                    azure_ad_token_provider=token_provider,
-                    timeout=self.timeout
-                    # Note: temperature and other unsupported parameters are not passed
-                )
-            else:
-                return AzureOpenAIChatCompletionClient(
-                    azure_deployment=self.deployment_name,
-                    model=self.model_name if self.model_name else self.deployment_name,
-                    api_version=self.api_version,
-                    azure_endpoint=self.endpoint,
-                    api_key=self.api_key,
-                    timeout=self.timeout
-                    # Note: temperature and other unsupported parameters are not passed
-                )
-        except Exception as e:
-            raise ProviderException(
-                f"Failed to create Azure OpenAI reasoning model autogen client: {e}"
-            )
 
     async def close(self):
         """Close the LLM client and cleanup resources."""

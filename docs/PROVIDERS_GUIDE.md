@@ -1,9 +1,9 @@
-
 ## Providers Guide
 
 This page gives a quick, easy-to-read summary of the providers you can use in this repo, how to configure them, and short copy-paste examples. For the authoritative types and defaults see `mmct/config/settings.py`.
 
 What you'll find here
+
 - Quick start (2-min setup)
 - Config snippets (env + minimal values)
 - How to call providers in code
@@ -59,11 +59,12 @@ from mmct.providers.base import BaseLLMProvider
 See the complete working implementation in `examples/image_agent.ipynb` under the section "Example Implementation of LLMProvider from other vendor like Anthropic".
 
 Key features demonstrated:
+
 - Inheriting from `BaseLLMProvider`
-- Implementing required methods: `chat_completion()` and `get_autogen_client()`
+- Implementing required methods: `chat_completion()` and `get_agent_framework_client()`
 - Message format conversion (OpenAI-style → Anthropic format)
 - System message handling
-- Autogen client integration with graceful error handling
+- Agent framework client integration with graceful error handling
 - Proper async client usage
 
 ### Using Custom LLM Providers
@@ -96,6 +97,7 @@ ingestion = IngestionPipeline(..., provider=ingestion_config)
 ```
 
 For complete implementation details:
+
 - [`examples/image_agent.ipynb`](../examples/image_agent.ipynb) - Full Anthropic provider example
 - [`mmct/providers/README.md`](../mmct/providers/README.md) - Step-by-step implementation guide
 
@@ -165,11 +167,11 @@ Similarity thresholds
 ---
 
 If you'd like, I can also:
+
 - add a small normalization helper in `VideoFrameSearchClient` so callers get one consistent result shape (recommended), or
 - add a short example script under `examples/` demonstrating end-to-end: load index, search, normalize and display results.
 
 Last updated: synthesized from repository code on branch `v-soumyade/local-providers`.
-
 
 ---
 
@@ -224,5 +226,6 @@ results = await client.search_similar_frames(query_vector=embedding_vector, top_
 ---
 
 If you want, I can:
+
 - add a small helper in `VideoFrameSearchClient` that normalizes search results across providers (recommended), or
 - add a short example script under `examples/` showing how to create a provider, run a query, and normalize results.

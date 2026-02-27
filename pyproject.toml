@@ -45,11 +45,8 @@ dependencies = [
     "openai>=1.72.0,<2.0.0",
     "tiktoken>=0.7.0,<1.0.0",
 
-    # AutoGen Framework
-    "autogen>=0.8.0,<1.0.0",
-    "autogen-agentchat>=0.4.9.0,<1.0.0",
-    "autogen-core>=0.4.9.0,<1.0.0",
-    "autogen-ext>=0.4.9.0,<1.0.0",
+    "openai>=1.72.0,<2.0.0",
+    "tiktoken>=0.7.0,<1.0.0",
 ]
 
 [project.optional-dependencies]
@@ -69,6 +66,7 @@ image-agent = [
     "azure-identity>=1.19.0,<2.0.0",
     "azure-core>=1.32.0,<2.0.0",
     "azure-storage-blob>=12.24.0,<13.0.0",
+    "agent-framework==1.0.0rc2",
 ]
 
 # Video Pipeline features (includes local models + Azure providers)
@@ -98,13 +96,12 @@ video-agent = [
     "azure-eventhub>=5.14.0,<6.0.0",
     "azure-eventhub-checkpointstoreblob-aio",
     "scenedetect>=0.6.0,<1.0.0",
+    "agent-framework==1.0.0rc2",
 ]
 
-# Complete installation (all features including MCP server)
 all = [
     "mmct[image-agent,video-agent]",
     "fastmcp==2.11.3",
-    "autogen-ext[mcp]",
 ]
 
 # Development tools
@@ -191,7 +188,6 @@ module = [
     "azure.*",
     "openai.*",
     "uvicorn.*",
-    "autogen.*",
 ]
 ignore_missing_imports = true
 

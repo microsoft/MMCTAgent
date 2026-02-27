@@ -8,9 +8,7 @@ from dotenv import load_dotenv
 from typing import Optional, Dict, Any
 from loguru import logger
 
-# Suppress autogen internal logging (kept for any transitive dependencies)
-logging.getLogger("autogen").setLevel(logging.WARNING)
-logging.getLogger("autogen_agentchat").setLevel(logging.WARNING)
+# Suppress internal logging
 
 from typing import Annotated
 from agent_framework import Agent, WorkflowBuilder, Workflow, AgentResponse

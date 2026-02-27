@@ -30,19 +30,17 @@ The **IngestionPipeline** performs comprehensive processing of video file to ext
 1. **Audio Extraction** – Extracts the audio from the input video.
 2. **Transcription** – Converts spoken content to text using the selected transcription service and language setting.
 
-    > Transcription Configuration
+   > Transcription Configuration
 
-    You can configure the transcription backend using the `TranslationServices` enum:
+   You can configure the transcription backend using the `TranslationServices` enum:
+   - `TranslationServices.WHISPER` – Uses OpenAI Whisper.
+   - `TranslationServices.AZURE_STT` – Uses Azure Speech-to-Text.
 
-    - `TranslationServices.WHISPER` – Uses OpenAI Whisper.
-    - `TranslationServices.AZURE_STT` – Uses Azure Speech-to-Text.
+   Specify the language of the video's audio using the `Languages` enum. For example:
+   - `Languages.ENGLISH_INDIA` – English (India)
+   - `Languages.HINDI` – Hindi
 
-    Specify the language of the video's audio using the `Languages` enum. For example:
-
-    - `Languages.ENGLISH_INDIA` – English (India)
-    - `Languages.HINDI` – Hindi
-
-    The `Languages` enum includes support for additional languages. Refer to the `Languages` enum definition to explore all available options.
+   The `Languages` enum includes support for additional languages. Refer to the `Languages` enum definition to explore all available options.
 
 3. **Frame Extraction** – Captures representative frames at 1 FPS intervals to support visual summarization and downstream VideoAgent.
 4. **Chapter Generation** – Aligns transcript segments with visual frames to form meaningful video chapters.
@@ -58,8 +56,8 @@ The **IngestionPipeline** performs comprehensive processing of video file to ext
 
 The agent uses the **Multi-Modal Critical Thinking (MMCT)** framework ([arxiv.org/abs/2405.18358](https://arxiv.org/abs/2405.18358)) to generate high-quality answers through structured reasoning. MMCT involves two key components:
 
-   - **Planner**: Drives the reasoning process using a coordinated toolchain, generating an initial response based on video analysis.
-   - **Critic (optional)**: Evaluates the planner's output and provides feedback to improve accuracy and decision-making.
+- **Planner**: Drives the reasoning process using a coordinated toolchain, generating an initial response based on video analysis.
+- **Critic (optional)**: Evaluates the planner's output and provides feedback to improve accuracy and decision-making.
 
 > **Note:** The critic agent is enabled by default. You can disable it by setting `use_critic_agent=False` during initialization.
 > **Disabling the critic agent skips the critical thinking feedback loop and may reduce the accuracy of the final response.**
@@ -240,7 +238,7 @@ from mmct.video_pipeline import VideoAgent, IngestionPipeline
 
 # Your custom LLM provider implementation
 class CustomLLMProvider(BaseLLMProvider):
-    # Implement required abstract methods: chat_completion() and get_autogen_client()
+    # Implement required abstract methods: chat_completion() and get_agent_framework_client()
     pass
 
 # Use your custom provider with VideoAgent

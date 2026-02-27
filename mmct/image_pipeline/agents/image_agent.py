@@ -1,12 +1,23 @@
 # importing the required files
 import asyncio
+import json
+import re
+import logging
 from enum import Enum
-from typing_extensions import Annotated, List
-from autogen_agentchat.agents import AssistantAgent
-from autogen_agentchat.teams import SelectorGroupChat, RoundRobinGroupChat
-from autogen_agentchat.conditions import MaxMessageTermination, TextMentionTermination
-from autogen_agentchat.base import TaskResult
-from autogen_agentchat.ui import Console
+from typing import Optional, Dict, Any, List
+from typing_extensions import Annotated
+from loguru import logger
+from dotenv import load_dotenv, find_dotenv
+
+from agent_framework import Agent, WorkflowBuilder, Workflow, AgentResponse
+from agent_framework._tools import FunctionTool
+from mmct.video_pipeline.core.tools.custom_middleware import (
+    LoggingAgentMiddleware, 
+    LoggingChatMiddleware, 
+    LoggingFunctionMiddleware, 
+    TerminationMiddleware
+)
+
 from mmct.image_pipeline.core.tools.vit import VitTool
 from mmct.image_pipeline.core.tools.recog import RecogTool
 from mmct.image_pipeline.core.tools.object_detect import ObjectDetectTool
@@ -15,14 +26,65 @@ from mmct.image_pipeline.core.tools.critic import CriticTool
 from mmct.image_pipeline.prompts import (
     get_planner_system_prompt,
     get_critic_system_prompt,
+    IMAGE_AGENT_SYSTEM_PROMPT,
+    ImageAgentResponse,
+    TokenInfo
 )
-from mmct.utils.error_handler import ProviderException, ConfigurationException
-from mmct.utils.error_handler import handle_exceptions
-from mmct.image_pipeline.prompts import IMAGE_AGENT_SYSTEM_PROMPT, ImageAgentResponse
 from mmct.config.providers import ImageAgentProviderConfig
-from loguru import logger
-from dotenv import load_dotenv, find_dotenv
-load_dotenv(find_dotenv(),override=True)
+from mmct.utils.error_handler import ProviderException, ConfigurationException, handle_exceptions
+
+load_dotenv(find_dotenv(), override=True)
+
+# Suppress internal logging
+
+def parse_response_to_dict(content: str) -> Dict[str, Any]:
+    """
+    Fast JSON extractor for ImageAgent.
+    Looks for {"Answer": "..."} format.
+    """
+    def try_parse_json(s: str):
+        try:
+            data = json.loads(s)
+            if "Answer" in data:
+                return data
+        except Exception:
+            return None
+
+    try:
+        clean = content.replace("TERMINATE", "").strip()
+
+        # 1. Fast path: JSON inside code block
+        block = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", clean, re.DOTALL)
+        if block:
+            parsed = try_parse_json(block.group(1))
+            if parsed:
+                return parsed
+
+        # 2. Fast JSON extraction
+        start = clean.find("{")
+        end = clean.rfind("}")
+        if start != -1 and end != -1:
+            candidate = clean[start : end + 1]
+            parsed = try_parse_json(candidate)
+            if parsed:
+                return parsed
+
+        # Fallback
+        return {"Answer": clean}
+
+    except Exception as e:
+        logger.error(f"Parse failed: {e}")
+        return {"Answer": "Error parsing response"}
+
+def _extract_last_text(output_events) -> str:
+    """Pull the final text content from workflow output events."""
+    if not output_events:
+        return ""
+    if isinstance(output_events, list):
+        last = output_events[-1]
+    else:
+        last = output_events
+    return getattr(last, "text", str(last))
 
 class ImageQnaTools(Enum):
     vit = VitTool
@@ -30,12 +92,11 @@ class ImageQnaTools(Enum):
     object_detection = ObjectDetectTool
     ocr = OcrTool
 
-
 class ImageAgent:
     """
     ImageAgent handles image-based queries using MMCT's modular architecture with a planner agent,
     optional critic agent, and configurable image-processing tools.
-
+    
     Parameters:
     -----------
     image_path (str):
@@ -75,343 +136,200 @@ class ImageAgent:
     >>> asyncio.run(run_example())
     """
 
+    @staticmethod
+    def _wrap(fn) -> FunctionTool:
+        """Wrap a callable into a FunctionTool for agent_framework JSON schema."""
+        return FunctionTool(name=fn.__name__, description=fn.__doc__ or "", func=fn)
+
     def __init__(
         self,
         image_path: Annotated[str, "local image path"],
         query: Annotated[str, "query related to image"],
         provider: Annotated[ImageAgentProviderConfig, "Provider configuration for Image Agent"],
-        use_critic_agent: Annotated[bool, "Include critic agent"],
+        use_critic_agent: Annotated[bool, "Include critic agent"] = True,
         stream: Annotated[bool, "Enable streaming response (True/False)"] = False,
-        tools: Annotated[List[ImageQnaTools], "Enum name and value as Enum value"] = [
+        tools: Annotated[List[ImageQnaTools], "List of tools to use"] = [
             ImageQnaTools.object_detection,
             ImageQnaTools.ocr,
             ImageQnaTools.recog,
             ImageQnaTools.vit,
         ],
-        disable_console_log: Annotated[bool, "boolean flag to disable console logs"] = False
+        verbose: bool = True,
     ):
         try:
-            # Initialize logger for this instance
             self.logger = logger
-            
-            # Initialize providers
-            self.llm_provider = provider.llm_provider
-            
-            # Set instance attributes
             self.image_path = image_path
             self.query = query
             self.use_critic_agent = use_critic_agent
             self.stream = stream
             self.tools_enum = tools
-            self.disable_console_log = disable_console_log
+            self.verbose = verbose
+            self.provider = provider
             
-            # Configure console logging
-            if not disable_console_log:
+            # Use agent_framework client
+            self.model_client = self.provider.llm_provider.get_agent_framework_client()
+
+            if self.verbose:
                 logger.enable("mmct")
             else:
                 logger.disable("mmct")
+
+            # ── Tool instantiation ────────────────────────────────────────────
+            self.tools = []
+            self.tools_str = [tool.name for tool in self.tools_enum]
             
-            # Initialize client components using providers
-            self.model_client = self.llm_provider.get_autogen_client()
+            for tool in self.tools_enum:
+                tool_class = tool.value
+                if tool_class == VitTool:
+                    tool_instance = tool_class(llm_provider=self.provider.llm_provider, img_path=self.image_path)
+                    self.tools.append(self._wrap(tool_instance.vit_tool))
+                elif tool_class == RecogTool:
+                    tool_instance = tool_class(img_path=self.image_path)
+                    self.tools.append(self._wrap(tool_instance.recog_tool))
+                elif tool_class == ObjectDetectTool:
+                    tool_instance = tool_class(img_path=self.image_path)
+                    self.tools.append(self._wrap(tool_instance.object_detect_tool))
+                elif tool_class == OcrTool:
+                    tool_instance = tool_class(img_path=self.image_path)
+                    self.tools.append(self._wrap(tool_instance.ocr_tool))
 
-            logger.info("Initialized ImageAgent with provider system")
+            self.task = f"query:{self.query}, image path:{self.image_path}."
+            if self.use_critic_agent:
+                self.task += "\nAlways criticize the final response if planner asks for review and provide feedback."
 
-            self.tools_list = []
-            self.planner_agent = None
-            self.critic_agent = None
-            self.team = None
+            self.workflow: Optional[Workflow] = None
             
         except Exception as e:
             logger.exception(f"Exception occurred while constructing the Image Agent: {e}")
             raise ConfigurationException(f"Failed to initialize ImageAgent: {e}")
 
-    @handle_exceptions(retries=2)
-    async def _initialize_tools(self):
-        """
-        Initialize the tools for Image Agent.
+    async def _build_workflow(self) -> None:
+        """Build the WorkflowBuilder graph."""
+        planner_system_prompt = await get_planner_system_prompt(
+            tools_string=self.tools_str,
+            criticFlag=self.use_critic_agent,
+            includeMetaGuidelines=True,
+        )
 
-        Raises:
-            ProviderException: If tool initialization fails
-        """
-        try:
-            logger.info("Initializing the tools for Image Agent")
-            self.tools = []
-            self.tools_str = [tool.name for tool in self.tools_enum]
+        middleware = []
+        if self.verbose:
+            middleware.extend([
+                LoggingAgentMiddleware(),
+                LoggingFunctionMiddleware(),
+                LoggingChatMiddleware(),
+            ])
+        middleware.append(TerminationMiddleware())
 
-            # Instantiate each tool class and get the method reference
-            for tool in self.tools_enum:
-                tool_class = tool.value
+        planner = Agent(
+            client=self.model_client,
+            instructions=planner_system_prompt,
+            name="planner",
+            tools=self.tools,
+            middleware=middleware
+        )
 
-                # Instantiate based on tool type
-                if tool_class == VitTool:
-                    tool_instance = tool_class(llm_provider=self.llm_provider, img_path=self.image_path)
-                    self.tools.append(tool_instance.vit_tool)
-                elif tool_class == RecogTool:
-                    tool_instance = tool_class(img_path=self.image_path)
-                    self.tools.append(tool_instance.recog_tool)
-                elif tool_class == ObjectDetectTool:
-                    tool_instance = tool_class(img_path=self.image_path)
-                    self.tools.append(tool_instance.object_detect_tool)
-                elif tool_class == OcrTool:
-                    tool_instance = tool_class(img_path=self.image_path)
-                    self.tools.append(tool_instance.ocr_tool)
-
-            logger.info("Successfully initialized tools for Image Agent")
-        except Exception as e:
-            logger.exception(f"Exception occurred while initializing the tools for Image Agent: {e}")
-            raise ProviderException(f"Tool initialization failed: {e}", "TOOL_INIT_FAILED")
-
-    @handle_exceptions(retries=2)
-    async def _initialize_agents(self):
-        """
-        Initialize the agents for Image Agent.
-        
-        Raises:
-            ProviderException: If agent initialization fails
-        """
-        try:
-            logger.info("Retrieving the Planner Agent's system prompt")
-            planner_prompt = await get_planner_system_prompt(
-                tools_string=self.tools_str,
-                criticFlag=self.use_critic_agent,
-                includeMetaGuidelines=True,
+        if self.use_critic_agent:
+            critic_tool_object = CriticTool(llm_provider=self.provider.llm_provider, query=self.query, img_path=self.image_path)
+            critic_prompt = await get_critic_system_prompt(includeMetaGuidelines=True)
+            
+            critic = Agent(
+                client=self.model_client,
+                instructions=critic_prompt,
+                name="critic",
+                tools=[self._wrap(critic_tool_object.critic_tool)],
+                middleware=middleware
             )
-            self.planner_agent = AssistantAgent(
-                name="ImageAgent_planner",
-                model_client=self.model_client,
-                model_client_stream=False,
-                system_message=planner_prompt,
-                tools=self.tools,
-                reflect_on_tool_use=True,
+
+            def _planner_ready_for_criticism(resp) -> bool:
+                messages = (
+                    (resp.agent_response.messages if resp.agent_response else None)
+                    or resp.full_conversation
+                    or []
+                )
+                if not messages:
+                    return False
+                last_text = getattr(messages[-1], "text", "") or ""
+                return "ready for criticism" in last_text.lower()
+
+            self.workflow = (
+                WorkflowBuilder(start_executor=planner)
+                .add_edge(planner, critic, condition=_planner_ready_for_criticism)
+                .add_edge(critic, planner)
+                .build()
             )
-            logger.info("Initialized the Planner Agent")
+        else:
+            self.workflow = WorkflowBuilder(start_executor=planner).build()
 
-            termination = TextMentionTermination("TERMINATE") | MaxMessageTermination(
-                20
-            )  # Termination condition
-
-            if self.use_critic_agent:
-                logger.info("Retrieving the Critic Agent's System Prompt")
-                critic_prompt = await get_critic_system_prompt(includeMetaGuidelines=True)
-
-                critic_tool_object = CriticTool(llm_provider = self.llm_provider, query=self.query, img_path=self.image_path)
-
-                self.critic_agent = AssistantAgent(
-                    name="ImageAgent_critic",
-                    model_client=self.model_client,
-                    model_client_stream=False,
-                    system_message=critic_prompt,
-                    tools=[critic_tool_object.critic_tool],
-                    reflect_on_tool_use=False,
-                )
-                logger.info("Initialized the Critic Agent")
-
-                selector_prompt = """Select an agent to perform task.
-
-                {roles}
-
-                Current conversation context:
-                {history}
-
-                Read the above conversation, then select an agent from {participants} to perform the next task.
-                Make sure 'critic' agent comes only when planner ask for criticism or feedback.
-                For your information - There are only two agents - 'planner' & 'critic'
-                Only select one agent.
-
-                - Limit the Planner–Critic feedback loop to **maximum 2 rounds**.
-                """
-                self.team = SelectorGroupChat(
-                    [self.planner_agent, self.critic_agent],
-                    model_client=self.model_client,
-                    termination_condition=termination,
-                    allow_repeated_speaker=True,
-                    selector_prompt=selector_prompt,
-                )
-                logger.info("Initialized the both Planner and Critic Agent under SelectorGroupChat")
-            else:
-                self.team = RoundRobinGroupChat(
-                    participants=[self.planner_agent], termination_condition=termination
-                )
-                logger.info("Initialized the Planner Agent under RoundRobinGroupChat")
-        except Exception as e:
-            logger.exception("Exception occurred while initializing the Agents for Image Agent.")
-            raise ProviderException(f"Agent initialization failed: {e}", "AGENT_INIT_FAILED")
-
-    @handle_exceptions(retries=2)
-    async def setup(self):
-        """
-        Setup the ImageAgent by initializing tools and agents.
-        
-        Raises:
-            ProviderException: If setup fails
-        """
+    async def _format_output(self, qna_result: dict) -> ImageAgentResponse:
+        """Structure the final output using LLM."""
         try:
-            await self._initialize_tools()
-            await self._initialize_agents()
-            logger.info("Setup Successfully Completed!")
-        except Exception as e:
-            logger.exception(f"Exception occurred while performing setup")
-            raise ProviderException(f"Setup failed: {e}", "SETUP_FAILED")
-
-    async def calculate_total_tokens(self, messages) -> dict:
-        """
-        Calculates total input (prompt_tokens) and output (completion_tokens) tokens
-        from a list of message objects from TaskResult containing `models_usage`.
-
-        Args:
-            messages (list): List of message objects, each possibly containing `models_usage`.
-
-        Returns:
-            dict: {'total_input': int, 'total_output': int}
-        """
-        try:
-            total_input = 0
-            total_output = 0
-            self.logger.info("Computing the total token usage")
-            for message in messages:
-                usage = getattr(message, "models_usage", None)
-                if usage:
-                    total_input += getattr(usage, "prompt_tokens", 0) or 0
-                    total_output += getattr(usage, "completion_tokens", 0) or 0
-
-            return {"total_input": total_input, "total_output": total_output}
-        except Exception as e:
-            self.logger.exception(f"Exception occured while computing the total token count: {e}")
-            raise
-
-    @handle_exceptions(retries=2)
-    async def run(self):
-        """
-        Execute the ImageAgent workflow.
-        
-        Returns:
-            Dictionary containing result and token usage
-            
-        Raises:
-            ProviderException: If execution fails
-        """
-        try:
-            await self.setup()
-            task = f"query:{self.query}, image path:{self.image_path}."
-            logger.info("Initializing the MMCT Image Agentic Flow")
-            if self.use_critic_agent:
-                task += "\nAlways criticize the final response if planner asks for review and provide feedback."
-                result = await self.team.run(task=task)
-            else:
-                result = await self.team.run(task=task)
-
-            tokens = await self.calculate_total_tokens(result.messages)
-            logger.info(f"Accumulated the response from the Image Agent: {result.messages[-1]}")
-            return {"result": result.messages[-1].content, "tokens": tokens}
-        except Exception as e:
-            logger.exception(f"Error occurred while executing the MMCT Image Agentic Flow: {e}")
-            raise ProviderException(f"ImageAgent execution failed: {e}", "AGENT_EXECUTION_FAILED")
-
-    @handle_exceptions(retries=2)
-    async def run_stream(self):
-        """
-        Execute the ImageAgent workflow in streaming mode.
-        
-        Returns:
-            Async generator for streaming responses
-            
-        Raises:
-            ProviderException: If execution fails
-        """
-        try:
-            await self.setup()
-            task = f"query:{self.query}, image path:{self.image_path}."
-            logger.info("Initializing the MMCT Image Agentic Flow")
-            if self.use_critic_agent:
-                task += "\nAlways criticize the final response if planner asks for review and provide feedback."
-                return self.team.run_stream(task=task)
-            else:
-                return self.team.run_stream(task=task)
-        except Exception as e:
-            logger.exception(f"Exception occurred while streaming the MMCT Image Agentic Flow: {e}")
-            raise ProviderException(f"ImageAgent streaming failed: {e}", "AGENT_STREAMING_FAILED")
-    
-    @handle_exceptions(retries=2)
-    async def _format_output(self):
-        """
-        Format the output using the LLM provider.
-        
-        Returns:
-            Formatted ImageAgentResponse
-            
-        Raises:
-            ProviderException: If output formatting fails
-        """
-        try:    
-            logger.info("Structuring the AutoGen Output")
+            logger.info("Structuring the Output")
+            context_text = str(qna_result.get("result", {}))
             messages = [
                 {"role": "system", "content": IMAGE_AGENT_SYSTEM_PROMPT},
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": f"Query: {self.query}"},
-                        {"type": "text", "text": f"Context: {self.result}"},
-                    ],
-                },
+                {"role": "user", "content": f"Query: {self.query}\nContext: {context_text}"}
             ]
 
-            # Use the provider system for LLM completion
-            response = await self.llm_provider.chat_completion(
+            response_dict = await self.provider.llm_provider.chat_completion(
                 messages=messages,
                 temperature=0,
                 response_format=ImageAgentResponse
             )
-
-            return response
-        except Exception as e:
-            logger.exception(f"Exception occurred while structuring the output: {e}")
-            raise ProviderException(f"Output formatting failed: {e}", "OUTPUT_FORMAT_FAILED") 
-        
-    @handle_exceptions(retries=2)
-    async def __call__(self):
-        """
-        Main execution method for the ImageAgent.
-        
-        Returns:
-            Formatted ImageAgentResponse
             
-        Raises:
-            ProviderException: If execution fails
-        """
-        try:
-            if self.stream:
-                response_generator = await self.run_stream()
-                self.result = await Console(response_generator)
-                if isinstance(self.result,TaskResult):
-                    self.result = self.result.messages[-1]
-            else:
-                result = await self.run()
-                self.result = result
-            return await self._format_output()
+            final_response = response_dict["content"]
+            
+            # Aggregate tokens
+            qna_tokens = qna_result.get("tokens", {})
+            formatting_usage = response_dict.get("usage", {})
+            
+            # Map k:v from qna_tokens and append formatting_usage
+            # agent_framework uses input_token_count / output_token_count
+            input_tokens = qna_tokens.get("input_token_count", 0) + formatting_usage.get("prompt_tokens", 0)
+            output_tokens = qna_tokens.get("output_token_count", 0) + formatting_usage.get("completion_tokens", 0)
+            
+            final_response.tokens = TokenInfo(input_token=input_tokens, output_token=output_tokens)
+            
+            return final_response
+            
         except Exception as e:
-            logger.exception(f"Exception occurred while executing the MMCT Image Agentic Flow.")
-            raise ProviderException(f"ImageAgent execution failed: {e}", "AGENT_CALL_FAILED")
+            logger.exception(f"Output formatting failed: {e}")
+            raise ProviderException(f"Output formatting failed: {e}", "OUTPUT_FORMAT_FAILED")
+
+    async def __call__(self) -> ImageAgentResponse:
+        """Main execution method."""
+        try:
+            await self._build_workflow()
+            
+            if self.stream:
+                # User mentioned non-streaming only, but keeping param for compatibility
+                # Simply running normally for now as they requested non-streaming
+                pass
+
+            events = await self.workflow.run(self.task)
+            output_events = events.get_outputs()
+            last_content = _extract_last_text(output_events)
+            parsed_result = parse_response_to_dict(last_content)
+
+            total_usage = {}
+            for event in events:
+                if event.type in ["data", "output"]:
+                    if isinstance(event.data, AgentResponse) and event.data.usage_details:
+                        for k, v in event.data.usage_details.items():
+                            if v is not None:
+                                total_usage[k] = total_usage.get(k, 0) + v
+
+            qna_result = {"result": parsed_result, "tokens": total_usage}
+            return await self._format_output(qna_result)
+
+        except Exception as e:
+            logger.exception(f"ImageAgent execution failed: {e}")
+            return ImageAgentResponse(
+                response=f"ImageAgent execution failed: {str(e)}",
+                tokens=TokenInfo(input_token=0, output_token=0)
+            )
 
 if __name__ == "__main__":
-    # Example usage - replace with your actual values
-    image_path = "path/to/your/image.png"
-    query = "example question about the image"
-    tools = [
-        # ImageQnaTools.object_detection,
-        # ImageQnaTools.ocr,
-        # ImageQnaTools.recog,
-        ImageQnaTools.vit,
-    ]
-    use_critic_agent = True
-    stream = True
+    async def main():
+        print("ImageAgent updated. Run manual validation as requested.")
 
-    image_qna = ImageAgent(
-            image_path=image_path,
-            query=query,
-            tools=tools,
-            use_critic_agent=use_critic_agent,
-            stream=stream,
-            # disable_console_log=False
-        )
-    res = asyncio.run(image_qna())
-    print(res)
+    asyncio.run(main())
