@@ -166,15 +166,6 @@ Similarity thresholds
 
 ---
 
-If you'd like, I can also:
-
-- add a small normalization helper in `VideoFrameSearchClient` so callers get one consistent result shape (recommended), or
-- add a short example script under `examples/` demonstrating end-to-end: load index, search, normalize and display results.
-
-Last updated: synthesized from repository code on branch `v-soumyade/local-providers`.
-
----
-
 ## How to override provider selection at runtime
 
 The system defaults to providers configured via `MMCTConfig` (which reads your `.env`). To override per-call you can use `ProviderFactory` directly.
