@@ -1,0 +1,12 @@
+# Azure Developer CLI (azd) configuration
+# Deploy with: azd up
+
+name: neo4j-prod
+metadata:
+  template: neo4j-community-vm
+
+infra:
+  provider: bicep
+  path: infra
+
+# No application services - infrastructure only deployment
