@@ -92,3 +92,16 @@ features:
   enable_metrics: "${ENABLE_METRICS:true}"
   enable_tracing: "${ENABLE_TRACING:false}"
   enable_rate_limiting: "${ENABLE_RATE_LIMITING:true}"
+# Sprint 2: New indexes for synopsis and temporal events
+indexes:
+  synopsis: "${SYNOPSIS_INDEX_NAME:synopsis-index}"
+  temporal_events: "${TEMPORAL_EVENTS_INDEX_NAME:temporal-events-index}"
+
+# Sprint 2: LLM constraints for adaptive extraction
+llm_constraints:
+  rate_limit_rpm: "${LLM_RATE_LIMIT_RPM:60}"
+  rate_limit_tpm: "${LLM_RATE_LIMIT_TPM:100000}"
+  max_context_tokens: "${LLM_MAX_CONTEXT_TOKENS:128000}"
+  max_output_tokens: "${LLM_MAX_OUTPUT_TOKENS:4096}"
+  supports_vision: "${LLM_SUPPORTS_VISION:true}"
+  supports_json_mode: "${LLM_SUPPORTS_JSON_MODE:true}"
