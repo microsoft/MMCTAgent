@@ -161,25 +161,27 @@ async def process_v4_query_stream(body: dict) -> AsyncGenerator[str, None]:
     video_id = body.get("video_id")
     video_ids = body.get("video_ids")
     use_critic = body.get("use_critic", True)
+    save_logs = body.get("save_logs", False)
     
     if not query:
         yield _format_sse("error", {"message": "Query is required"})
         return
     
-    # Setup logging
-    logs_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "logs")
-    os.makedirs(logs_dir, exist_ok=True)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    log_file = os.path.join(logs_dir, f"v4_query_{timestamp}.json")
-    
-    events = []
+    # Setup logging (only when save_logs is enabled)
+    if save_logs:
+        logs_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "logs")
+        os.makedirs(logs_dir, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        log_file = os.path.join(logs_dir, f"v4_query_{timestamp}.json")
+        events = []
     
     def emit_and_log(event_type: str, data: dict) -> str:
-        events.append({"type": event_type, **data})
+        if save_logs:
+            events.append({"type": event_type, **data})
         return _format_sse(event_type, data)
     
     def save_events():
-        if events:
+        if save_logs and events:
             with open(log_file, "w") as f:
                 json.dump(events, f, indent=2, default=str)
             logger.info(f"V4 query events saved to {log_file}")

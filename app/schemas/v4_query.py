@@ -27,42 +27,27 @@ class V4QueryRequest(BaseModel):
         default=True, 
         description="Enable critic agent for answer validation"
     )
-    stream: bool = Field(
-        default=False, 
-        description="Enable streaming response (SSE)"
+    save_logs: bool = Field(
+        default=False,
+        description="Save event logs to file (streaming only). Defaults to False."
     )
     
     model_config = {
         "json_schema_extra": {
             "examples": [
                 {
-                    "summary": "Single video query",
-                    "description": "Query a specific video by ID",
-                    "value": {
-                        "query": "How does the farmer collect soil samples?",
-                        "video_id": "Dk1toyI7AJs",
-                        "use_critic": True,
-                        "stream": False
-                    }
+                    "query": "How does the farmer collect soil samples?",
+                    "video_id": "Dk1toyI7AJs",
+                    "use_critic": True
                 },
                 {
-                    "summary": "Cross-video query",
-                    "description": "Search across all videos",
-                    "value": {
-                        "query": "Which videos show farming techniques?",
-                        "use_critic": True,
-                        "stream": False
-                    }
+                    "query": "Which videos show farming techniques?",
+                    "use_critic": True
                 },
                 {
-                    "summary": "Multi-video query",
-                    "description": "Search specific videos",
-                    "value": {
-                        "query": "Compare soil preparation methods",
-                        "video_ids": ["Dk1toyI7AJs", "E9sM2b3uV3c"],
-                        "use_critic": False,
-                        "stream": False
-                    }
+                    "query": "Compare soil preparation methods",
+                    "video_ids": ["Dk1toyI7AJs", "E9sM2b3uV3c"],
+                    "use_critic": False
                 }
             ]
         }

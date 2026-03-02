@@ -4,8 +4,11 @@ FROM ${BASE_IMAGE}
 
 WORKDIR /app
 
-# Copy application-specific files (build context is already in app/ directory)
-COPY . app/
+# Copy application-specific files
+COPY app/ app/
+
+# Overlay updated mmct package files (overrides base image)
+COPY mmct/ mmct/
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
@@ -26,4 +29,4 @@ HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]

@@ -9,19 +9,31 @@ Dependencies:
     Run from the project root with venv activated.
 
 Usage:
+    # Single video:
     python app/ingest_local.py <video_path> --video-id <video_id> --language <language>
+
+    # Batch mode (reads videos from a JSON manifest):
+    python app/ingest_local.py --batch batch_manifest.json
+
+Batch JSON format:
+    [
+        {
+            "video_path": "videos/abc123/file.mp4",
+            "video_id": "abc123",
+            "language": "ENGLISH_UNITED_STATES",
+            "url": "https://www.youtube.com/watch?v=abc123"   // optional
+        },
+        ...
+    ]
 
 Examples:
     python app/ingest_local.py videos/abc123/file.mp4 --video-id abc123 --language ENGLISH_UNITED_STATES
-    python app/ingest_local.py /path/to/video.mp4 --video-id my_video_001 --language HINDI
-
-Available Languages:
-    ENGLISH_UNITED_STATES, ENGLISH_UNITED_KINGDOM, HINDI, SPANISH, FRENCH, GERMAN,
-    CHINESE_SIMPLIFIED, JAPANESE, KOREAN, PORTUGUESE, ITALIAN, RUSSIAN, ARABIC
+    python app/ingest_local.py --batch my_videos.json
 """
 
 import argparse
 import asyncio
+import json
 import os
 import sys
 from pathlib import Path
@@ -121,16 +133,17 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__
     )
-    parser.add_argument("video_path", help="Path to the local video file")
+    parser.add_argument("video_path", nargs="?", default=None,
+                        help="Path to the local video file (omit when using --batch)")
     parser.add_argument(
         "--video-id", "-i",
-        required=True,
+        default=None,
         help="Unique identifier for the video"
     )
     parser.add_argument(
         "--language", "-l",
-        required=True,
-        help="Language of the video (e.g., ENGLISH_UNITED_STATES, HINDI)"
+        default="ENGLISH_UNITED_STATES",
+        help="Language of the video (default: ENGLISH_UNITED_STATES)"
     )
     parser.add_argument(
         "--transcript", "-t",
@@ -149,38 +162,115 @@ def main():
         choices=[0, 1, 2],
         help="Logging verbosity: 0=quiet, 1=info, 2=debug (default: 2)"
     )
+    parser.add_argument(
+        "--batch", "-b",
+        default=None,
+        metavar="JSON_FILE",
+        help="Path to a JSON manifest for batch ingestion"
+    )
 
     args = parser.parse_args()
 
-    # Convert language string to enum
-    try:
-        language = get_language_enum(args.language)
-    except ValueError as e:
-        print(f"Error: {e}")
-        sys.exit(1)
+    if args.batch:
+        # ----------------------------------------------------------
+        # Batch mode: read video list from JSON file
+        # ----------------------------------------------------------
+        batch_path = Path(args.batch)
+        if not batch_path.exists():
+            print(f"Error: Batch file not found: {batch_path}")
+            sys.exit(1)
 
-    # Run ingestion
-    try:
-        result = asyncio.run(
-            ingest_local_video(
-                video_path=args.video_path,
-                video_id=args.video_id,
-                language=language,
-                transcript_path=args.transcript,
-                url=args.url,
-                verbosity=args.verbosity,
+        try:
+            with open(batch_path, "r") as f:
+                batch_entries = json.load(f)
+        except json.JSONDecodeError as e:
+            print(f"Error: Invalid JSON in {batch_path}: {e}")
+            sys.exit(1)
+
+        if not isinstance(batch_entries, list):
+            print("Error: Batch JSON must be a list of objects")
+            sys.exit(1)
+
+        async def run_batch():
+            results = []
+            for idx, entry in enumerate(batch_entries):
+                vid = entry.get("video_id")
+                vpath = entry.get("video_path")
+                lang_str = entry.get("language", "ENGLISH_UNITED_STATES")
+
+                if not vid or not vpath:
+                    print(f"  ✗ Entry {idx}: missing video_id or video_path, skipping")
+                    results.append((vid or f"entry_{idx}", "skipped: missing fields"))
+                    continue
+
+                try:
+                    lang = get_language_enum(lang_str)
+                except ValueError as e:
+                    results.append((vid, f"skipped: {e}"))
+                    continue
+
+                print(f"\n{'='*60}")
+                print(f"Ingesting video: {vid}")
+                print(f"{'='*60}")
+                try:
+                    await ingest_local_video(
+                        video_path=str(vpath),
+                        video_id=vid,
+                        language=lang,
+                        url=entry.get("url"),
+                        verbosity=args.verbosity,
+                    )
+                    results.append((vid, "success"))
+                    print(f"  ✓ {vid} ingested successfully")
+                except Exception as e:
+                    results.append((vid, f"failed: {e}"))
+                    print(f"  ✗ {vid} failed: {e}")
+
+            print(f"\n{'='*60}")
+            print("Batch ingestion summary:")
+            print(f"{'='*60}")
+            for vid, status in results:
+                print(f"  {vid}: {status}")
+
+        asyncio.run(run_batch())
+    else:
+        # ----------------------------------------------------------
+        # Single video mode
+        # ----------------------------------------------------------
+        if not args.video_path:
+            print("Error: video_path is required in single video mode (or use --batch)")
+            sys.exit(1)
+        if not args.video_id:
+            print("Error: --video-id is required in single video mode")
+            sys.exit(1)
+
+        try:
+            language = get_language_enum(args.language)
+        except ValueError as e:
+            print(f"Error: {e}")
+            sys.exit(1)
+
+        try:
+            result = asyncio.run(
+                ingest_local_video(
+                    video_path=args.video_path,
+                    video_id=args.video_id,
+                    language=language,
+                    transcript_path=args.transcript,
+                    url=args.url,
+                    verbosity=args.verbosity,
+                )
             )
-        )
-        print(f"\nIngestion complete!")
-        print(f"  Video ID: {result['video_id']}")
-        print(f"  Pipeline: {result['pipeline']}")
-        print(f"  Status: {result['message']}")
-    except FileNotFoundError as e:
-        print(f"Error: {e}")
-        sys.exit(1)
-    except Exception as e:
-        print(f"Ingestion failed: {e}")
-        sys.exit(1)
+            print(f"\nIngestion complete!")
+            print(f"  Video ID: {result['video_id']}")
+            print(f"  Pipeline: {result['pipeline']}")
+            print(f"  Status: {result['message']}")
+        except FileNotFoundError as e:
+            print(f"Error: {e}")
+            sys.exit(1)
+        except Exception as e:
+            print(f"Ingestion failed: {e}")
+            sys.exit(1)
 
 
 if __name__ == "__main__":

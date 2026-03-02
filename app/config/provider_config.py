@@ -6,8 +6,9 @@ variables and provides singleton instances of VideoAgentProviderConfig and
 IngestionProviderConfig for use across the application.
 """
 
+import os
 from functools import lru_cache
-from azure.identity import DefaultAzureCredential, AzureCliCredential, ChainedTokenCredential
+
 from loguru import logger
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
@@ -16,6 +17,7 @@ from mmct.config.providers import (
     VideoAgentProviderConfig,
     IngestionProviderConfig,
     ImageAgentProviderConfig,
+    TemporalGraphProviderConfig,
 )
 from mmct.providers.azure import (
     AzureLLMProvider,
@@ -27,18 +29,10 @@ from mmct.providers.azure import (
     AzureSpeechServiceProvider,
 )
 from mmct.providers.local import ClipImageEmbeddingProvider
+from mmct.providers.custom_providers import Neo4jGraphStoreProvider, FastEmbedQdrantCLIPEmbeddingProvider
 from dotenv import load_dotenv, find_dotenv
 
-_credentials = None
-
-
-def get_credentials():
-    """Get or create Azure credentials."""
-    global _credentials
-    if _credentials is None:
-        _credentials = ChainedTokenCredential(AzureCliCredential(), DefaultAzureCredential())
-        logger.info("Azure credentials initialized")
-    return _credentials
+from app.config.credentials import resolve_credentials
 
 
 class ProviderEnvSettings(BaseSettings):
@@ -73,6 +67,12 @@ class ProviderEnvSettings(BaseSettings):
     speech_service_resource_id: str = Field(...)
     speech_service_region: str = Field(...)
 
+    # Neo4j Graph Database Settings
+    neo4j_uri: str = Field(default="bolt://localhost:7687", description="Neo4j connection URI")
+    neo4j_username: str = Field(default="neo4j", description="Neo4j username")
+    neo4j_password: str = Field(default="", description="Neo4j password")
+    neo4j_database: str = Field(default="neo4j", description="Neo4j database name")
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> ProviderEnvSettings:
@@ -88,7 +88,7 @@ def get_image_agent_provider() -> ImageAgentProviderConfig:
     Returns:
         ImageAgentProviderConfig: Configured provider for ImageAgent
     """
-    credentials = get_credentials()
+    credentials = resolve_credentials()
     settings = get_settings()
 
     logger.info("Initializing ImageAgentProviderConfig")
@@ -115,7 +115,7 @@ def get_video_agent_provider() -> VideoAgentProviderConfig:
     Returns:
         VideoAgentProviderConfig: Configured provider for VideoAgent
     """
-    credentials = get_credentials()
+    credentials = resolve_credentials()
     settings = get_settings()
 
     logger.info("Initializing VideoAgentProviderConfig")
@@ -134,7 +134,7 @@ def get_video_agent_provider() -> VideoAgentProviderConfig:
             api_version=settings.embedding_service_api_version,
             credentials=credentials,
         ),
-        image_embedding_provider=ClipImageEmbeddingProvider(),
+        image_embedding_provider=FastEmbedQdrantCLIPEmbeddingProvider(),
         vectordb_chapter=AISearchChapterProvider(
             endpoint=settings.search_endpoint,
             index_name=settings.chapter_index_name,
@@ -166,13 +166,15 @@ def get_ingestion_provider() -> IngestionProviderConfig:
     """
     Get IngestionProviderConfig singleton instance.
 
+    Uses token broker credentials for Azure service authentication.
+
     Returns:
         IngestionProviderConfig: Configured provider for IngestionPipeline
     """
-    credentials = get_credentials()
+    credentials = resolve_credentials()
     settings = get_settings()
 
-    logger.info("Initializing IngestionProviderConfig")
+    logger.info("Initializing IngestionProviderConfig with resolved credentials")
 
     provider = IngestionProviderConfig(
         llm_provider=AzureLLMProvider(
@@ -188,7 +190,7 @@ def get_ingestion_provider() -> IngestionProviderConfig:
             api_version=settings.embedding_service_api_version,
             credentials=credentials,
         ),
-        image_embedding_provider=ClipImageEmbeddingProvider(),
+        image_embedding_provider=FastEmbedQdrantCLIPEmbeddingProvider(),
         vectordb_chapter=AISearchChapterProvider(
             endpoint=settings.search_endpoint,
             index_name=settings.chapter_index_name,
@@ -213,7 +215,20 @@ def get_ingestion_provider() -> IngestionProviderConfig:
             speech_service_resource_id=settings.speech_service_resource_id,
             speech_service_region=settings.speech_service_region,
             credentials=credentials,
+            llm_provider=AzureLLMProvider(
+                endpoint=settings.llm_endpoint,
+                deployment_name=settings.llm_deployment_name,
+                model_name=settings.llm_model_name,
+                api_version=settings.llm_api_version,
+                credentials=credentials,
+            )
         ),
+        graph_store_provider=Neo4jGraphStoreProvider(
+            uri=settings.neo4j_uri,
+            username=settings.neo4j_username,
+            password=settings.neo4j_password,
+            database=settings.neo4j_database,
+        ) if settings.neo4j_password else None,
     )
 
     logger.info("IngestionProviderConfig initialized successfully")
