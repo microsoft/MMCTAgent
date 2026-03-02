@@ -649,9 +649,14 @@ dbms.security.auth_enabled=true
 dbms.security.procedures.unrestricted=apoc.*,gds.*
 dbms.security.procedures.allowlist=apoc.*,gds.*
 
+# Bolt connection settings for high concurrency (100+ pooled connections)
+server.bolt.connection_keep_alive=true
+server.bolt.connection_keep_alive_for_requests=ALL
+server.bolt.thread_pool_size=400
+
 # Query settings
-db.transaction.timeout=60s
-db.lock.acquisition.timeout=30s
+db.transaction.timeout=30s
+db.lock.acquisition.timeout=10s
 
 # Logging
 db.logs.query.enabled=INFO
