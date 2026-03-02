@@ -45,7 +45,7 @@ class VideoDiscoveryTool(OutputFormatterMixin):
     async def find_relevant_videos(
         self,
         query: Annotated[str, "Query to find relevant videos for"],
-        limit: Annotated[int, "Maximum videos to return"] = 5,
+        limit: Annotated[int, "Maximum videos to return"] = 3,
     ) -> str:
         """Find videos relevant to a query by searching ChapterGroup summaries.
         

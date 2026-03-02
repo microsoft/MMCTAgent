@@ -49,7 +49,7 @@ class V4QueryResponse(BaseModel):
     def get_schema_template() -> str:
         """Returns the JSON schema template for use in prompts."""
         return '''{
-  "answer": "<Markdown answer with [1], [2] citations. Must be complete and self-contained.>",
+  "answer": "<Readable answer text with [1], [2] citations. Must be self-contained. Do NOT include sources list, timestamps, video IDs, or graph terms (ChapterGroup, Chapter, etc.) here — only the human-readable answer.>",
   "sources": [
     {
       "citation": "[1]",
@@ -62,7 +62,8 @@ class V4QueryResponse(BaseModel):
 
 CRITICAL: start_time and end_time MUST be numbers (float/int). NEVER use null.
 If no specific timestamp, use 0.0 for start_time and video duration for end_time.
-Each citation marker [1], [2], etc. should appear ONLY ONCE in sources array.'''
+Each citation marker [1], [2], etc. should appear ONLY ONCE in sources array.
+The "answer" field must contain ONLY the answer text — NO source lists, NO timestamps, NO video IDs, NO graph node types.'''
 
     @staticmethod
     def get_example() -> str:

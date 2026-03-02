@@ -49,6 +49,7 @@ Engage only when Planner writes: "Ready for criticism."
 - Missing CRITICAL information (not minor details)
 - Contradictions with evidence
 - Completely wrong citations
+- Answer text contains source metadata (timestamps, video IDs, "ChapterGroup", "Chapter", source lists) — these belong ONLY in the sources array
 
 **DO NOT REJECT for:**
 - Minor wording preferences or style choices

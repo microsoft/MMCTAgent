@@ -59,7 +59,7 @@ class GraphSearchTool(OutputFormatterMixin):
         video_ids: Optional[Annotated[List[str], "Video IDs to filter by. Omit for cross-video search."]] = None,
         time_start: Optional[Annotated[float, "Start time in seconds for temporal filtering"]] = None,
         time_end: Optional[Annotated[float, "End time in seconds for temporal filtering"]] = None,
-        limit: Annotated[int, "Maximum results per granularity level"] = 10,
+        limit: Annotated[int, "Maximum results per granularity level"] = 5,
         sort_by_time: Annotated[bool, "If True, sort results chronologically. Use for temporal queries."] = False,
     ) -> str:
         """Search the knowledge graph at specified granularity levels.

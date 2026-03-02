@@ -19,13 +19,13 @@ from dataclasses import dataclass, field
 
 from loguru import logger
 from autogen_agentchat.teams import Swarm
-from autogen_agentchat.conditions import TextMentionTermination
+from autogen_agentchat.conditions import FunctionCallTermination, TextMentionTermination
 from autogen_agentchat.base import TaskResult
 from autogen_agentchat.messages import TextMessage, ToolCallRequestEvent, ToolCallExecutionEvent, HandoffMessage
 from autogen_core.model_context import BufferedChatCompletionContext
 from autogen_core.models import RequestUsage
 
-from mmct.v4.agents.planner_agent import V4PlannerAgent
+from mmct.v4.agents.planner_agent import V4PlannerAgent, SUBMIT_TOOL_NAME, reset_handoff_counter
 from mmct.v4.agents.video_agent import V4VideoAgent
 from mmct.v4.agents.image_agent import V4ImageAgent
 from mmct.v4.agents.critic_agent import V4CriticAgent
@@ -55,7 +55,6 @@ IMAGE_AGENT_BUFFER_SIZE = 10  # Needs context for image analysis
 CRITIC_BUFFER_SIZE = 10    # Just needs recent draft + evidence
 
 _TERMINATE_STRING = "TERMINATE"
-_MAX_MESSAGES_TO_SEARCH = 5  # Messages to search backwards for JSON
 
 
 @dataclass
@@ -145,15 +144,43 @@ class V4OrchestratorConfig:
     stream: bool = False
 
 
-def _extract_json_from_messages(messages: list, max_search: int = _MAX_MESSAGES_TO_SEARCH) -> Optional[str]:
-    """Search backwards through messages to find JSON content.
+def _try_extract_json(content: str) -> Optional[str]:
+    """Try to extract a JSON string from a message content.
     
-    The planner may send JSON and TERMINATE in separate messages,
-    or include preamble text before the JSON block.
+    Args:
+        content: Raw message content string.
+        
+    Returns:
+        Extracted JSON string if found, None otherwise.
+    """
+    cleaned = content.strip()
+    
+    # Check for ```json code block
+    if '```json' in cleaned:
+        start_idx = cleaned.find('```json') + len('```json')
+        end_idx = cleaned.find('```', start_idx)
+        if end_idx != -1:
+            return cleaned[start_idx:end_idx].strip()
+    
+    # Check for raw JSON object
+    brace_idx = cleaned.find('{')
+    if brace_idx != -1:
+        potential_json = cleaned[brace_idx:]
+        potential_json = potential_json.rstrip().rstrip(_TERMINATE_STRING).rstrip()
+        if potential_json.endswith('}'):
+            return potential_json
+    
+    return None
+
+
+def _extract_json_from_messages(messages: list, **_kwargs) -> Optional[str]:
+    """Extract the final answer JSON from swarm messages.
+    
+    Primary path: Look for a ToolCallExecutionEvent from submit_final_answer.
+    Fallback: Search backwards through planner TextMessages for JSON with sources.
     
     Args:
         messages: List of messages from TaskResult.
-        max_search: Maximum messages to search backwards.
         
     Returns:
         JSON content string if found, None otherwise.
@@ -161,32 +188,50 @@ def _extract_json_from_messages(messages: list, max_search: int = _MAX_MESSAGES_
     if not messages:
         return None
     
-    search_range = min(max_search, len(messages))
+    # Primary: find submit_final_answer tool result (searches backwards for latest)
+    for msg in reversed(messages):
+        if isinstance(msg, ToolCallExecutionEvent):
+            for execution in msg.content:
+                if execution.name == SUBMIT_TOOL_NAME:
+                    return execution.content
     
-    for i in range(1, search_range + 1):
-        msg = messages[-i]
+    # Fallback: scan planner text messages for JSON (backward compat / edge cases)
+    best_with_sources = None
+    best_with_answer = None
+    
+    for msg in reversed(messages):
+        source = getattr(msg, 'source', '')
         content = getattr(msg, 'content', '')
         if not content or not isinstance(content, str):
             continue
         
-        cleaned = content.strip()
+        if source and source != 'planner':
+            continue
         
-        # Check for ```json code block
-        if '```json' in cleaned:
-            start_idx = cleaned.find('```json') + len('```json')
-            end_idx = cleaned.find('```', start_idx)
-            if end_idx != -1:
-                return cleaned[start_idx:end_idx].strip()
+        json_str = _try_extract_json(content)
+        if not json_str:
+            continue
         
-        # Check for raw JSON object
-        brace_idx = cleaned.find('{')
-        if brace_idx != -1:
-            potential_json = cleaned[brace_idx:]
-            potential_json = potential_json.rstrip().rstrip(_TERMINATE_STRING).rstrip()
-            if potential_json.endswith('}'):
-                return potential_json
+        try:
+            parsed = json.loads(json_str)
+        except (json.JSONDecodeError, ValueError):
+            continue
+        
+        if not isinstance(parsed, dict) or "answer" not in parsed:
+            continue
+        
+        if parsed.get("sources") and len(parsed["sources"]) > 0:
+            if best_with_sources is None:
+                best_with_sources = json_str
+                break
+        
+        if best_with_answer is None:
+            best_with_answer = json_str
     
-    return None
+    result = best_with_sources or best_with_answer
+    if result and not best_with_sources and best_with_answer:
+        logger.info("No sourced answer found, using latest answer without sources")
+    return result
 
 
 def _parse_response(json_str: str) -> Dict[str, Any]:
@@ -304,7 +349,10 @@ class V4Orchestrator:
             Configured Swarm instance.
         """
         self._initialize_agents()
-        
+
+        # Reset per-query handoff counters
+        reset_handoff_counter()
+
         participants = [
             self._planner_wrapper.agent,
             self._video_agent_wrapper.agent,
@@ -316,7 +364,8 @@ class V4Orchestrator:
         if self.use_critic:
             participants.append(self._critic_wrapper.agent)
         
-        termination = TextMentionTermination(_TERMINATE_STRING)
+        # Stop when planner calls submit_final_answer OR says TERMINATE (backward compat)
+        termination = FunctionCallTermination(SUBMIT_TOOL_NAME) | TextMentionTermination(_TERMINATE_STRING)
         
         return Swarm(
             participants=participants,
@@ -509,17 +558,18 @@ class V4Orchestrator:
         Returns:
             Response dictionary with answer, sources, token_usage.
         """
+        msgs = result.messages
         # Calculate token usage
         total_prompt_tokens = 0
         total_completion_tokens = 0
         
-        for msg in result.messages:
+        for msg in msgs:
             if hasattr(msg, "models_usage") and msg.models_usage:
                 total_prompt_tokens += msg.models_usage.prompt_tokens
                 total_completion_tokens += msg.models_usage.completion_tokens
         
         # Extract JSON response
-        json_content = _extract_json_from_messages(result.messages)
+        json_content = _extract_json_from_messages(msgs)
         
         if json_content:
             parsed = _parse_response(json_content)
@@ -527,7 +577,7 @@ class V4Orchestrator:
             logger.warning("No JSON response found in messages")
             # Try to get the last meaningful message
             last_content = ""
-            for msg in reversed(result.messages):
+            for msg in reversed(msgs):
                 content = getattr(msg, 'content', '')
                 if content and isinstance(content, str) and _TERMINATE_STRING not in content:
                     last_content = content
