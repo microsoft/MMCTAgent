@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from loguru import logger
-from app.routers import query, frames, transcripts
+from app.routers import query, frames, transcripts, videos
 # from app.routers import ingestion, graph_ingestion  # Disabled: not exposed in this deployment
 
 # Configure loguru to output to stderr (uvicorn compatible)
@@ -18,7 +18,7 @@ logger.add(
 app = FastAPI(
     title="MMCT Agent API",
     description="Multi-modal Critical Thinking Agent Framework for image and video analysis",
-    version="1.2.1",
+    version="1.2.3",
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json",
@@ -37,6 +37,7 @@ app.include_router(query.router)
 # app.include_router(graph_ingestion.router)   # Disabled: not exposed in this deployment
 app.include_router(frames.router)
 app.include_router(transcripts.router)
+app.include_router(videos.router)
 
 
 def custom_openapi():
@@ -46,7 +47,7 @@ def custom_openapi():
 
     openapi_schema = get_openapi(
         title="MMCT Agent API",
-        version="1.2.1",
+        version="1.2.3",
         description="""
         # Multi-modal Critical Thinking Agent Framework
         
@@ -90,7 +91,7 @@ async def root():
     """Root endpoint providing API information."""
     return {
         "message": "MMCT Agent API",
-        "version": "1.2.1",
+        "version": "1.2.3",
         "description": "Multi-modal Critical Thinking Agent Framework",
         "docs_url": "/docs",
         "redoc_url": "/redoc",

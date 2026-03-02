@@ -5,16 +5,17 @@ from pydantic import BaseModel, Field
 
 
 class FrameHit(BaseModel):
-    """A single frame blob URL with its timestamp."""
+    """A single frame with its image data."""
     timestamp_second: int = Field(..., description="Timestamp in seconds")
-    blob_url: str = Field(..., description="Full blob URL for the frame")
+    image_base64: str = Field(..., description="Base64-encoded JPEG image bytes")
+    content_type: str = Field(default="image/jpeg", description="MIME type of the image")
 
 
 class FrameLookupResponse(BaseModel):
-    """Response for frame lookup — up to 3 URLs for ±1 second window."""
+    """Response for frame lookup — single frame at the requested timestamp."""
     video_id: str = Field(..., description="Original (pre-normalization) video ID")
-    requested_timestamp: int = Field(..., description="Requested centre timestamp")
-    frames: List[FrameHit] = Field(default_factory=list, description="Existing frame URLs")
+    requested_timestamp: int = Field(..., description="Requested timestamp")
+    frames: List[FrameHit] = Field(default_factory=list, description="Frame image data")
 
     model_config = {
         "json_schema_extra": {
@@ -23,16 +24,9 @@ class FrameLookupResponse(BaseModel):
                 "requested_timestamp": 120,
                 "frames": [
                     {
-                        "timestamp_second": 119,
-                        "blob_url": "https://geckostorageaccount.blob.core.windows.net/video-frames-lively/Dk1toyI7AJs/119/frame.jpg"
-                    },
-                    {
                         "timestamp_second": 120,
-                        "blob_url": "https://geckostorageaccount.blob.core.windows.net/video-frames-lively/Dk1toyI7AJs/120/frame.jpg"
-                    },
-                    {
-                        "timestamp_second": 121,
-                        "blob_url": "https://geckostorageaccount.blob.core.windows.net/video-frames-lively/Dk1toyI7AJs/121/frame.jpg"
+                        "image_base64": "<base64-encoded JPEG bytes>",
+                        "content_type": "image/jpeg"
                     }
                 ]
             }

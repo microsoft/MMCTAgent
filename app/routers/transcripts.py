@@ -1,8 +1,8 @@
-"""Router for transcript blob URL lookup."""
+"""Router for transcript lookup — returns full transcript content."""
 
 from fastapi import APIRouter, Query
 from app.schemas.transcripts import TranscriptLookupResponse
-from app.services.transcript_lookup_service import lookup_transcript_url
+from app.services.transcript_lookup_service import lookup_transcript_content
 
 router = APIRouter()
 
@@ -10,10 +10,10 @@ router = APIRouter()
 @router.get(
     "/transcripts/lookup",
     response_model=TranscriptLookupResponse,
-    summary="Look up transcript blob URL",
+    summary="Look up and download transcript",
     description=(
-        "Given a video_id, returns the blob URL for its SRT transcript "
-        "in the 'video-transcript-lively' container, if it exists."
+        "Given a video_id, downloads and returns the full SRT transcript "
+        "content from blob storage."
     ),
     responses={
         200: {
@@ -22,7 +22,7 @@ router = APIRouter()
                 "application/json": {
                     "example": {
                         "video_id": "Dk1toyI7AJs",
-                        "blob_url": "https://geckostorageaccount.blob.core.windows.net/video-transcript-lively/Dk1toyI7AJs/transcript.srt",
+                        "transcript": "1\n00:00:00,000 --> 00:00:05,000\nHello and welcome...",
                     }
                 }
             },
@@ -39,11 +39,11 @@ router = APIRouter()
         },
     },
 )
-async def get_transcript_url(
+async def get_transcript(
     video_id: str = Query(..., description="Video identifier (e.g., YouTube ID)", examples=["Dk1toyI7AJs"]),
 ) -> TranscriptLookupResponse:
-    url = await lookup_transcript_url(video_id)
+    content = await lookup_transcript_content(video_id)
     return TranscriptLookupResponse(
         video_id=video_id,
-        blob_url=url,
+        transcript=content,
     )

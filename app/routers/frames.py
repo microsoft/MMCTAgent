@@ -1,8 +1,8 @@
-"""Router for frame blob URL lookup."""
+"""Router for frame lookup — returns actual frame bytes."""
 
 from fastapi import APIRouter, Query
 from app.schemas.frames import FrameLookupResponse, FrameHit
-from app.services.frame_lookup_service import lookup_frame_urls
+from app.services.frame_lookup_service import lookup_frame_bytes
 
 router = APIRouter()
 
@@ -10,24 +10,21 @@ router = APIRouter()
 @router.get(
     "/frames/lookup",
     response_model=FrameLookupResponse,
-    summary="Look up uniform-frame blob URLs",
+    summary="Look up and download a uniform frame",
     description=(
-        "Given a video_id and timestamp (seconds), returns blob URLs for "
-        "frames at t-1, t, and t+1 that actually exist in the "
-        "'video-frames-lively' container."
+        "Given a video_id and timestamp (seconds), returns the base64-encoded "
+        "JPEG frame image at that exact timestamp from blob storage."
     ),
     responses={
         200: {
-            "description": "Frame URLs found",
+            "description": "Frame image found",
             "content": {
                 "application/json": {
                     "example": {
                         "video_id": "Dk1toyI7AJs",
                         "requested_timestamp": 120,
                         "frames": [
-                            {"timestamp_second": 119, "blob_url": "https://geckostorageaccount.blob.core.windows.net/video-frames-lively/Dk1toyI7AJs/119/frame.jpg"},
-                            {"timestamp_second": 120, "blob_url": "https://geckostorageaccount.blob.core.windows.net/video-frames-lively/Dk1toyI7AJs/120/frame.jpg"},
-                            {"timestamp_second": 121, "blob_url": "https://geckostorageaccount.blob.core.windows.net/video-frames-lively/Dk1toyI7AJs/121/frame.jpg"},
+                            {"timestamp_second": 120, "image_base64": "<base64>", "content_type": "image/jpeg"},
                         ],
                     }
                 }
@@ -35,13 +32,13 @@ router = APIRouter()
         },
     },
 )
-async def get_frame_urls(
+async def get_frame_bytes(
     video_id: str = Query(..., description="Video identifier (e.g., YouTube ID)", examples=["Dk1toyI7AJs"]),
     timestamp: int = Query(..., ge=0, description="Centre timestamp in seconds", examples=[120]),
 ) -> FrameLookupResponse:
-    hits = await lookup_frame_urls(video_id, timestamp)
+    hits = await lookup_frame_bytes(video_id, timestamp)
     return FrameLookupResponse(
         video_id=video_id,
         requested_timestamp=timestamp,
-        frames=[FrameHit(timestamp_second=ts, blob_url=url) for ts, url in hits],
+        frames=[FrameHit(timestamp_second=ts, image_base64=data) for ts, data in hits],
     )

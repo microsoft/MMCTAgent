@@ -106,3 +106,25 @@ async def blob_exists_cached(container: str, blob_name: str) -> bool:
 
     _existence_cache[cache_key] = exists
     return exists
+
+
+async def download_blob(container: str, blob_name: str) -> Optional[bytes]:
+    """Download blob content as bytes.
+
+    Args:
+        container: Blob container name.
+        blob_name: Path to the blob within the container.
+
+    Returns:
+        Blob content as bytes, or None if the blob does not exist.
+    """
+    service = await get_blob_service_client()
+    blob_client = service.get_container_client(container).get_blob_client(blob_name)
+    try:
+        stream = await blob_client.download_blob()
+        return await stream.readall()
+    except Exception as exc:
+        logger.warning(f"Blob download failed for {container}/{blob_name}: {exc}")
+        return None
+    finally:
+        await blob_client.close()
