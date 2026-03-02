@@ -53,7 +53,7 @@ class TranscriptNodeType(BaseNodeType):
     
     def format_search_result(self, props: Dict[str, Any]) -> Dict[str, Any]:
         return {
-            "transcript": (props.get("transcript", "") or "")[:500],
+            "transcript": props.get("transcript", "") or "",
             "start_time": props.get("start_time"),
             "end_time": props.get("end_time"),
             "chunk_index": props.get("chunk_index"),

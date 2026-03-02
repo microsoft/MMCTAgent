@@ -51,8 +51,7 @@ class ChapterGroupNodeType(BaseNodeType):
     
     def format_search_result(self, props: Dict[str, Any]) -> Dict[str, Any]:
         return {
-            "summary": (props.get("summary", "") or "")[:500],
-            "title": props.get("title") or props.get("name", ""),
+            "summary": props.get("summary", "") or "",
             "start_time": props.get("start_time"),
             "end_time": props.get("end_time"),
             "video_duration": props.get("video_duration"),
