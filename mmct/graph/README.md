@@ -21,6 +21,61 @@ mmct/graph/
     └── keyframe.py
 ```
 
+## Graph Structure
+
+```mermaid
+graph TD
+    classDef group fill:#4a90d9,stroke:#2c5f8a,color:#fff
+    classDef mid fill:#50b86c,stroke:#2d7a3e,color:#fff
+    classDef leaf fill:#f0ad4e,stroke:#c77c1a,color:#fff
+    classDef visual fill:#d9534f,stroke:#a93c3a,color:#fff
+
+    %% ── Nodes ──
+    CG1["🗂 ChapterGroup 1"]:::group
+    CG2["🗂 ChapterGroup 2"]:::group
+    CH1["📖 Chapter 1"]:::mid
+    CH2["📖 Chapter 2"]:::mid
+    CH3["📖 Chapter 3"]:::mid
+    TR1["🎙 Transcript"]:::leaf
+    EV1["⚡ Event A"]:::leaf
+    EV2["⚡ Event B"]:::leaf
+    EV3["⚡ Event C"]:::leaf
+    OB1["🏷 Object"]:::leaf
+    KF1["🖼 Keyframe 1"]:::visual
+    KF2["🖼 Keyframe 2"]:::visual
+
+    %% ── Hierarchy ──
+    CG1 -->|HAS_CHAPTER| CH1
+    CG1 -->|HAS_CHAPTER| CH2
+    CG2 -->|HAS_CHAPTER| CH3
+    CH1 -->|HAS_TRANSCRIPT| TR1
+    CH1 -->|HAS_EVENT| EV1
+    CH1 -->|HAS_EVENT| EV2
+    CH2 -->|HAS_EVENT| EV3
+    CH1 -->|HAS_KEYFRAME| KF1
+    CH1 -->|HAS_KEYFRAME| KF2
+    EV1 -->|CONTAINS| OB1
+
+    %% ── Temporal ──
+    CG1 -. NEXT_GROUP .-> CG2
+    CH1 -. NEXT_CHAPTER .-> CH2
+    CH2 -. NEXT_CHAPTER .-> CH3
+    EV1 -. NEXT_EVENT .-> EV2
+
+    %% ── Causal ──
+    EV1 == CAUSES ==> EV3
+
+    %% ── Similarity ──
+    EV2 -. SIMILAR_TO .-> EV3
+```
+
+> **Solid arrows** = hierarchy (HAS_CHAPTER, HAS_EVENT, HAS_KEYFRAME, HAS_TRANSCRIPT, CONTAINS)
+> **Dashed arrows** = temporal ordering (NEXT\_\* / PREV\_\*)
+> **Thick arrows** = causal (CAUSES / RESULT_OF)
+> **Dotted arrows** = semantic similarity (SIMILAR_TO)
+
+---
+
 ## Quick Start
 
 ### Using the Registry

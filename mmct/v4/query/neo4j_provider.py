@@ -80,6 +80,9 @@ class Neo4jQueryProvider:
         password: str,
         database: str = "neo4j",
         ef_search: int = DEFAULT_EF_SEARCH,
+        max_connection_pool_size: int = 100,
+        connection_acquisition_timeout: int = 60,
+        max_connection_lifetime: int = 3600,
     ):
         """Initialize Neo4j query provider.
         
@@ -90,25 +93,41 @@ class Neo4jQueryProvider:
             database: Database name (default "neo4j").
             ef_search: HNSW search parameter (default 100). Higher values give
                 better recall but increase latency. Should be >= limit for good results.
+            max_connection_pool_size: Maximum pooled connections for concurrent reads.
+            connection_acquisition_timeout: Seconds to wait for a pooled connection.
+            max_connection_lifetime: Maximum lifetime of a pooled connection in seconds.
         """
         self._uri = uri
         self._username = username
         self._password = password
         self._database = database
         self._ef_search = ef_search
+        self._max_connection_pool_size = max_connection_pool_size
+        self._connection_acquisition_timeout = connection_acquisition_timeout
+        self._max_connection_lifetime = max_connection_lifetime
         self._driver = None
+        self._init_lock = asyncio.Lock()
     
-    def _ensure_driver(self) -> None:
-        """Lazy initialize Neo4j driver."""
-        if self._driver is None:
+    async def _ensure_driver(self) -> None:
+        """Lazy initialize Neo4j async driver (double-checked locking)."""
+        if self._driver is not None:
+            return
+        async with self._init_lock:
+            if self._driver is not None:
+                return
             try:
-                from neo4j import GraphDatabase
-                self._driver = GraphDatabase.driver(
+                from neo4j import AsyncGraphDatabase
+                self._driver = AsyncGraphDatabase.driver(
                     self._uri,
                     auth=(self._username, self._password),
+                    max_connection_pool_size=self._max_connection_pool_size,
+                    connection_acquisition_timeout=self._connection_acquisition_timeout,
+                    max_connection_lifetime=self._max_connection_lifetime,
                 )
-                self._driver.verify_connectivity()
-                logger.info(f"Neo4jQueryProvider connected to {self._uri}")
+                logger.info(
+                    f"Neo4jQueryProvider async driver connected to {self._uri} "
+                    f"(pool_size={self._max_connection_pool_size})"
+                )
             except ImportError:
                 raise ImportError(
                     "neo4j package required. Install with: pip install neo4j"
@@ -117,10 +136,32 @@ class Neo4jQueryProvider:
                 logger.error(f"Failed to connect to Neo4j: {e}")
                 raise
     
+    async def _run_read(
+        self,
+        query: str,
+        parameters: Optional[Dict[str, Any]] = None,
+    ) -> List[Dict[str, Any]]:
+        """Run a read query using the async driver and connection pool.
+        
+        Each call acquires a connection from the pool, executes the query,
+        and returns the connection — enabling high concurrency for reads.
+        
+        Args:
+            query: Cypher query string.
+            parameters: Optional query parameters.
+            
+        Returns:
+            List of record dictionaries.
+        """
+        await self._ensure_driver()
+        async with self._driver.session(database=self._database) as session:
+            result = await session.run(query, parameters or {})
+            return [dict(record) async for record in result]
+    
     async def close(self) -> None:
-        """Close the Neo4j driver."""
+        """Close the Neo4j async driver and release pooled connections."""
         if self._driver is not None:
-            self._driver.close()
+            await self._driver.close()
             self._driver = None
             logger.info("Neo4jQueryProvider connection closed")
     
@@ -343,7 +384,7 @@ class Neo4jQueryProvider:
         Returns:
             List of SearchResult.
         """
-        self._ensure_driver()
+        await self._ensure_driver()
         
         # Get index name and properties from registry
         nt = node_registry.get(node_type)
@@ -427,13 +468,8 @@ class Neo4jQueryProvider:
             LIMIT $limit
             """
         
-        def run_query():
-            with self._driver.session(database=self._database) as session:
-                result = session.run(query, params)
-                return [dict(record) for record in result]
-        
         try:
-            records = await asyncio.to_thread(run_query)
+            records = await self._run_read(query, params)
             
             results = []
             for record in records:
@@ -473,7 +509,7 @@ class Neo4jQueryProvider:
         Returns:
             List of dicts with video_id, max_score, and summary snippets.
         """
-        self._ensure_driver()
+        await self._ensure_driver()
         
         # Search ChapterGroups and aggregate by video_id
         chapter_group_type = node_registry.get("ChapterGroup")
@@ -490,18 +526,13 @@ class Neo4jQueryProvider:
         LIMIT $limit
         """
         
-        def run_query():
-            with self._driver.session(database=self._database) as session:
-                result = session.run(query, {
-                    "index_name": index_name,
-                    "search_limit": limit * 5,  # Over-fetch for aggregation
-                    "embedding": query_embedding,
-                    "limit": limit,
-                })
-                return [dict(record) for record in result]
-        
         try:
-            records = await asyncio.to_thread(run_query)
+            records = await self._run_read(query, {
+                "index_name": index_name,
+                "search_limit": limit * 5,
+                "embedding": query_embedding,
+                "limit": limit,
+            })
             return records
             
         except Exception as e:
@@ -520,7 +551,7 @@ class Neo4jQueryProvider:
         Returns:
             Dictionary with video_id, groups (ordered), and combined_summary.
         """
-        self._ensure_driver()
+        await self._ensure_driver()
         
         query = """
         MATCH (g:ChapterGroup {video_id: $video_id})
@@ -533,13 +564,8 @@ class Neo4jQueryProvider:
         ORDER BY g.order
         """
         
-        def run_query():
-            with self._driver.session(database=self._database) as session:
-                result = session.run(query, {"video_id": video_id})
-                return [dict(record) for record in result]
-        
         try:
-            records = await asyncio.to_thread(run_query)
+            records = await self._run_read(query, {"video_id": video_id})
             
             if not records:
                 return {
@@ -576,7 +602,7 @@ class Neo4jQueryProvider:
         Returns:
             List of video IDs.
         """
-        self._ensure_driver()
+        await self._ensure_driver()
         
         query = """
         MATCH (n)
@@ -584,13 +610,9 @@ class Neo4jQueryProvider:
         RETURN DISTINCT n.video_id AS video_id
         """
         
-        def run_query():
-            with self._driver.session(database=self._database) as session:
-                result = session.run(query)
-                return [record["video_id"] for record in result]
-        
         try:
-            return await asyncio.to_thread(run_query)
+            records = await self._run_read(query)
+            return [record["video_id"] for record in records]
         except Exception as e:
             logger.error(f"Failed to get video IDs: {e}")
             return []
@@ -613,7 +635,7 @@ class Neo4jQueryProvider:
         Returns:
             Node properties dict or None if not found.
         """
-        self._ensure_driver()
+        await self._ensure_driver()
         
         # Get properties from registry
         nt = node_registry.get(node_type) if node_type else None
@@ -631,20 +653,16 @@ class Neo4jQueryProvider:
             RETURN n {.*, embedding: null} AS props
             """
         
-        def run_query():
-            with self._driver.session(database=self._database) as session:
-                result = session.run(query, {"node_id": node_id})
-                record = result.single()
-                if record:
-                    if "props" in record:
-                        props = dict(record["props"])
-                        props.pop("embedding", None)
-                        return props
-                    return dict(record)
-                return None
-        
         try:
-            return await asyncio.to_thread(run_query)
+            records = await self._run_read(query, {"node_id": node_id})
+            if not records:
+                return None
+            record = records[0]
+            if "props" in record:
+                props = dict(record["props"])
+                props.pop("embedding", None)
+                return props
+            return dict(record)
         except Exception as e:
             logger.error(f"Failed to get node {node_id}: {e}")
             return None
@@ -672,7 +690,7 @@ class Neo4jQueryProvider:
         Returns:
             List of SearchResult with all matching nodes.
         """
-        self._ensure_driver()
+        await self._ensure_driver()
         
         # Get properties from registry
         nt = node_registry.get(node_type)
@@ -702,13 +720,8 @@ class Neo4jQueryProvider:
         LIMIT $limit
         """
         
-        def run_query():
-            with self._driver.session(database=self._database) as session:
-                result = session.run(query, {"video_id": video_id, "limit": limit})
-                return [dict(record) for record in result]
-        
         try:
-            records = await asyncio.to_thread(run_query)
+            records = await self._run_read(query, {"video_id": video_id, "limit": limit})
             
             results = []
             for record in records:
@@ -732,20 +745,16 @@ class Neo4jQueryProvider:
         Returns:
             Dictionary mapping index name to existence boolean.
         """
-        self._ensure_driver()
+        await self._ensure_driver()
         
         query = "SHOW INDEXES YIELD name RETURN name"
         
         # Build expected index names from registry
         expected_indexes = node_registry.build_index_map()
         
-        def run_query():
-            with self._driver.session(database=self._database) as session:
-                result = session.run(query)
-                return {record["name"] for record in result}
-        
         try:
-            existing = await asyncio.to_thread(run_query)
+            records = await self._run_read(query)
+            existing = {record["name"] for record in records}
             return {
                 name: name in existing
                 for name in expected_indexes.values()
@@ -871,7 +880,7 @@ class Neo4jQueryProvider:
         
         relationship, direction = self.TRAVERSAL_MAP[traversal_key]
         
-        self._ensure_driver()
+        await self._ensure_driver()
         
         # Build Cypher query - get properties from registry
         properties = target_nt.neo4j_properties
@@ -920,13 +929,8 @@ class Neo4jQueryProvider:
         LIMIT $limit
         """
         
-        def run_query():
-            with self._driver.session(database=self._database) as session:
-                result = session.run(query, params)
-                return [dict(record) for record in result]
-        
         try:
-            records = await asyncio.to_thread(run_query)
+            records = await self._run_read(query, params)
             
             results = []
             for record in records:

@@ -44,52 +44,59 @@ class Neo4jGraphProvider(BaseGraphDBProvider):
         self.connection_acquisition_timeout = connection_acquisition_timeout
         
         self._driver = None
-        self._lock = asyncio.Lock()
+        self._init_lock = asyncio.Lock()
     
-    def _ensure_driver(self) -> None:
-        """Ensure Neo4j driver is initialized."""
-        if self._driver is None:
+    async def _ensure_driver(self) -> None:
+        """Ensure Neo4j async driver is initialized (double-checked locking)."""
+        if self._driver is not None:
+            return
+        async with self._init_lock:
+            if self._driver is not None:
+                return
             try:
-                from neo4j import GraphDatabase
-                self._driver = GraphDatabase.driver(
+                from neo4j import AsyncGraphDatabase
+                self._driver = AsyncGraphDatabase.driver(
                     self.uri,
                     auth=(self.username, self.password),
                     max_connection_lifetime=self.max_connection_lifetime,
                     max_connection_pool_size=self.max_connection_pool_size,
-                    connection_acquisition_timeout=self.connection_acquisition_timeout
+                    connection_acquisition_timeout=self.connection_acquisition_timeout,
                 )
-                logger.info(f"Neo4j driver initialized for {self.uri}")
+                logger.info(
+                    f"Neo4j async driver initialized for {self.uri} "
+                    f"(pool_size={self.max_connection_pool_size})"
+                )
             except ImportError as e:
                 logger.error("neo4j driver not installed. Install with: pip install neo4j")
                 raise ImportError(
                     "neo4j package is required. Install with: pip install neo4j"
                 ) from e
     
-    def _run_query_sync(
+    async def _run_query(
         self,
         query: str,
         parameters: Optional[Dict[str, Any]] = None
     ) -> List[Dict[str, Any]]:
-        """Run a Cypher query synchronously."""
-        self._ensure_driver()
-        
-        with self._driver.session(database=self.database_name) as session:
-            result = session.run(query, parameters or {})
-            return [dict(record) for record in result]
+        """Run a Cypher read query using the async driver and connection pool."""
+        await self._ensure_driver()
+        async with self._driver.session(database=self.database_name) as session:
+            result = await session.run(query, parameters or {})
+            return [dict(record) async for record in result]
     
-    def _run_write_sync(
+    async def _run_write(
         self,
         query: str,
         parameters: Optional[Dict[str, Any]] = None
-    ) -> Any:
-        """Run a write transaction synchronously."""
-        self._ensure_driver()
+    ) -> List[Dict[str, Any]]:
+        """Run a write transaction using the async driver and connection pool."""
+        await self._ensure_driver()
         
-        with self._driver.session(database=self.database_name) as session:
-            result = session.execute_write(
-                lambda tx: list(tx.run(query, parameters or {}))
-            )
-            return result
+        async def _tx_work(tx):
+            result = await tx.run(query, parameters or {})
+            return [dict(record) async for record in result]
+        
+        async with self._driver.session(database=self.database_name) as session:
+            return await session.execute_write(_tx_work)
     
     async def create_node(
         self,
@@ -110,8 +117,7 @@ class Neo4jGraphProvider(BaseGraphDBProvider):
         
         params = {"node_id": node_id, "properties": props}
         
-        async with self._lock:
-            result = await asyncio.to_thread(self._run_write_sync, query, params)
+        await self._run_write(query, params)
         
         return {
             "id": node_id,
@@ -144,8 +150,7 @@ class Neo4jGraphProvider(BaseGraphDBProvider):
             "properties": props
         }
         
-        async with self._lock:
-            await asyncio.to_thread(self._run_write_sync, query, params)
+        await self._run_write(query, params)
         
         return {
             "source_id": source_id,
@@ -165,7 +170,7 @@ class Neo4jGraphProvider(BaseGraphDBProvider):
         RETURN n, labels(n) as labels
         """
         
-        result = await asyncio.to_thread(self._run_query_sync, query, {"node_id": node_id})
+        result = await self._run_query(query, {"node_id": node_id})
         
         if not result:
             return None
@@ -195,10 +200,7 @@ class Neo4jGraphProvider(BaseGraphDBProvider):
         RETURN count(n) as deleted
         """
         
-        async with self._lock:
-            result = await asyncio.to_thread(
-                self._run_write_sync, query, {"node_id": node_id}
-            )
+        result = await self._run_write(query, {"node_id": node_id})
         
         return len(result) > 0
     
@@ -225,8 +227,7 @@ class Neo4jGraphProvider(BaseGraphDBProvider):
         
         params = {"source_id": source_id, "target_id": target_id}
         
-        async with self._lock:
-            result = await asyncio.to_thread(self._run_write_sync, query, params)
+        result = await self._run_write(query, params)
         
         return len(result) > 0
     
@@ -261,9 +262,7 @@ class Neo4jGraphProvider(BaseGraphDBProvider):
             LIMIT $limit
             """
         
-        result = await asyncio.to_thread(
-            self._run_query_sync, query, {"node_id": node_id, "limit": limit}
-        )
+        result = await self._run_query(query, {"node_id": node_id, "limit": limit})
         
         neighbors = []
         for record in result:
@@ -300,10 +299,7 @@ class Neo4jGraphProvider(BaseGraphDBProvider):
         RETURN n, labels(n) as labels
         """
         
-        async with self._lock:
-            result = await asyncio.to_thread(
-                self._run_write_sync, query, {"node_id": node_id, "properties": properties}
-            )
+        result = await self._run_write(query, {"node_id": node_id, "properties": properties})
         
         if not result:
             return None
@@ -327,10 +323,7 @@ class Neo4jGraphProvider(BaseGraphDBProvider):
         **kwargs
     ) -> List[Dict[str, Any]]:
         """Execute a native Cypher query."""
-        result = await asyncio.to_thread(
-            self._run_query_sync, query_string, parameters
-        )
-        return result
+        return await self._run_query(query_string, parameters)
     
     async def get_nodes_by_type(
         self,
@@ -358,7 +351,7 @@ class Neo4jGraphProvider(BaseGraphDBProvider):
         LIMIT $limit
         """
         
-        result = await asyncio.to_thread(self._run_query_sync, query, params)
+        result = await self._run_query(query, params)
         
         nodes = []
         for record in result:
@@ -376,8 +369,7 @@ class Neo4jGraphProvider(BaseGraphDBProvider):
         """Clear all nodes and edges from the database."""
         query = "MATCH (n) DETACH DELETE n"
         
-        async with self._lock:
-            await asyncio.to_thread(self._run_write_sync, query)
+        await self._run_write(query)
         
         logger.info("Neo4j database cleared")
         return True
@@ -404,23 +396,20 @@ class Neo4jGraphProvider(BaseGraphDBProvider):
         success_count = 0
         failed_count = 0
         
-        async with self._lock:
-            for node_type, node_list in nodes_by_type.items():
-                query = f"""
-                UNWIND $nodes as nodeProps
-                MERGE (n:{node_type} {{id: nodeProps.id}})
-                SET n += nodeProps
-                RETURN count(n) as created
-                """
-                
-                try:
-                    await asyncio.to_thread(
-                        self._run_write_sync, query, {"nodes": node_list}
-                    )
-                    success_count += len(node_list)
-                except Exception as e:
-                    logger.error(f"Batch node creation failed for type {node_type}: {e}")
-                    failed_count += len(node_list)
+        for node_type, node_list in nodes_by_type.items():
+            query = f"""
+            UNWIND $nodes as nodeProps
+            MERGE (n:{node_type} {{id: nodeProps.id}})
+            SET n += nodeProps
+            RETURN count(n) as created
+            """
+            
+            try:
+                await self._run_write(query, {"nodes": node_list})
+                success_count += len(node_list)
+            except Exception as e:
+                logger.error(f"Batch node creation failed for type {node_type}: {e}")
+                failed_count += len(node_list)
         
         return {"success": success_count, "failed": failed_count}
     
@@ -447,31 +436,28 @@ class Neo4jGraphProvider(BaseGraphDBProvider):
         success_count = 0
         failed_count = 0
         
-        async with self._lock:
-            for edge_type, edge_list in edges_by_type.items():
-                query = f"""
-                UNWIND $edges as edgeData
-                MATCH (a {{id: edgeData.source_id}})
-                MATCH (b {{id: edgeData.target_id}})
-                MERGE (a)-[r:{edge_type}]->(b)
-                SET r += edgeData.properties
-                RETURN count(r) as created
-                """
-                
-                try:
-                    await asyncio.to_thread(
-                        self._run_write_sync, query, {"edges": edge_list}
-                    )
-                    success_count += len(edge_list)
-                except Exception as e:
-                    logger.error(f"Batch edge creation failed for type {edge_type}: {e}")
-                    failed_count += len(edge_list)
+        for edge_type, edge_list in edges_by_type.items():
+            query = f"""
+            UNWIND $edges as edgeData
+            MATCH (a {{id: edgeData.source_id}})
+            MATCH (b {{id: edgeData.target_id}})
+            MERGE (a)-[r:{edge_type}]->(b)
+            SET r += edgeData.properties
+            RETURN count(r) as created
+            """
+            
+            try:
+                await self._run_write(query, {"edges": edge_list})
+                success_count += len(edge_list)
+            except Exception as e:
+                logger.error(f"Batch edge creation failed for type {edge_type}: {e}")
+                failed_count += len(edge_list)
         
         return {"success": success_count, "failed": failed_count}
     
     async def close(self) -> None:
-        """Close the Neo4j driver."""
+        """Close the Neo4j async driver and release pooled connections."""
         if self._driver:
-            self._driver.close()
+            await self._driver.close()
             self._driver = None
             logger.info(f"Neo4j driver closed for {self.uri}")
