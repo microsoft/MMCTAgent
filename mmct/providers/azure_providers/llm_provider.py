@@ -234,7 +234,17 @@ class AzureLLMProvider(BaseLLMProvider):
     def get_autogen_client(self, **kwargs):
         """Get autogen-compatible client for Azure OpenAI."""
         try:
-            temperature = kwargs.get("temperature", 0)
+            model = self.model_name if self.model_name else self.deployment_name
+
+            # Provide model_info for custom deployment names not recognized by autogen
+            model_info = {
+                "vision": True,
+                "function_calling": True,
+                "json_output": True,
+                "family": "gpt-5",
+                "structured_output": True,
+                "multiple_system_messages": True,
+            }
 
             if self.credentials is not None:
                 # Use credentials with token-based authentication
@@ -243,22 +253,22 @@ class AzureLLMProvider(BaseLLMProvider):
                 )
                 return AzureOpenAIChatCompletionClient(
                     azure_deployment=self.deployment_name,
-                    model=self.model_name if self.model_name else self.deployment_name,
+                    model=model,
                     api_version=self.api_version,
                     azure_endpoint=self.endpoint,
                     azure_ad_token_provider=token_provider,
                     timeout=self.timeout,
-                    temperature=temperature,
+                    model_info=model_info,
                 )
             else:
                 return AzureOpenAIChatCompletionClient(
                     azure_deployment=self.deployment_name,
-                    model=self.model_name if self.model_name else self.deployment_name,
+                    model=model,
                     api_version=self.api_version,
                     azure_endpoint=self.endpoint,
                     api_key=self.api_key,
                     timeout=self.timeout,
-                    temperature=temperature,
+                    model_info=model_info,
                 )
         except Exception as e:
             raise ProviderException(f"Failed to create Azure OpenAI autogen client: {e}")
