@@ -47,7 +47,14 @@ pipeline:
         include_timestamps: true
         include_word_count: true
 
-    # Step 4: Video Chunking
+    # Step 4: Upload transcript to blob storage
+    - id: "transcript_upload"
+      type: "ingestion.transcript_upload"
+      params:
+        source_transcribe_step: "transcribe"
+        container_name: "video-transcript-lively"
+
+    # Step 5: Video Chunking
     - id: "video_chunking"
       type: "ingestion.video_chunking"
       params:
@@ -67,7 +74,16 @@ pipeline:
       params:
         video_chunking_step: "video_chunking"
 
-    # Step 6: Dense keyframe extraction
+    # Step 6: Uniform frame extraction (1 fps, upload to blob)
+    - id: "uniform_frames"
+      type: "ingestion.uniform_frames"
+      params:
+        compress_step: "compress"
+        container_name: "video-frames-lively"
+        extension: "jpg"
+        upload_batch_size: 5
+
+    # Step 7: Dense keyframe extraction
     - id: "dense_keyframes"
       type: "ingestion.dense_keyframes"
       params:

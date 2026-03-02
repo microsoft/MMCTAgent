@@ -129,6 +129,33 @@ class VideoCompressor:
             return False
 
     # ------------------------------------------------------------------
+    # Codec compatibility
+    # ------------------------------------------------------------------
+
+    # Codecs that OpenCV (cv2.VideoCapture) can reliably decode.
+    # Videos encoded with codecs outside this set must be transcoded
+    # before downstream keyframe-extraction steps can read them.
+    CV2_COMPATIBLE_CODECS = {"h264", "hevc", "h265", "mpeg4", "vp8", "vp9", "mjpeg"}
+
+    def get_video_codec(self) -> str | None:
+        """Return the codec name of the first video stream, or None."""
+        try:
+            probe = ffmpeg.probe(self.input_path)
+            for stream in probe.get("streams", []):
+                if stream.get("codec_type") == "video":
+                    return stream.get("codec_name", "").lower()
+        except Exception:
+            pass
+        return None
+
+    def needs_transcode(self) -> bool:
+        """Return True if the input codec is not decodable by OpenCV."""
+        codec = self.get_video_codec()
+        if codec is None:
+            return False
+        return codec not in self.CV2_COMPATIBLE_CODECS
+
+    # ------------------------------------------------------------------
     # Metadata helpers
     # ------------------------------------------------------------------
     def _get_duration(self):

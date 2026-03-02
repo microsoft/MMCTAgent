@@ -36,6 +36,12 @@ from .graph_upload import GraphUploadStep
 # Upload steps
 from .keyframe_upload import KeyframeUploadStep
 
+# Uniform frame extraction
+from .uniform_frames import UniformFrameExtractionStep
+
+# Transcript upload
+from .transcript_upload import TranscriptUploadStep
+
 __all__ = [
     "PreValidationStep",
     "TranscriptionStep",
@@ -60,4 +66,8 @@ __all__ = [
     "GraphUploadStep",
     # Upload steps
     "KeyframeUploadStep",
+    # Uniform frame extraction
+    "UniformFrameExtractionStep",
+    # Transcript upload
+    "TranscriptUploadStep",
 ]

@@ -327,6 +327,13 @@ class DenseKeyframeExtractionStep(PipelineStep):
             color_threshold=self.get_param("boundary_color_threshold", context, default=0.3),
         )
 
+        # Prefer the compressed video produced by the compress step so that
+        # codecs unsupported by OpenCV (e.g. AV1) are already transcoded.
+        compress_step: str = self.get_param("compress_step", context, default="compress")
+        effective_video_path: str = (
+            context.data_store.get(compress_step, "video_path") or context.video_path
+        )
+
         # Get video chunks with type hint
         source_step: str = self.get_param("source_step", context, default="video_chunking")
         video_chunks: List[Dict[str, Any]] = context.data_store.get(source_step, "video_chunks") or []
@@ -361,7 +368,7 @@ class DenseKeyframeExtractionStep(PipelineStep):
         async def process_chunk(chunk_idx: int, chunk: Dict[str, Any]) -> Dict[str, Any]:
             """Process a single chunk."""
             chunk_id: str = chunk.get("chunk_id", f"chunk_{chunk_idx}")
-            video_path: str = chunk.get("path", context.video_path)
+            video_path: str = chunk.get("path", effective_video_path)
             start_time: float = chunk.get("start_time", 0)
             end_time: float = chunk.get("end_time", context.video_duration)
 
