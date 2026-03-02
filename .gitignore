@@ -6,6 +6,10 @@ __pycache__/
 # C extensions
 *.so
 media/
+app/logs*
+keyframes*
+videos/
+cookies.txt
 
 # Distribution / packaging
 .Python
@@ -136,6 +140,9 @@ celerybeat.pid
 .venv
 env/
 venv/
+
+# Deployment artifacts (generated at deploy time)
+.generated-container-app.yaml
 ENV/
 env.bak/
 venv.bak/
