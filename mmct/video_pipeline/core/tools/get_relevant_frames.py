@@ -23,7 +23,7 @@ class GetRelevantFrames:
         self,
         query: Annotated[str, "query to be look for frames"],
         video_id: Annotated[str, "video id"],
-        index_name: Annotated[str, "search index name"],
+        # index_name: Annotated[str, "search index name"],
         top_k: Annotated[int, "number of relevant frames to fetch"] = 5,
     ) -> List[str]:
         """

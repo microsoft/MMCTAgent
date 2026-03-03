@@ -1,10 +1,17 @@
-FROM geckocontainerregistry.azurecr.io/mmct-base:latest
+ARG BASE_IMAGE=mmct_base:latest
+FROM ${BASE_IMAGE}
 
 # Set working directory
 WORKDIR /app
 
 # Copy .env file
+COPY mmct/ mmct/
+COPY config/ config/
+# COPY docs/ docs/
+COPY mcp_server/ mcp_server/
 COPY .env .
+
+RUN pip install -e .
 
 # Expose the MCP server port
 EXPOSE 8000

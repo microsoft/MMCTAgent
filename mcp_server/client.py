@@ -2,7 +2,7 @@ import asyncio
 from typing import List, Dict, Any
 from loguru import logger
 from fastmcp import Client
-import datetime
+
 
 async def list_and_log_tools(client: Client) -> List[str]:
     """
@@ -27,9 +27,7 @@ async def list_and_log_tools(client: Client) -> List[str]:
     return available_tool_names
 
 
-async def validate_tool(
-    client: Client, tool_name: str, arguments: Dict[str, Any]
-) -> None:
+async def validate_tool(client: Client, tool_name: str, arguments: Dict[str, Any]) -> None:
     """
     Call and validate a specific tool by name.
 
@@ -42,7 +40,7 @@ async def validate_tool(
     try:
         result = await client.call_tool(name=tool_name, arguments=arguments)
         logger.success(f"Tool '{tool_name}' executed successfully.")
-        logger.debug(f"Result: {result}")
+        logger.info(f"Result: {result}")
     except Exception as e:
         logger.error(f"Failed to execute tool '{tool_name}': {e}")
 
@@ -53,18 +51,22 @@ async def main(tools_to_validate: List[str] = None) -> None:
 
     Args:
         tools_to_validate (List[str], optional): List of tool names to validate.
-                                                Defaults to commonly used tools.
+                                                Defaults to all tools except video_ingestion_tool.
     """
     if tools_to_validate is None:
         tools_to_validate = [
             "video_agent_tool",
-            "video_ingestion_tool",
             "image_agent_tool",
+            "get_context_tool",
+            "get_relevant_frames_tool",
+            "query_frame_tool",
+            "get_object_collection_tool",
+            "get_video_summary_tool",
         ]
 
     try:
         logger.info("Initializing MCP client...")
-        client = Client("http://127.0.0.1:8000/mcp")    # change the url accordingly
+        client = Client("http://127.0.0.1:8000/mcp")  # change the url accordingly
 
         async with client:
             # Step 1: Verify connection
@@ -75,31 +77,15 @@ async def main(tools_to_validate: List[str] = None) -> None:
             available_tools = await list_and_log_tools(client)
 
             # Step 3: Validate selected tools
+
             if "video_agent_tool" in tools_to_validate and "video_agent_tool" in available_tools:
                 await validate_tool(
                     client,
                     "video_agent_tool",
                     {
-                        "query": "user-query",
-                        "index_name": "index-name",
-                        "top_n": 2,
-                        "use_computer_vision_tool": False,
+                        "query": "What is this video about?",
                         "use_critic_agent": True,
-                        "stream": True,
-                    },
-                )
-
-            if "video_ingestion_tool" in tools_to_validate and "video_ingestion_tool" in available_tools:
-                await validate_tool(
-                    client,
-                    "video_ingestion_tool",
-                    {
-                        "video_url": "video-url",
-                        "file_name": "filename.mp4",
-                        "index_name": "valid-index-name",
-                        "transcription_service": "azure-stt",  # valid transcription services
-                        "language": "en-IN",                   # valid language
-                        "use_computer_vision_tool": False,
+                        "url": "www.youtube.com/watch?v=2W3BKOSg958",
                     },
                 )
 
@@ -108,31 +94,83 @@ async def main(tools_to_validate: List[str] = None) -> None:
                     client,
                     "image_agent_tool",
                     {
-                        "query": "user-query",
-                        "image_url": "image-url",
-                        "tools": ["object_detection", "vit"],   # valid image agent tools
+                        "query": "Answer the question shown in the image",
+                        "image_url": "https://www.doingmaths.co.uk/uploads/8/3/8/9/8389495/4890329_orig.png",
+                        "tools": ["vit", "recog"],
                         "use_critic_agent": True,
                         "stream": True,
                     },
                 )
 
-            if "kb_tool" in tools_to_validate and "kb_tool" in available_tools:
+            if "get_context_tool" in tools_to_validate and "get_context_tool" in available_tools:
                 await validate_tool(
                     client,
-                    "kb_tool",
+                    "get_context_tool",
                     {
-                        "request": {   # understand the input schema of the kb_tool to understand more about the relevant query and filter parameters
-                            "query": "relevant-user-query",
-                            "query_type": "available query-type",
-                            "index_name": "index-name",
-                            "k": 10,
-                            "filters": {
-                                "category": "relevant-category",    # relevant category         
-                                "hash_video_id": "hash-video-id",   # hash video id filter
-                                "time_from": datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
-                            }
-                        }
-                    }
+                        "query": "What is this video about?",
+                        "fields_to_retrieve": [
+                            "chapter_transcript",
+                            "detailed_summary",
+                            "start_time",
+                            "end_time",
+                            "hash_video_id",
+                        ],
+                        "top": 3,
+                        "url": "www.youtube.com/watch?v=2W3BKOSg958",
+                    },
+                )
+
+            if (
+                "get_relevant_frames_tool" in tools_to_validate
+                and "get_relevant_frames_tool" in available_tools
+            ):
+                await validate_tool(
+                    client,
+                    "get_relevant_frames_tool",
+                    {
+                        "query": "Computing gcd of two numbers",
+                        "video_id": "2W3BKOSg958",
+                        "top_k": 5,
+                    },
+                )
+
+            if "query_frame_tool" in tools_to_validate and "query_frame_tool" in available_tools:
+                await validate_tool(
+                    client,
+                    "query_frame_tool",
+                    {
+                        "query": "tell about gcd of two numbers",
+                        "video_id": "2W3BKOSg958",
+                        "start_time": 60.0,
+                        "end_time": 120.0,
+                    },
+                )
+
+            if (
+                "get_object_collection_tool" in tools_to_validate
+                and "get_object_collection_tool" in available_tools
+            ):
+                await validate_tool(
+                    client,
+                    "get_object_collection_tool",
+                    {
+                        "object_names": ["Presentation Slide", "board", "text"],
+                        "video_id": "2W3BKOSg958",
+                    },
+                )
+
+            if (
+                "get_video_summary_tool" in tools_to_validate
+                and "get_video_summary_tool" in available_tools
+            ):
+                await validate_tool(
+                    client,
+                    "get_video_summary_tool",
+                    {
+                        "query": "computing gcd of two numbers",
+                        "video_id": "2W3BKOSg958",
+                        "top": 1,
+                    },
                 )
 
     except Exception as e:
@@ -141,6 +179,21 @@ async def main(tools_to_validate: List[str] = None) -> None:
 
 if __name__ == "__main__":
     # Run the main function with desired tools
-    # supported tools: kb_tool, video_agent_tool, video_ingestion_tool, image_agent_tool
-    # input the tools that you have to validate
-    asyncio.run(main(tools_to_validate=["kb_tool"]))
+    # Supported tools: video_agent_tool, image_agent_tool, get_context_tool,
+    #                   get_relevant_frames_tool, query_frame_tool,
+    #                   get_object_collection_tool, get_video_summary_tool,
+    #                   video_ingestion_tool
+    # Input the tools that you want to validate
+    asyncio.run(
+        main(
+            tools_to_validate=[
+                "video_agent_tool",
+                "image_agent_tool",
+                "get_context_tool",
+                "get_relevant_frames_tool",
+                "query_frame_tool",
+                "get_object_collection_tool",
+                "get_video_summary_tool",
+            ]
+        )
+    )

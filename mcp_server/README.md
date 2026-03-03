@@ -1,227 +1,461 @@
-# **MMCTAgent MCP Server**
+# MMCT Agent MCP Server — Guide & Guidelines
 
-A powerful Model Context Protocol (MCP) server that exposes MMCT (Multi-modal Critical Thinking) Agent capabilities through a standardized interface. Built with FastMCP for seamless integration with AI agents and applications.
+## Overview
 
-## **Quick Start**
+The **MMCT Agent MCP Server** exposes the Multi-Modal Critical Thinking (MMCT) framework as a set of tools via the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/). It enables AI agents and clients to perform video question-answering, image analysis, video ingestion, frame-level querying, and semantic search — all over HTTP.
 
-<details>
-<summary>Requirements Installation</summary>
+Built with [FastMCP](https://gofastmcp.com), the server runs on `http://0.0.0.0:8000/mcp` using the Streamable HTTP transport.
 
-Ensure to install the requirements from the `requirements.txt` present in the base directory.
+---
 
-</details>
+## Architecture
 
-<details>
-
-<summary>Start the Server</summary>
-
-```python
-python main.py
+```
+┌─────────────────────────────────────────────────┐
+│                  MCP Client                     │
+│          (fastmcp.Client / any MCP client)      │
+└────────────────────┬────────────────────────────┘
+                     │ HTTP (Streamable-HTTP)
+                     ▼
+┌─────────────────────────────────────────────────┐
+│            FastMCP Server (:8000/mcp)           │
+│               mcp_server/main.py                │
+├─────────────────────────────────────────────────┤
+│  Tools Layer (mcp_server/tools/)                │
+│  ┌──────────────┐ ┌──────────────────────────┐  │
+│  │video_agent   │ │image_agent               │  │
+│  │video_ingest  │ │get_context               │  │
+│  │query_frame   │ │get_relevant_frames       │  │
+│  │get_object_   │ │get_video_summary         │  │
+│  │collection    │ │                          │  │
+│  └──────────────┘ └──────────────────────────┘  │
+├─────────────────────────────────────────────────┤
+│  Config Layer (mcp_server/config.py)            │
+│  Provider singletons loaded from .env           │
+├─────────────────────────────────────────────────┤
+│  MMCT Core (mmct/)                              │
+│  VideoAgent, ImageAgent, IngestionPipeline, ... │
+└─────────────────────────────────────────────────┘
 ```
 
-Server runs on `http://0.0.0.0:8000` by default on `streamable-http` transport. 
+---
 
-Learn more about the [MCP transport configuration](https://deepwiki.com/jlowin/fastmcp/7.1-transport-protocols).
-</details>
+## Quick Start
 
-<details>
+### Prerequisites
 
-<summary>Test Connection</summary>
+- Python 3.10+
+- Conda environment with `mmct` installed (`pip install .[all]`)
+- Azure credentials configured (CLI login or Managed Identity)
+- `.env` file with required environment variables
 
-You can test out individual tool using the `client.py`.
+### 1. Configure Environment
+
+Create a `.env` file in the project root with the following variables:
+
+```env
+# LLM (Azure OpenAI)
+llm_endpoint=https://<your-endpoint>.openai.azure.com/
+llm_deployment_name=<deployment-name>
+llm_model_name=<model-name>
+llm_api_version=<api-version>
+
+# Embedding Service
+embedding_service_endpoint=https://<your-endpoint>.openai.azure.com/
+embedding_service_deployment_name=<embedding-deployment>
+embedding_service_api_version=<api-version>
+
+# AI Search
+search_endpoint=https://<your-search>.search.windows.net
+chapter_index_name=<chapter-index>
+keyframes_index_name=<keyframes-index>
+object_collection_index_name=<object-collection-index>
+
+# Azure Blob Storage
+storage_account_name=<storage-account>
+keyframe_container_name=<container-name>
+
+# Speech Service (for ingestion)
+speech_service_resource_id=<resource-id>
+speech_service_region=<region>
+```
+
+### 2. Start the Server
 
 ```bash
-python client.py
+cd /path/to/MMCTAgent
+python -m mcp_server.main
 ```
-</details>
 
-<details>
+The server starts at `http://0.0.0.0:8000/mcp`.
 
-<summary>Available Tools</summary>
+A health check endpoint is available at `GET http://0.0.0.0:8000/`.
 
-### 1. **Video Agent Tool** (`video_agent_tool`)
+### 3. Test with the Client
 
-**Purpose**: Answer natural language questions over ingested video content through MMCT reasoning.
+```bash
+python -m mcp_server.client
+```
 
-**Key Features**:
+Edit the `tools_to_validate` list at the bottom of `client.py` to select which tools to test.
 
-- Multi-modal reasoning (transcript + visual frames)
-- Optional critic agent for enhanced accuracy
-- Automatic document retrieval from vector database
+---
 
-```python
-# Example usage
+## Docker Deployment
+
+### Build Images
+
+```bash
+# Build the base image (includes system deps + Python packages)
+docker build -t <your-registry>/mmct_base:<tag> . -f Dockerfile.base
+
+# Build the MCP server image (adds source code + .env)
+# Pass the base image name via --build-arg
+docker build \
+  --build-arg BASE_IMAGE=<your-registry>/mmct_base:<tag> \
+  -t <your-registry>/mmct_mcp:<tag> \
+  . -f mcp_server/Dockerfile.mcp
+```
+
+### Run Container
+
+```bash
+docker run -d --name mmct_mcp -p 8000:8000 \
+  <your-registry>/mmct_mcp:<tag>
+```
+
+### Check Logs
+
+```bash
+docker logs mmct_mcp
+```
+
+---
+
+## Available Tools
+
+### 1. `video_agent_tool` — End-to-End Video QA
+
+The primary tool for answering questions about ingested videos. Internally orchestrates transcript retrieval, frame analysis, and multi-step reasoning with an optional critic agent.
+
+| Parameter          | Type    | Required             | Description                          |
+| ------------------ | ------- | -------------------- | ------------------------------------ |
+| `query`            | string  | ✅                   | Natural language question            |
+| `video_id`         | string  | ❌                   | Constrain search to a specific video |
+| `url`              | string  | ❌                   | Video source URL                     |
+| `use_critic_agent` | boolean | ❌ (default: `true`) | Enable critic validation             |
+
+**Example:**
+
+```json
 {
-    "query": "What is the main topic discussed?",
-    "index_name": "video-knowledge-base",
-    "video_id": "optional-video-id",
-    "use_computer_vision_tool": True,
-    "use_critic_agent": True,
-    "top_n": 1
+  "query": "What is this video about?",
+  "url": "www.youtube.com/watch?v=2W3BKOSg958",
+  "use_critic_agent": true
 }
 ```
 
-### 2. **Video Ingestion Tool** (`video_ingestion_tool`)
+---
 
-**Purpose**: Process and index video content for searchability  
-**Key Features**:
+### 2. `image_agent_tool` — Image Analysis & QA
 
-- Multi-language transcription support
-- Frame extraction and visual analysis
-- Automatic metadata enrichment
+Analyzes images using vision models (VIT, OCR, recognition, object detection) with optional critic feedback.
 
-```python
-# Example usage
+| Parameter             | Type         | Required              | Description                                               |
+| --------------------- | ------------ | --------------------- | --------------------------------------------------------- |
+| `image_url`           | string       | ✅                    | Publicly accessible image URL                             |
+| `query`               | string       | ✅                    | Question about the image                                  |
+| `use_critic_agent`    | boolean      | ✅                    | Enable critic validation                                  |
+| `tools`               | list[string] | ✅                    | Analysis tools: `vit`, `ocr`, `recog`, `object_detection` |
+| `stream`              | boolean      | ❌ (default: `false`) | Stream intermediate steps                                 |
+| `disable_console_log` | boolean      | ❌ (default: `false`) | Suppress console logs                                     |
+
+**Example:**
+
+```json
 {
-    "video_url": "https://example.com/video.mp4",
-    "file_name": "video.mp4",
-    "index_name": "my-video-index",
-    "language": "en-US",
-    "transcription_service": "whisper",
-    "use_computer_vision_tool": False,
-    "frame_stacking_grid_size": 4,
-    "hash_video_id": "optional-video-id"
+  "query": "What text is written on the board?",
+  "image_url": "https://example.com/image.png",
+  "tools": ["ocr", "vit"],
+  "use_critic_agent": true
 }
 ```
 
-### 3. **Image Agent Tool** (`image_agent_tool`)
+---
 
-**Purpose**: Analyze images and answer questions about visual content  
-**Key Features**:
+### 3. `video_ingestion_tool` — Ingest Videos
 
-- Multiple analysis modes (ocr, Object Detection, vit, Recognition)
-- Optional critic agent validation
-- Automatic image download and cleanup
+Downloads and ingests a video into the MMCT pipeline (transcription, chaptering, frame extraction, indexing).
 
-```python
-# Example usage
+| Parameter                  | Type           | Required          | Description                                 |
+| -------------------------- | -------------- | ----------------- | ------------------------------------------- |
+| `video_url`                | string         | ✅                | Video download URL                          |
+| `file_name`                | string         | ✅                | Local filename for temp storage             |
+| `language`                 | Languages enum | ✅                | Video language (e.g., `en-IN`, `hi-IN`)     |
+| `url`                      | string         | ❌                | Source URL for metadata                     |
+| `transcript_url`           | string         | ❌                | URL to download existing transcript         |
+| `transcript_file_name`     | string         | ❌                | Filename for transcript                     |
+| `hash_video_id`            | string         | ❌                | Custom video ID (auto-generated if omitted) |
+| `frame_stacking_grid_size` | int            | ❌ (default: `4`) | Grid size for frame stacking                |
+
+**Example:**
+
+```json
 {
-    "image_url": "https://example.com/image.jpg",
-    "query": "What text is visible in this image?",
-    "tools": ["ocr", "object_detection"],
-    "use_critic_agent": True
+  "video_url": "https://example.com/video.mp4",
+  "file_name": "lecture.mp4",
+  "language": "en-IN",
+  "url": "www.youtube.com/watch?v=abc123"
 }
 ```
 
-### 4. **Knowledge Base Tool** (`kb_tool`)
+---
 
-**Purpose**: Search and retrieve structured metadata from indexed content  
-**Key Features**:
+### 4. `get_context_tool` — Retrieve Transcript Chunks
 
-- Multiple search modes (full-text, vector, semantic)
-- Advanced filtering capabilities
-- Flexible field selection
+Searches the chapter vector index for relevant transcript segments and summaries.
 
-```python
-# Example usage
+| Parameter            | Type         | Required          | Description                           |
+| -------------------- | ------------ | ----------------- | ------------------------------------- |
+| `query`              | string       | ✅                | Search query                          |
+| `video_id`           | string       | ❌                | Filter by video ID                    |
+| `url`                | string       | ❌                | Filter by video URL                   |
+| `fields_to_retrieve` | list[string] | ❌                | Fields to return (see defaults below) |
+| `start_time`         | float        | ❌                | Filter by start time (seconds)        |
+| `end_time`           | float        | ❌                | Filter by end time (seconds)          |
+| `top`                | int          | ❌ (default: `3`) | Number of results                     |
+
+**Default fields:** `chapter_transcript`, `detailed_summary`, `action_taken`, `text_from_scene`, `start_time`, `end_time`, `hash_video_id`, `url`
+
+**Example:**
+
+```json
 {
-    "request": {
-        "query": "machine learning concepts",
-        "query_type": "semantic",
-        "index_name": "knowledge-base",
-        "k": 10,
-        "filters": {
-            "category": "Education",
-            "time_from": "2024-01-01T00:00:00Z"
-        },
-        "select": ["category", "subject", "hash_video_id"]
-    }
+  "query": "How to compute GCD?",
+  "url": "www.youtube.com/watch?v=2W3BKOSg958",
+  "top": 3
 }
 ```
 
-### Search Modes
+---
 
-| Mode | Description | Use Case |
-|------|-------------|----------|
-| `full` | Keyword-based search | Exact term matching |
-| `vector` | Embedding similarity | Semantic similarity |
-| `semantic` | Natural language understanding | Complex queries |
+### 5. `get_relevant_frames_tool` — Find Frames by Visual Query
 
-</details>
+Searches keyframe embeddings to find visually relevant frames for a query. Returns frame filenames and timestamps.
 
-<details>
+| Parameter  | Type   | Required           | Description                      |
+| ---------- | ------ | ------------------ | -------------------------------- |
+| `query`    | string | ✅                 | Visual description to search for |
+| `video_id` | string | ✅                 | Video ID to search within        |
+| `top_k`    | int    | ❌ (default: `10`) | Number of frames to return       |
 
-<summary>Configuration</summary>
+**Example:**
 
-The server automatically configures providers through MMCTConfig:
+```json
+{
+  "query": "person writing on whiteboard",
+  "video_id": "2W3BKOSg958",
+  "top_k": 5
+}
+```
 
-- **Search Provider**: Azure AI Search integration
-- **Embedding Provider**: Vector embedding generation
-- **Transcription Services**: Multiple ASR options
+---
 
-</details>
+### 6. `query_frame_tool` — Analyze Specific Video Frames
 
-<details>
+Uses vision models to analyze video frames and answer questions. Works with either specific frame IDs or time ranges.
 
-<summary>Project Structure</summary>
+| Parameter    | Type   | Required | Description                                      |
+| ------------ | ------ | -------- | ------------------------------------------------ |
+| `query`      | string | ✅       | What to look for in frames                       |
+| `frame_ids`  | list   | ❌       | Specific frame filenames to analyze              |
+| `video_id`   | string | ❌       | Video ID (required with frame_ids or time range) |
+| `start_time` | float  | ❌       | Start time in seconds                            |
+| `end_time`   | float  | ❌       | End time in seconds                              |
 
-```py
+> **⚠️ Important:** You must provide either `frame_ids` + `video_id` **or** `start_time` + `end_time` + `video_id`. Calling with only `query` will result in a `TypeError`.
+
+**Example (time range):**
+
+```json
+{
+  "query": "What is shown on the slide?",
+  "video_id": "2W3BKOSg958",
+  "start_time": 60.0,
+  "end_time": 120.0
+}
+```
+
+**Example (frame IDs):**
+
+```json
+{
+  "query": "Describe the content",
+  "frame_ids": ["2W3BKOSg958_528.jpg", "2W3BKOSg958_11214.jpg"],
+  "video_id": "2W3BKOSg958"
+}
+```
+
+---
+
+### 7. `get_object_collection_tool` — Object Lookup in Videos
+
+Retrieves details of specific objects detected in a video from the object registry index.
+
+| Parameter      | Type         | Required | Description                |
+| -------------- | ------------ | -------- | -------------------------- |
+| `object_names` | list[string] | ✅       | Object names to search for |
+| `video_id`     | string       | ❌       | Filter by video ID         |
+| `url`          | string       | ❌       | Filter by video URL        |
+
+> **💡 Tip:** Provide an exhaustive list of possible object names. The tool uses fuzzy matching (>0.6 similarity threshold).
+
+**Example:**
+
+```json
+{
+  "object_names": ["Presentation Slide", "whiteboard", "equations"],
+  "video_id": "2W3BKOSg958"
+}
+```
+
+---
+
+### 8. `get_video_summary_tool` — Video Summary & Discovery
+
+Retrieves high-level video summaries. Use without `video_id`/`url` for video discovery, or with them for a specific video's summary.
+
+| Parameter  | Type   | Required          | Description                      |
+| ---------- | ------ | ----------------- | -------------------------------- |
+| `query`    | string | ✅                | Search query for video summaries |
+| `video_id` | string | ❌                | Specific video ID                |
+| `url`      | string | ❌                | Specific video URL               |
+| `top`      | int    | ❌ (default: `3`) | Number of results (max 3)        |
+
+**Example (discovery — no video_id):**
+
+```json
+{
+  "query": "lectures about Python programming"
+}
+```
+
+**Example (specific video):**
+
+```json
+{
+  "query": "summary of this video",
+  "video_id": "2W3BKOSg958",
+  "top": 1
+}
+```
+
+---
+
+## Recommended Tool Usage Patterns
+
+### Pattern 1: Full Video QA (Simplest)
+
+Use `video_agent_tool` — it handles everything internally.
+
+### Pattern 2: Granular Analysis Pipeline
+
+For more control, chain the lower-level tools:
+
+```
+get_video_summary_tool   →  Discover relevant videos, get video_ids
+        ↓
+get_context_tool         →  Retrieve transcript chunks and timestamps
+        ↓
+get_relevant_frames_tool →  Find visually relevant frames
+        ↓
+query_frame_tool         →  Analyze specific frames with vision models
+```
+
+### Pattern 3: Object-Specific Queries
+
+```
+get_video_summary_tool       →  Get video_id
+        ↓
+get_object_collection_tool   →  Find detected objects and their details
+        ↓
+query_frame_tool             →  Visually verify objects in specific frames
+```
+
+---
+
+## Project Structure
+
+```
 mcp_server/
-├── server.py                # FastMCP server instance
-├── main.py                  # Server entry point
-├── client.py                # Test client with examples
-├── tools/                   # MCP tool implementations
-│   ├── video_agent_tool.py
-│   ├── image_agent_tool.py
-│   ├── video_ingestion_tool.py
-│   └── kb_tool.py
-├── schemas/                 # Pydantic schemas
-└── notebooks/               # Usage examples
+├── main.py                           # Entry point — imports all tools, starts server
+├── server.py                         # FastMCP instance + health check endpoint
+├── config.py                         # Provider config singletons (loaded from .env)
+├── client.py                         # Test client for validating tools
+└── tools/
+    ├── video_agent_tool.py           # End-to-end video QA
+    ├── image_agent_tool.py           # Image analysis & QA
+    ├── video_ingestion_tool.py       # Video ingestion pipeline
+    ├── get_context_tool.py           # Transcript/chapter search
+    ├── get_relevant_frames_tool.py   # Visual frame search
+    ├── query_frame_tool.py           # Frame-level vision analysis
+    ├── get_object_collection_tool.py # Object registry lookup
+    └── get_video_summary_tool.py     # Video summary retrieval
 ```
 
-</details>
+---
 
-## **Integration with Agents**
+## Connecting from an MCP Client
 
-Integration of `AutoGen` Agent with MCP server has been provided in the `notebooks/autogen_mcp_example.ipynb`. You can understand the connection setup with the AutoGen.
-Below are the links which showcase the integration of MCP server tools with agents.
-- [AutoGen Docs](https://microsoft.github.io/autogen/stable/reference/python/autogen_ext.tools.mcp.html#module-autogen_ext.tools.mcp)
-- [MCP tools integration in Semantic Kernel](https://valentinaalto.medium.com/leverage-mcp-tools-with-semantic-kernel-agents-36120136832d)
+### Python (FastMCP Client)
 
+```python
+from fastmcp import Client
+import asyncio
 
-## **Deployment of Resources & MCP server**
+async def main():
+    client = Client("http://<server-host>:8000/mcp")
+    async with client:
+        await client.ping()
 
-For the deployment of MCP server you can visit the `MMCT Infrastructure Deployment Guide` present in the `infra` folder. 
+        # List available tools
+        tools = await client.list_tools()
+        for t in tools:
+            print(f"Tool: {t.name}")
 
-Required Resources are on Azure Cloud:
-1. Azure Storage Account
-2. Azure AI Search Service
-3. Azure Speech Service/Azure OpenAI Whisper
-4. Azure OpenAI - Chat Model, Embedding Model and OpenAI Whisper (if not using Azure Speech Service)
+        # Call a tool
+        result = await client.call_tool(
+            name="video_agent_tool",
+            arguments={"query": "What is this video about?"}
+        )
+        print(result)
 
-You can utilize any service to deploy the MCP server such as Azure App Service, Azure Container Apps etc. Ensure to validate the required role assignment if using [Microsoft Intra Id Access](https://learn.microsoft.com/en-us/entra/identity).
+asyncio.run(main())
+```
 
-## **Multi-Tenant Setup for MCP server**
+### Claude Desktop / Cursor / VS Code
 
-This section covers the way to authorize the MCP server so it can access the respective client's resources when receiving the incoming request.
+Add to your MCP configuration:
 
-  The OBO (On-Behalf-Of) flow describes the scenario of a web API using an identity other than its own to call another web API. Referred to as delegation in OAuth, the intent is to pass a user's identity and permissions through the request chain. [[source]](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-on-behalf-of-flow)
+```json
+{
+  "mcpServers": {
+    "mmct-agent": {
+      "url": "http://<server-host>:8000/mcp"
+    }
+  }
+}
+```
 
-For our MCP server the OBO Flow Auth representation is below:
+---
 
-<p align="center">
-    <img src="docs/img/obo_flow_auth.png" alt="OBO Flow Auth" width=70% style="margin:10px">
-</p>
+## Troubleshooting
 
-The following configuration steps must be performed:
-1. **MCP App Registration (in MCP Tenant)**
-    - Create an App Registration for the MCP Server in its own tenant.
-    - This app registration represents the MCP Server’s identity in Azure AD.
-    - Ensure a **Service Principal** is created for it in the MCP Tenant.
-2. **Enable Multi-Tenant Access**
-    - In the MCP App Registration, set the app to **multi-tenant** so that it can accept tokens from other tenants (e.g., the client’s tenant).
-    - This allows the MCP app to be consented/used outside its home tenant.
-3. **Create Service Principal in Client Tenant**
-    - When the Agentic Client first requests access, an **MCP App Service Principal** (an instance of the MCP App Registration) is created in the **Client’s Tenant**.
-    - This requires **admin consent** in the client’s tenant.
-4. **Grant Required API Permissions**
-    - Assign the correct API permissions / role assignments in the client’s tenant for the MCP Service Principal.
-    - For example, allow it to access Azure resources (Key Vault, AI Search, Blob, OpenAI) on behalf of the user.
-    - Ensure proper whitelisting / RBAC setup in the client’s Azure AD.
-5. **Consistent Resource Access via Key Vault**
-    - Resource names (endpoints) may vary across tenants, e.g.:
-      - `AZURE_OPENAI_ENDPOINT`
-      - `AZURE_SEARCH_ENDPOINT` 
-    - To standardize, the **MCP Server reads all endpoints/secrets from a Key Vault**, where environment variable keys are always consistent.
-    - This ensures that, regardless of client tenant naming differences, the MCP Server always looks up the same variable name to access the correct resource endpoint.
-</details>
+| Issue                                       | Solution                                                                   |
+| ------------------------------------------- | -------------------------------------------------------------------------- |
+| `Address already in use`                    | Kill existing process on port 8000: `lsof -ti:8000 \| xargs kill`          |
+| `NameError: name 'Dict' is not defined`     | Ensure `from typing import Dict, Any` is imported                          |
+| `'VIT'` KeyError in image_agent             | Use **lowercase** tool names: `vit`, `ocr`, `recog`, `object_detection`    |
+| `'NoneType' is not iterable` in query_frame | Must provide either `frame_ids` or `start_time`+`end_time` with `video_id` |
+| Azure credential errors                     | Run `az login` or ensure Managed Identity is configured                    |
+| Missing `.env` variables                    | Check all required variables are set (see Configuration section)           |
