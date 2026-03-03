@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from loguru import logger
 from app.routers import query, frames, transcripts, videos
+from app.version import API_VERSION, BUILD_TIMESTAMP
 # from app.routers import ingestion, graph_ingestion  # Disabled: not exposed in this deployment
 
 # Configure loguru to output to stderr (uvicorn compatible)
@@ -17,8 +18,11 @@ logger.add(
 
 app = FastAPI(
     title="MMCT Agent API",
-    description="Multi-modal Critical Thinking Agent Framework for image and video analysis",
-    version="1.2.3",
+    description=(
+        "Multi-modal Critical Thinking Agent Framework for image and video analysis\n\n"
+        f"**Build:** {BUILD_TIMESTAMP}"
+    ),
+    version=API_VERSION,
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json",
@@ -47,9 +51,11 @@ def custom_openapi():
 
     openapi_schema = get_openapi(
         title="MMCT Agent API",
-        version="1.2.3",
-        description="""
+        version=API_VERSION,
+        description=f"""
         # Multi-modal Critical Thinking Agent Framework
+        
+        **Version:** {API_VERSION} | **Built:** {BUILD_TIMESTAMP}
         
         This API provides endpoints for multi-modal AI analysis including:
         
@@ -67,13 +73,6 @@ def custom_openapi():
         Rate limiting is applied based on the configured provider limits.
         """,
         routes=app.routes,
-        tags=[
-            {
-                "name": "query",
-                "description": "Query operations for image, video, and document analysis",
-            },
-            {"name": "ingestion", "description": "Document and media ingestion operations"},
-        ],
     )
 
     # Add custom extensions
@@ -91,7 +90,8 @@ async def root():
     """Root endpoint providing API information."""
     return {
         "message": "MMCT Agent API",
-        "version": "1.2.3",
+        "version": API_VERSION,
+        "build_timestamp": BUILD_TIMESTAMP,
         "description": "Multi-modal Critical Thinking Agent Framework",
         "docs_url": "/docs",
         "redoc_url": "/redoc",
@@ -109,10 +109,43 @@ async def health_check():
 async def get_supported_providers():
     """Get information about supported providers."""
     return {
-        "supported_providers": {
+        "active_providers": {
+            "llm": {
+                "provider": "AzureLLMProvider",
+                "description": "Powers Planner, Video, Critic, and Image agents",
+            },
+            "text_embedding": {
+                "provider": "FastEmbedBGEsmallEmbeddingProvider",
+                "dimensions": 384,
+                "description": "Text embeddings for semantic search (local, same as ingestion)",
+            },
+            "image_embedding": {
+                "provider": "FastEmbedQdrantCLIPEmbeddingProvider",
+                "dimensions": 512,
+                "description": "Image embeddings for keyframe search (local, same as ingestion)",
+            },
+            "graph_query": {
+                "provider": "Neo4jQueryProvider",
+                "description": "HNSW vector search and graph traversal on Neo4j knowledge graph",
+            },
+            "storage": {
+                "provider": "AzureStorageProvider",
+                "description": "Keyframe and media storage in Azure Blob",
+            },
+            "vector_search": {
+                "providers": [
+                    "AISearchChapterProvider",
+                    "AISearchKeyframesProvider",
+                    "AISearchObjectCollectionProvider",
+                ],
+                "description": "Azure AI Search indexes for chapters, keyframes, and objects",
+            },
+        },
+        "all_supported_providers": {
             "llm": ["AzureLLMProvider", "AzureReasoningLLMProvider", "OpenAILLMProvider"],
-            "embedding": ["AzureEmbeddingProvider", "OpenAIEmbeddingProvider"],
-            "image_embedding": ["ClipImageEmbeddingProvider"],
+            "embedding": ["AzureEmbeddingProvider", "OpenAIEmbeddingProvider", "FastEmbedBGEsmallEmbeddingProvider"],
+            "image_embedding": ["FastEmbedQdrantCLIPEmbeddingProvider", "ClipImageEmbeddingProvider"],
+            "graph": ["Neo4jQueryProvider", "Neo4jGraphProvider", "Neo4jGraphStoreProvider", "NetworkXGraphProvider"],
             "storage": ["AzureStorageProvider", "LocalStorageProvider"],
             "vector_db": [
                 "AISearchChapterProvider",
@@ -128,5 +161,4 @@ async def get_supported_providers():
             ],
             "vision": ["AzureVisionProvider", "OpenAIVisionProvider"],
         },
-        "message": "These are the currently supported providers for each service type",
     }

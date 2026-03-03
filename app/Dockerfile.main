@@ -10,6 +10,21 @@ COPY app/ app/
 # Overlay updated mmct package files (overrides base image)
 COPY mmct/ mmct/
 
+# Auto-bump minor version: read current version, increment minor, write back
+RUN CURRENT=$(grep '_DEFAULT_VERSION' app/version.py | head -1 | grep -oP '\d+\.\d+\.\d+') && \
+    MAJOR=$(echo "$CURRENT" | cut -d. -f1) && \
+    MINOR=$(echo "$CURRENT" | cut -d. -f2) && \
+    PATCH=$(echo "$CURRENT" | cut -d. -f3) && \
+    NEW_MINOR=$((MINOR + 1)) && \
+    NEW_VERSION="${MAJOR}.${NEW_MINOR}.0" && \
+    sed -i "s/_DEFAULT_VERSION = \"${CURRENT}\"/_DEFAULT_VERSION = \"${NEW_VERSION}\"/" app/version.py && \
+    echo "Version bumped: ${CURRENT} → ${NEW_VERSION}"
+
+# Stamp build timestamp into the version file
+RUN BUILD_TS=$(date -u '+%Y-%m-%d %H:%M:%S UTC') && \
+    sed -i "s/_DEFAULT_BUILD_TIMESTAMP = \"\"/_DEFAULT_BUILD_TIMESTAMP = \"${BUILD_TS}\"/" app/version.py && \
+    echo "Build timestamp: ${BUILD_TS}"
+
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
