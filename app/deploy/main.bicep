@@ -357,6 +357,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'NEO4J_URI', value: neo4jUri }
             { name: 'NEO4J_USERNAME', value: neo4jUsername }
             { name: 'NEO4J_PASSWORD', value: neo4jPassword }
+            { name: 'NEO4J_DATABASE', value: 'neo4j' }
 
             // --- Vision Provider ---
             { name: 'VISION_PROVIDER', value: 'azure' }

@@ -83,6 +83,7 @@ class Neo4jQueryProvider:
         max_connection_pool_size: int = 100,
         connection_acquisition_timeout: int = 60,
         max_connection_lifetime: int = 3600,
+        keep_alive: bool = True,
     ):
         """Initialize Neo4j query provider.
         
@@ -96,6 +97,7 @@ class Neo4jQueryProvider:
             max_connection_pool_size: Maximum pooled connections for concurrent reads.
             connection_acquisition_timeout: Seconds to wait for a pooled connection.
             max_connection_lifetime: Maximum lifetime of a pooled connection in seconds.
+            keep_alive: Enable TCP keep-alive to detect stale connections.
         """
         self._uri = uri
         self._username = username
@@ -105,6 +107,7 @@ class Neo4jQueryProvider:
         self._max_connection_pool_size = max_connection_pool_size
         self._connection_acquisition_timeout = connection_acquisition_timeout
         self._max_connection_lifetime = max_connection_lifetime
+        self._keep_alive = keep_alive
         self._driver = None
         self._init_lock = asyncio.Lock()
     
@@ -123,6 +126,7 @@ class Neo4jQueryProvider:
                     max_connection_pool_size=self._max_connection_pool_size,
                     connection_acquisition_timeout=self._connection_acquisition_timeout,
                     max_connection_lifetime=self._max_connection_lifetime,
+                    keep_alive=self._keep_alive,
                 )
                 logger.info(
                     f"Neo4jQueryProvider async driver connected to {self._uri} "
@@ -146,6 +150,8 @@ class Neo4jQueryProvider:
         Each call acquires a connection from the pool, executes the query,
         and returns the connection — enabling high concurrency for reads.
         
+        Retries once on closed transport errors (stale pooled connections).
+        
         Args:
             query: Cypher query string.
             parameters: Optional query parameters.
@@ -154,9 +160,17 @@ class Neo4jQueryProvider:
             List of record dictionaries.
         """
         await self._ensure_driver()
-        async with self._driver.session(database=self._database) as session:
-            result = await session.run(query, parameters or {})
-            return [dict(record) async for record in result]
+        for attempt in range(2):
+            try:
+                async with self._driver.session(database=self._database) as session:
+                    result = await session.run(query, parameters or {})
+                    return [dict(record) async for record in result]
+            except Exception as e:
+                is_closed_transport = "handler is closed" in str(e) or "closed=True" in str(e)
+                if attempt == 0 and is_closed_transport:
+                    logger.warning(f"Stale Neo4j connection detected, retrying: {e}")
+                    continue
+                raise
     
     async def close(self) -> None:
         """Close the Neo4j async driver and release pooled connections."""
