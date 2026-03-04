@@ -32,6 +32,7 @@ from .temporal_graph import TemporalGraphStep
 from .chapter_grouping import ChapterGroupingStep
 from .graph_construction import GraphConstructionStep
 from .graph_upload import GraphUploadStep
+from .graph_validation import GraphValidationStep
 
 # Upload steps
 from .keyframe_upload import KeyframeUploadStep
@@ -64,6 +65,7 @@ __all__ = [
     "ChapterGroupingStep",
     "GraphConstructionStep",
     "GraphUploadStep",
+    "GraphValidationStep",
     # Upload steps
     "KeyframeUploadStep",
     # Uniform frame extraction

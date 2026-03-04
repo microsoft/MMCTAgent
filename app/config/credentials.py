@@ -14,8 +14,12 @@ from typing import Any
 import requests
 from azure.identity import DefaultAzureCredential, AzureCliCredential, ChainedTokenCredential
 from azure.core.credentials import TokenCredential, AccessToken
+from dotenv import load_dotenv
 from loguru import logger
 
+# Load app/.env into os.environ so TOKEN_BROKER_URL (and other vars) are available
+_env_path = os.path.join(os.path.dirname(__file__), '..', '.env')
+load_dotenv(_env_path, override=True)
 
 # Token broker configuration (no default — must be explicitly set via env var)
 TOKEN_BROKER_URL = os.getenv("TOKEN_BROKER_URL")

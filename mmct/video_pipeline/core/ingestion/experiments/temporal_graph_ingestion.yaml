@@ -21,12 +21,11 @@ pipeline:
   mode: "sequential"
 
   steps:
-    # Step 1: Pre-validation
-    - id: "pre_validation"
-      type: "ingestion.pre_validation"
+    # Step 1: Graph store validation — skip if ChapterGroup + Chapter nodes exist
+    - id: "graph_validation"
+      type: "ingestion.graph_validation"
       params:
-        skip_if_exists: true
-        require_audio_when_no_transcript: true
+        require_chapter_groups: true
 
     # Step 2: Compress video
     - id: "compress"
