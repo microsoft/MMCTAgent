@@ -60,7 +60,8 @@ class SceneLLMChapterGenerator:
         params: Dict[str, Any] = {},
     ) -> List[Dict[str, Any]]:  # Returns list of chapter dicts
 
-        max_frames_per_chapter = int(params.get("max_frames_per_chapter", 12))
+        val = params.get("max_frames_per_chapter")
+        max_frames_per_chapter = int(val) if val is not None else -1
         batch_size = int(params.get("batch_size", 5))
         max_parallel_requests = int(params.get("max_parallel_requests", batch_size))
         llm_request_options: Dict[str, Any] = dict(params.get("llm_request_options", {}) or {})
