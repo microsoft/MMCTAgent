@@ -19,6 +19,8 @@ from pydantic import BaseModel
 
 from mmct.v4.schemas import V4QueryResponse, CitationSource
 
+from loguru import logger
+
 
 # ---------------------------------------------------------------------------
 # Counting handoff — enforces per-agent handoff limits at code level
@@ -263,9 +265,19 @@ def submit_final_answer(answer: str, sources: str) -> str:
     Returns:
         Confirmation that the answer was submitted.
     """
-    try:
-        parsed_sources = json.loads(sources) if sources else []
-    except (json.JSONDecodeError, TypeError):
+    if isinstance(sources, list):
+        parsed_sources = sources
+    elif isinstance(sources, str) and sources:
+        try:
+            parsed_sources = json.loads(sources)
+        except (json.JSONDecodeError, TypeError):
+            logger.warning(f"submit_final_answer: failed to parse sources: {sources[:200]}")
+            parsed_sources = []
+    else:
+        parsed_sources = []
+
+    if not isinstance(parsed_sources, list):
+        logger.warning(f"submit_final_answer: parsed_sources is {type(parsed_sources).__name__}, expected list")
         parsed_sources = []
 
     response = {"answer": answer, "sources": parsed_sources}
