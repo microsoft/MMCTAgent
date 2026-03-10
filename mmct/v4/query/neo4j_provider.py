@@ -631,6 +631,51 @@ class Neo4jQueryProvider:
             logger.error(f"Failed to get video IDs: {e}")
             return []
     
+    async def get_video_catalog_raw(self) -> List[Dict[str, Any]]:
+        """Get lightweight video catalog from ChapterGroup metadata.
+        
+        Returns one row per ChapterGroup with video_id, main_theme,
+        playlist_id, and playlist_order extracted from the metadata JSON.
+        
+        Returns:
+            List of dicts with video_id, main_theme, playlist_id, playlist_order.
+        """
+        await self._ensure_driver()
+        
+        query = """
+        MATCH (g:ChapterGroup)
+        WHERE g.metadata IS NOT NULL
+        RETURN g.video_id AS video_id,
+               g.metadata AS metadata,
+               g.order AS group_order
+        ORDER BY g.video_id, g.order
+        """
+        
+        try:
+            records = await self._run_read(query)
+            results = []
+            for record in records:
+                meta = record.get("metadata")
+                if meta is None:
+                    continue
+                import json as _json
+                if isinstance(meta, str):
+                    try:
+                        meta = _json.loads(meta)
+                    except _json.JSONDecodeError:
+                        continue
+                results.append({
+                    "video_id": record["video_id"],
+                    "group_order": record.get("group_order", 0),
+                    "main_theme": meta.get("main_theme", ""),
+                    "playlist_id": meta.get("playlist_id"),
+                    "playlist_order": meta.get("playlist_order"),
+                })
+            return results
+        except Exception as e:
+            logger.error(f"Failed to get video catalog: {e}")
+            return []
+    
     # =========================================================================
     # Utility Methods
     # =========================================================================
