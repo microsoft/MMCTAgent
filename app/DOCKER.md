@@ -17,6 +17,12 @@ DOCKER_BUILDKIT=0 docker build -f Dockerfile.base -t mmct-base:latest .
 The patch version is auto-bumped and the build timestamp is stamped during this step.
 
 ```bash
+./app/build.sh
+```
+
+Or build manually (without auto-bump):
+
+```bash
 DOCKER_BUILDKIT=0 docker build -f app/Dockerfile.main \
   -t mmct-lively-fastapi:latest \
   --build-arg BASE_IMAGE=mmct-base:latest .
@@ -114,7 +120,7 @@ cd app/deploy && ./deploy.sh --deploy-only
 ```bash
 # Build
 DOCKER_BUILDKIT=0 docker build -f Dockerfile.base -t mmct-base:latest .
-DOCKER_BUILDKIT=0 docker build -f app/Dockerfile.main -t mmct-lively-fastapi:latest --build-arg BASE_IMAGE=mmct-base:latest .
+./app/build.sh
 
 # Test
 docker run -d --name mmct-test -p 8000:8000 --env-file app/.env.gpt4.1 mmct-lively-fastapi:latest
