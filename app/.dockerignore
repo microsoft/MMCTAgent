@@ -4,3 +4,4 @@ infra/
 *.pyc
 .env*
 **/.env*
+logs*
