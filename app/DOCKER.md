@@ -14,7 +14,7 @@ DOCKER_BUILDKIT=0 docker build -f Dockerfile.base -t mmct-base:latest .
 
 ### Build the app image
 
-The minor version is auto-bumped and the build timestamp is stamped during this step.
+The patch version is auto-bumped and the build timestamp is stamped during this step.
 
 ```bash
 DOCKER_BUILDKIT=0 docker build -f app/Dockerfile.main \

@@ -16,13 +16,13 @@ COPY mcp_server/ mcp_server/
 
 RUN pip install -e .
 
-# Auto-bump minor version: read current version, increment minor, write back
+# Auto-bump patch version: read current version, increment patch, write back
 RUN CURRENT=$(grep '_DEFAULT_VERSION' app/version.py | head -1 | grep -oP '\d+\.\d+\.\d+') && \
     MAJOR=$(echo "$CURRENT" | cut -d. -f1) && \
     MINOR=$(echo "$CURRENT" | cut -d. -f2) && \
     PATCH=$(echo "$CURRENT" | cut -d. -f3) && \
-    NEW_MINOR=$((MINOR + 1)) && \
-    NEW_VERSION="${MAJOR}.${NEW_MINOR}.0" && \
+    NEW_PATCH=$((PATCH + 1)) && \
+    NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}" && \
     sed -i "s/_DEFAULT_VERSION = \"${CURRENT}\"/_DEFAULT_VERSION = \"${NEW_VERSION}\"/" app/version.py && \
     echo "Version bumped: ${CURRENT} → ${NEW_VERSION}"
 
