@@ -107,6 +107,10 @@ class ChapterGroupingStep(PipelineStep):
             "generate_summaries", context, default=True
         )
         
+        # Get optional playlist metadata from context
+        playlist_id = self.get_param("playlist_id", context, default=None)
+        playlist_order = self.get_param("playlist_order", context, default=None)
+        
         # Initialize grouper
         grouper = ChapterGrouper(
             similarity_threshold=similarity_threshold,
@@ -118,6 +122,8 @@ class ChapterGroupingStep(PipelineStep):
             chapters=chapters,
             video_id=video_id,
             video_duration=video_duration,
+            playlist_id=playlist_id,
+            playlist_order=playlist_order,
         )
         
         # Log grouping messages

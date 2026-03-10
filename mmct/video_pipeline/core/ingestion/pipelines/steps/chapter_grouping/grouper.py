@@ -51,6 +51,8 @@ class ChapterGrouper:
         chapters: List[Dict[str, Any]],
         video_id: str,
         video_duration: float = 0.0,
+        playlist_id: Optional[str] = None,
+        playlist_order: Optional[int] = None,
     ) -> Tuple[List[ChapterGroup], List[str]]:
         """Group chapters by semantic similarity and temporal proximity.
         
@@ -63,6 +65,8 @@ class ChapterGrouper:
             chapters: List of chapter dictionaries with optional 'embeddings' key
             video_id: Video identifier for the chapter groups
             video_duration: Total duration of the video in seconds
+            playlist_id: Optional playlist ID this video belongs to
+            playlist_order: Optional 1-based position within the playlist
             
         Returns:
             Tuple of:
@@ -70,6 +74,8 @@ class ChapterGrouper:
             - List of warning/info messages generated during grouping
         """
         messages: List[str] = []
+        self._playlist_id = playlist_id
+        self._playlist_order = playlist_order
         
         if not chapters:
             messages.append("No chapters provided for grouping")
@@ -330,6 +336,8 @@ class ChapterGrouper:
             metadata={
                 "chapter_count": len(indices),
                 "embedding_vector": group_embedding,
+                **({"playlist_id": self._playlist_id} if self._playlist_id else {}),
+                **({"playlist_order": self._playlist_order} if self._playlist_order is not None else {}),
             },
         )
     

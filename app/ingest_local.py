@@ -15,6 +15,12 @@ Usage:
     # Batch mode (reads videos from a JSON manifest):
     python app/ingest_local.py --batch batch_manifest.json
 
+    # Folder mode (auto-discovers videos in a playlist directory):
+    python app/ingest_local.py --folder playlist_PLZ2ps__7DhBaDccbZRgiU1sHX2gZrQ-XT
+
+    # Retry only specific video IDs from a folder:
+    python app/ingest_local.py --folder playlist_PLZ2ps__7DhBaDccbZRgiU1sHX2gZrQ-XT --only id1,id2,id3
+
 Batch JSON format:
     [
         {
@@ -26,9 +32,15 @@ Batch JSON format:
         ...
     ]
 
+Folder mode:
+    Scans videos/<folder>/ for subdirectories containing file.mp4.
+    Each subdirectory name is used as the video_id.
+    YouTube URLs are auto-generated from video_id.
+
 Examples:
     python app/ingest_local.py videos/abc123/file.mp4 --video-id abc123 --language ENGLISH_UNITED_STATES
     python app/ingest_local.py --batch my_videos.json
+    python app/ingest_local.py --folder playlist_PLZ2ps__7DhBaDccbZRgiU1sHX2gZrQ-XT
 """
 
 import argparse
@@ -59,6 +71,8 @@ async def ingest_local_video(
     transcript_path: str = None,
     url: str = None,
     verbosity: int = 2,
+    playlist_id: str = None,
+    playlist_order: int = None,
 ) -> dict:
     """
     Ingest a local video file using the temporal graph pipeline.
@@ -70,6 +84,8 @@ async def ingest_local_video(
         transcript_path: Optional path to existing transcript file
         url: Optional URL associated with the video
         verbosity: Logging verbosity (0=quiet, 1=info, 2=debug)
+        playlist_id: Optional playlist ID this video belongs to
+        playlist_order: Optional 1-based position within the playlist
 
     Returns:
         Dict with ingestion results
@@ -96,6 +112,8 @@ async def ingest_local_video(
             provider=provider,
             pipeline_config_path=str(TEMPORAL_GRAPH_PIPELINE_CONFIG),
             verbosity=verbosity,
+            playlist_id=playlist_id,
+            playlist_order=playlist_order,
         )
         await pipeline.run()
 
@@ -168,10 +186,115 @@ def main():
         metavar="JSON_FILE",
         help="Path to a JSON manifest for batch ingestion"
     )
+    parser.add_argument(
+        "--folder", "-f",
+        default=None,
+        metavar="FOLDER_NAME",
+        help="Folder inside videos/ to scan for video subdirectories (e.g. playlist_PLZ2ps__7DhBaDccbZRgiU1sHX2gZrQ-XT)"
+    )
+    parser.add_argument(
+        "--only",
+        default=None,
+        metavar="VIDEO_IDS",
+        help="Comma-separated list of video IDs to process (use with --folder to retry specific videos)"
+    )
+    parser.add_argument(
+        "--playlist-id",
+        default=None,
+        metavar="PLAYLIST_ID",
+        help="Playlist ID this video (or folder of videos) belongs to"
+    )
+    parser.add_argument(
+        "--playlist-order",
+        type=int,
+        default=None,
+        metavar="ORDER",
+        help="1-based position of the video within its playlist (single video mode only)"
+    )
 
     args = parser.parse_args()
 
-    if args.batch:
+    if args.batch and args.folder:
+        print("Error: --batch and --folder cannot be used together")
+        sys.exit(1)
+
+    if args.folder:
+        # ----------------------------------------------------------
+        # Folder mode: auto-discover videos in a playlist directory
+        # ----------------------------------------------------------
+        videos_dir = project_root / "videos" / args.folder
+        if not videos_dir.is_dir():
+            print(f"Error: Folder not found: {videos_dir}")
+            sys.exit(1)
+
+        # Find all subdirectories containing file.mp4
+        entries = sorted([
+            d for d in videos_dir.iterdir()
+            if d.is_dir() and (d / "file.mp4").exists()
+        ], key=lambda d: d.name)
+
+        # Filter to specific video IDs if --only is provided
+        if args.only:
+            only_ids = set(args.only.split(","))
+            entries = [d for d in entries if d.name in only_ids]
+            missing = only_ids - {d.name for d in entries}
+            if missing:
+                print(f"Warning: {len(missing)} video IDs not found in folder: {', '.join(sorted(missing))}")
+
+        if not entries:
+            print(f"Error: No video subdirectories with file.mp4 found in {videos_dir}")
+            sys.exit(1)
+
+        try:
+            language = get_language_enum(args.language)
+        except ValueError as e:
+            print(f"Error: {e}")
+            sys.exit(1)
+
+        print(f"Found {len(entries)} videos in {videos_dir.name}")
+        print(f"Language: {language.name}")
+        if args.playlist_id:
+            print(f"Playlist ID: {args.playlist_id}")
+
+        async def run_folder():
+            results = []
+            for idx, video_dir in enumerate(entries, 1):
+                vid = video_dir.name
+                vpath = str(video_dir / "file.mp4")
+                url = f"https://www.youtube.com/watch?v={vid}"
+
+                print(f"\n{'='*60}")
+                print(f"[{idx}/{len(entries)}] Ingesting video: {vid}")
+                print(f"{'='*60}")
+                try:
+                    await ingest_local_video(
+                        video_path=vpath,
+                        video_id=vid,
+                        language=language,
+                        url=url,
+                        verbosity=args.verbosity,
+                        playlist_id=args.playlist_id,
+                        playlist_order=idx if args.playlist_id else None,
+                    )
+                    results.append((vid, "success"))
+                    print(f"  ✓ {vid} ingested successfully")
+                except Exception as e:
+                    results.append((vid, f"failed: {e}"))
+                    print(f"  ✗ {vid} failed: {e}")
+
+            print(f"\n{'='*60}")
+            print("Folder ingestion summary:")
+            print(f"{'='*60}")
+            ok = sum(1 for _, s in results if s == "success")
+            fail = len(results) - ok
+            for vid, status in results:
+                marker = "✓" if status == "success" else "✗"
+                print(f"  {marker} {vid}: {status}")
+            print(f"\nTotal: {ok} succeeded, {fail} failed out of {len(results)}")
+
+        asyncio.run(run_folder())
+
+    elif args.batch:
         # ----------------------------------------------------------
         # Batch mode: read video list from JSON file
         # ----------------------------------------------------------
@@ -219,6 +342,8 @@ def main():
                         language=lang,
                         url=entry.get("url"),
                         verbosity=args.verbosity,
+                        playlist_id=entry.get("playlist_id") or args.playlist_id,
+                        playlist_order=entry.get("playlist_order"),
                     )
                     results.append((vid, "success"))
                     print(f"  ✓ {vid} ingested successfully")
@@ -259,6 +384,8 @@ def main():
                     transcript_path=args.transcript,
                     url=args.url,
                     verbosity=args.verbosity,
+                    playlist_id=args.playlist_id,
+                    playlist_order=args.playlist_order,
                 )
             )
             print(f"\nIngestion complete!")
