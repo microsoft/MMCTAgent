@@ -1,8 +1,10 @@
 """Router for transcript lookup — returns full transcript content."""
 
 from fastapi import APIRouter, Query
+from loguru import logger
 from app.schemas.transcripts import TranscriptLookupResponse
 from app.services.transcript_lookup_service import lookup_transcript_content
+from app.utilities.request_id_middleware import get_request_id
 
 router = APIRouter()
 
@@ -40,8 +42,12 @@ router = APIRouter()
     },
 )
 async def get_transcript(
-    video_id: str = Query(..., description="Video identifier (e.g., YouTube ID)", examples=["Dk1toyI7AJs"]),
+    video_id: str = Query(
+        ..., description="Video identifier (e.g., YouTube ID)", examples=["Dk1toyI7AJs"]
+    ),
 ) -> TranscriptLookupResponse:
+    request_id = get_request_id()
+    logger.info(f"[{request_id}] Transcript lookup: video_id={video_id}")
     content = await lookup_transcript_content(video_id)
     return TranscriptLookupResponse(
         video_id=video_id,

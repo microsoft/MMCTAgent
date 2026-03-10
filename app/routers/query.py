@@ -1,11 +1,13 @@
 from fastapi import APIRouter, Depends, UploadFile, File
 from fastapi.responses import StreamingResponse
+
 # from app.schemas.query import ImageQueryRequest, VideoQueryRequest
 # from app.services.query_services import process_image_query, process_video_query
 # from app.schemas.query import UnifiedQueryRequest
 # from app.services.query_services import process_query_v2_endpoint, process_query_v2_stream
 from app.schemas.v4_query import V4QueryRequest, V4QueryResponse
 from app.services.v4_query_service import process_v4_query, process_v4_query_stream
+from app.utilities.request_id_middleware import get_request_id
 
 router = APIRouter()
 
@@ -77,6 +79,7 @@ router = APIRouter()
 # V4 Query Endpoints (Neo4j Graph Backend)
 # =============================================================================
 
+
 @router.post(
     "/v4/query",
     summary="V4 Query (Neo4j Graph)",
@@ -133,7 +136,8 @@ The response includes:
 )
 async def query_v4(data: V4QueryRequest):
     """Process a V4 query against the Neo4j knowledge graph."""
-    return await process_v4_query(data.model_dump())
+    request_id = get_request_id()
+    return await process_v4_query(data.model_dump(), request_id=request_id)
 
 
 @router.post(
@@ -176,14 +180,15 @@ Events:
 )
 async def query_v4_stream(data: V4QueryRequest):
     """Process a V4 query with streaming output."""
+    request_id = get_request_id()
     body = data.model_dump()
-    
+
     return StreamingResponse(
-        process_v4_query_stream(body),
+        process_v4_query_stream(body, request_id=request_id),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
-        }
+        },
     )

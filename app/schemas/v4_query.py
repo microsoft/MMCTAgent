@@ -9,46 +9,33 @@ from pydantic import BaseModel, Field
 
 class V4QueryRequest(BaseModel):
     """Request schema for V4 Neo4j-backed query operations."""
-    
-    query: str = Field(
-        ..., 
-        min_length=1, 
-        description="Natural language query about video content"
-    )
+
+    query: str = Field(..., min_length=1, description="Natural language query about video content")
     video_id: Optional[str] = Field(
-        None, 
-        description="Optional video ID to scope search to a specific video"
+        None, description="Optional video ID to scope search to a specific video"
     )
     video_ids: Optional[List[str]] = Field(
-        None,
-        description="Optional list of video IDs to scope search (for multi-video queries)"
+        None, description="Optional list of video IDs to scope search (for multi-video queries)"
     )
-    use_critic: bool = Field(
-        default=True, 
-        description="Enable critic agent for answer validation"
-    )
+    use_critic: bool = Field(default=True, description="Enable critic agent for answer validation")
     save_logs: bool = Field(
-        default=False,
-        description="Save event logs to file (streaming only). Defaults to False."
+        default=False, description="Save event logs to file (streaming only). Defaults to False."
     )
-    
+
     model_config = {
         "json_schema_extra": {
             "examples": [
                 {
                     "query": "How does the farmer collect soil samples?",
                     "video_id": "Dk1toyI7AJs",
-                    "use_critic": True
+                    "use_critic": True,
                 },
-                {
-                    "query": "Which videos show farming techniques?",
-                    "use_critic": True
-                },
+                {"query": "Which videos show farming techniques?", "use_critic": True},
                 {
                     "query": "Compare soil preparation methods",
                     "video_ids": ["Dk1toyI7AJs", "E9sM2b3uV3c"],
-                    "use_critic": False
-                }
+                    "use_critic": False,
+                },
             ]
         }
     }
@@ -56,7 +43,7 @@ class V4QueryRequest(BaseModel):
 
 class CitationSourceResponse(BaseModel):
     """Citation source in the response."""
-    
+
     citation: str = Field(..., description="Citation marker, e.g., '[1]'")
     video_id: str = Field(..., description="Video identifier")
     start_time: float = Field(..., description="Start timestamp in seconds")
@@ -65,24 +52,21 @@ class CitationSourceResponse(BaseModel):
 
 class V4QueryResponse(BaseModel):
     """Response schema for V4 query operations."""
-    
+
     answer: str = Field(
-        ...,
-        description="Markdown-formatted answer with inline citations [1], [2], etc."
+        ..., description="Markdown-formatted answer with inline citations [1], [2], etc."
     )
     sources: List[CitationSourceResponse] = Field(
-        default_factory=list,
-        description="List of citation sources with video_id and timestamps"
+        default_factory=list, description="List of citation sources with video_id and timestamps"
     )
     token_usage: Optional[dict] = Field(
-        None,
-        description="Token usage statistics (prompt_tokens, completion_tokens)"
+        None, description="Token usage statistics (prompt_tokens, completion_tokens)"
     )
-    elapsed_seconds: Optional[float] = Field(
-        None,
-        description="Query processing time in seconds"
+    elapsed_seconds: Optional[float] = Field(None, description="Query processing time in seconds")
+    request_id: Optional[str] = Field(
+        None, description="Unique request identifier for log correlation and tracing"
     )
-    
+
     model_config = {
         "json_schema_extra": {
             "example": {
@@ -92,20 +76,17 @@ class V4QueryResponse(BaseModel):
                         "citation": "[1]",
                         "video_id": "Dk1toyI7AJs",
                         "start_time": 107.0,
-                        "end_time": 163.0
+                        "end_time": 163.0,
                     },
                     {
                         "citation": "[2]",
                         "video_id": "Dk1toyI7AJs",
                         "start_time": 121.4,
-                        "end_time": 127.4
-                    }
+                        "end_time": 127.4,
+                    },
                 ],
-                "token_usage": {
-                    "prompt_tokens": 1234,
-                    "completion_tokens": 567
-                },
-                "elapsed_seconds": 4.5
+                "token_usage": {"prompt_tokens": 1234, "completion_tokens": 567},
+                "elapsed_seconds": 4.5,
             }
         }
     }

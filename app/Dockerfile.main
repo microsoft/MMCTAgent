@@ -7,8 +7,14 @@ WORKDIR /app
 # Copy application-specific files
 COPY app/ app/
 
-# Overlay updated mmct package files (overrides base image)
+
+# Copy core package and available directories
 COPY mmct/ mmct/
+COPY config/ config/
+COPY docs/ docs/
+COPY mcp_server/ mcp_server/
+
+RUN pip install -e .
 
 # Auto-bump minor version: read current version, increment minor, write back
 RUN CURRENT=$(grep '_DEFAULT_VERSION' app/version.py | head -1 | grep -oP '\d+\.\d+\.\d+') && \

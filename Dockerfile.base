@@ -31,12 +31,6 @@ COPY pyproject.toml .
 COPY setup.py .
 COPY README.md .
 
-# Copy core package and available directories
-COPY mmct/ mmct/
-COPY config/ config/
-COPY docs/ docs/
-COPY mcp_server/ mcp_server/
-
 # Install Python dependencies
 RUN pip install --upgrade pip>=24.3
 RUN pip install ".[all]"

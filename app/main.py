@@ -5,6 +5,8 @@ from fastapi.openapi.utils import get_openapi
 from loguru import logger
 from app.routers import query, frames, transcripts, videos
 from app.version import API_VERSION, BUILD_TIMESTAMP
+from app.utilities.request_id_middleware import RequestIDMiddleware
+
 # from app.routers import ingestion, graph_ingestion  # Disabled: not exposed in this deployment
 
 # Configure loguru to output to stderr (uvicorn compatible)
@@ -35,6 +37,9 @@ app.add_middleware(
     allow_headers=["*"],
     allow_credentials=True,
 )
+
+# Request ID middleware — must be added after CORS so it runs for every request
+app.add_middleware(RequestIDMiddleware)
 
 app.include_router(query.router)
 # app.include_router(ingestion.router)        # Disabled: not exposed in this deployment
@@ -162,9 +167,21 @@ async def get_supported_providers():
         },
         "all_supported_providers": {
             "llm": ["AzureLLMProvider", "AzureReasoningLLMProvider", "OpenAILLMProvider"],
-            "embedding": ["AzureEmbeddingProvider", "OpenAIEmbeddingProvider", "FastEmbedBGEsmallEmbeddingProvider"],
-            "image_embedding": ["FastEmbedQdrantCLIPEmbeddingProvider", "ClipImageEmbeddingProvider"],
-            "graph": ["Neo4jQueryProvider", "Neo4jGraphProvider", "Neo4jGraphStoreProvider", "NetworkXGraphProvider"],
+            "embedding": [
+                "AzureEmbeddingProvider",
+                "OpenAIEmbeddingProvider",
+                "FastEmbedBGEsmallEmbeddingProvider",
+            ],
+            "image_embedding": [
+                "FastEmbedQdrantCLIPEmbeddingProvider",
+                "ClipImageEmbeddingProvider",
+            ],
+            "graph": [
+                "Neo4jQueryProvider",
+                "Neo4jGraphProvider",
+                "Neo4jGraphStoreProvider",
+                "NetworkXGraphProvider",
+            ],
             "storage": ["AzureStorageProvider", "LocalStorageProvider"],
             "vector_db": [
                 "AISearchChapterProvider",
