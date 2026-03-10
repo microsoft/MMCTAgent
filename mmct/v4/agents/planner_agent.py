@@ -314,6 +314,7 @@ class V4PlannerAgent:
     Attributes:
         model_client: AutoGen model client for LLM calls.
         use_critic: Whether to use Critic for validation.
+        video_catalog: Optional compact catalog of available videos.
         agent: The underlying AutoGen AssistantAgent.
     """
     
@@ -322,6 +323,7 @@ class V4PlannerAgent:
         model_client,
         use_critic: bool = True,
         model_context: Optional[ChatCompletionContext] = None,
+        video_catalog: Optional[str] = None,
     ):
         """Initialize the Planner agent.
         
@@ -329,10 +331,12 @@ class V4PlannerAgent:
             model_client: AutoGen model client.
             use_critic: Whether to enable Critic validation.
             model_context: Optional shared model context for KV cache.
+            video_catalog: Optional pre-generated catalog of available videos.
         """
         self.model_client = model_client
         self.use_critic = use_critic
         self.model_context = model_context
+        self.video_catalog = video_catalog
         self.agent = self._create_agent()
     
     def _create_agent(self) -> AssistantAgent:
@@ -343,6 +347,15 @@ class V4PlannerAgent:
             system_message = _format_prompt(V4_PLANNER_SYSTEM_PROMPT_WITH_CRITIC)
         else:
             system_message = _format_prompt(V4_PLANNER_SYSTEM_PROMPT_WITHOUT_CRITIC)
+
+        # Append video catalog section if available
+        if self.video_catalog:
+            system_message += (
+                "\n\n# VIDEO CATALOG\n\n"
+                "The following is a summary of the videos available in the knowledge graph. "
+                "Use this to inform your retrieval plan.\n\n"
+                f"{self.video_catalog}"
+            )
 
         handoffs = [CountingHandoff(target=t) for t in handoff_targets]
 

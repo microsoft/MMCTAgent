@@ -276,6 +276,7 @@ class V4Orchestrator:
         image_llm_provider=None,
         use_critic: bool = True,
         max_turns: int = 20,
+        video_catalog: Optional[str] = None,
     ):
         """Initialize the orchestrator.
         
@@ -288,6 +289,7 @@ class V4Orchestrator:
             image_llm_provider: Optional LLM provider for ImageAgent.
             use_critic: Whether to use Critic validation.
             max_turns: Maximum Swarm conversation turns.
+            video_catalog: Optional pre-generated video catalog for Planner context.
         """
         self.model_client = model_client
         self.neo4j_provider = neo4j_provider
@@ -297,6 +299,7 @@ class V4Orchestrator:
         self.image_llm_provider = image_llm_provider
         self.use_critic = use_critic
         self.max_turns = max_turns
+        self.video_catalog = video_catalog
         
         self._agents_initialized = False
         self._image_agent_wrapper = None
@@ -311,6 +314,7 @@ class V4Orchestrator:
             model_client=self.model_client,
             use_critic=self.use_critic,
             model_context=BufferedChatCompletionContext(buffer_size=PLANNER_BUFFER_SIZE),
+            video_catalog=self.video_catalog,
         )
         
         self._video_agent_wrapper = V4VideoAgent(

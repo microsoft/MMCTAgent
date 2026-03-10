@@ -82,6 +82,7 @@ def get_v4_orchestrator(use_critic: bool = True) -> V4Orchestrator:
         Configured V4Orchestrator instance.
     """
     from app.config import get_video_agent_provider, get_image_agent_provider
+    from app.services.video_catalog_service import get_cached_catalog
     
     # Get providers
     neo4j_provider = get_neo4j_provider()
@@ -104,6 +105,7 @@ def get_v4_orchestrator(use_critic: bool = True) -> V4Orchestrator:
         storage_provider=storage_provider,
         image_llm_provider=image_provider.llm_provider,
         use_critic=use_critic,
+        video_catalog=get_cached_catalog(),
     )
 
 

@@ -44,6 +44,25 @@ app.include_router(transcripts.router)
 app.include_router(videos.router)
 
 
+@app.on_event("startup")
+async def startup_generate_video_catalog():
+    """Pre-generate the video catalog at server startup (best-effort)."""
+    try:
+        from app.services.v4_query_service import get_neo4j_provider
+        from app.config import get_video_agent_provider
+        from app.services.video_catalog_service import generate_video_catalog
+
+        neo4j_provider = get_neo4j_provider()
+        llm_provider = get_video_agent_provider().llm_provider
+        catalog = await generate_video_catalog(neo4j_provider, llm_provider)
+        if catalog:
+            logger.info(f"Video catalog ready ({len(catalog)} chars)")
+        else:
+            logger.warning("Video catalog is empty — Planner will run without it")
+    except Exception as e:
+        logger.warning(f"Video catalog generation failed (non-fatal): {e}")
+
+
 def custom_openapi():
     """Generate custom OpenAPI schema."""
     if app.openapi_schema:
