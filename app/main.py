@@ -129,6 +129,21 @@ async def health_check():
     return {"status": "healthy", "service": "mmct-agent"}
 
 
+@app.get("/model", tags=["model"])
+async def get_model_info():
+    """Return the LLM agent provider, model, and base URL currently in use."""
+    from app.config.provider_config import get_settings
+
+    settings = get_settings()
+    return {
+        "provider": "AzureLLMProvider",
+        "model_name": settings.llm_model_name,
+        "deployment_name": settings.llm_deployment_name,
+        "base_url": settings.llm_endpoint,
+        "api_version": settings.llm_api_version,
+    }
+
+
 @app.get("/providers", tags=["providers"])
 async def get_supported_providers():
     """Get information about supported providers."""

@@ -66,7 +66,7 @@ def post(path: str, json_body: dict, **kwargs) -> requests.Response:
 
 def test_root():
     """GET / — root endpoint with version and build info."""
-    print("\n[1/10] GET /")
+    print("\n[1/11] GET /")
     try:
         r = get("/")
         data = r.json()
@@ -80,7 +80,7 @@ def test_root():
 
 def test_health():
     """GET /health — health check."""
-    print("\n[2/10] GET /health")
+    print("\n[2/11] GET /health")
     try:
         r = get("/health")
         data = r.json()
@@ -90,9 +90,25 @@ def test_health():
         result("request failed", False, str(e))
 
 
+def test_model():
+    """GET /model — LLM agent provider, model, and base URL."""
+    print("\n[3/11] GET /model")
+    try:
+        r = get("/model")
+        data = r.json()
+        result("status 200", r.status_code == 200, f"got {r.status_code}")
+        result("has provider", "provider" in data, data.get("provider", ""))
+        result("has model_name", bool(data.get("model_name")), data.get("model_name", ""))
+        result("has deployment_name", bool(data.get("deployment_name")), data.get("deployment_name", ""))
+        result("has base_url", bool(data.get("base_url")), data.get("base_url", ""))
+        result("has api_version", bool(data.get("api_version")), data.get("api_version", ""))
+    except Exception as e:
+        result("request failed", False, str(e))
+
+
 def test_providers():
     """GET /providers — active and supported providers."""
-    print("\n[3/10] GET /providers")
+    print("\n[4/11] GET /providers")
     try:
         r = get("/providers")
         data = r.json()
@@ -108,7 +124,7 @@ def test_providers():
 
 def test_openapi():
     """GET /openapi.json — Swagger schema contains version and build info."""
-    print("\n[4/10] GET /openapi.json")
+    print("\n[5/11] GET /openapi.json")
     try:
         r = get("/openapi.json")
         data = r.json()
@@ -124,7 +140,7 @@ def test_openapi():
 
 def test_videos():
     """GET /videos — list ingested video IDs."""
-    print("\n[5/10] GET /videos")
+    print("\n[6/11] GET /videos")
     try:
         r = get("/videos")
         data = r.json()
@@ -141,7 +157,7 @@ def test_videos_concurrent():
     """GET /videos x10 — no empty results under concurrency."""
     import concurrent.futures
 
-    print("\n[6/10] GET /videos (x10 concurrent)")
+    print("\n[7/11] GET /videos (x10 concurrent)")
     try:
         with concurrent.futures.ThreadPoolExecutor(max_workers=10) as pool:
             futures = [pool.submit(get, "/videos") for _ in range(10)]
@@ -157,7 +173,7 @@ def test_videos_concurrent():
 
 def test_frames_lookup():
     """GET /frames/lookup — fetch a keyframe by video_id + timestamp."""
-    print("\n[7/10] GET /frames/lookup")
+    print("\n[8/11] GET /frames/lookup")
     try:
         r = get("/frames/lookup", params={"video_id": SAMPLE_VIDEO_ID, "timestamp": 10})
         data = r.json()
@@ -188,7 +204,7 @@ def test_frames_lookup():
 
 def test_transcripts_lookup():
     """GET /transcripts/lookup — fetch transcript for a video."""
-    print("\n[8/10] GET /transcripts/lookup")
+    print("\n[9/11] GET /transcripts/lookup")
     try:
         r = get("/transcripts/lookup", params={"video_id": SAMPLE_VIDEO_ID})
         data = r.json()
@@ -213,7 +229,7 @@ def test_transcripts_lookup():
 
 def test_video_catalog():
     """GET /videos/catalog — cached video catalog string."""
-    print("\n[9/10] GET /videos/catalog")
+    print("\n[10/11] GET /videos/catalog")
     try:
         r = get("/videos/catalog")
         data = r.json()
@@ -233,7 +249,7 @@ def test_video_catalog():
 
 def test_video_catalog_refresh():
     """POST /videos/catalog/refresh — regenerate catalog from Neo4j."""
-    print("\n[10/10] POST /videos/catalog/refresh")
+    print("\n[11/11] POST /videos/catalog/refresh")
     try:
         r = requests.post(f"{BASE_URL}/videos/catalog/refresh", timeout=60)
         data = r.json()
@@ -302,6 +318,7 @@ def main():
     # Run all tests
     test_root()
     test_health()
+    test_model()
     test_providers()
     test_openapi()
     test_videos()
