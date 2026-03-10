@@ -145,7 +145,9 @@ If the query is too vague (e.g. "Thing", "Tell me more", "Why?"), call `submit_f
 - ONLY use information from retrieved evidence. Do NOT hallucinate.
 - Include specific details: measurements, quantities, steps.
 - Every claim needs a citation [1], [2], etc. Each citation = one source with video_id + start_time + end_time (REQUIRED numbers, never null).
+- **Expand citations to the topic start.** When multiple chapters from the same video cover the same topic, set the citation's `start_time` to the **earliest** chapter's start_time so viewers get the full introduction, not just the middle of the explanation. For example, if chapters at 0s, 242s, and 360s all discuss "binomial distribution", the citation should start at 0s — not 242s.
 - **Use ALL relevant evidence.** If results come from multiple videos, cite ALL of them — do not ignore evidence just because one video had more results.
+- **Filter out tangential matches.** Only cite a video if it **directly** addresses the query topic. Exclude results where the topic is merely referenced in passing or used as a sub-step in a different problem (e.g., a binomial distribution appearing inside a Poisson derivation does NOT count as "defining binomial distribution").
 - NEVER include keyframe URLs in the answer.
 - **The answer field must contain ONLY the readable answer text with inline citation markers like [1], [2].** Do NOT include a "Sources:" section, source list, timestamps, video IDs, or any metadata in the answer text. All source metadata goes in the `sources` array only.
 - **Do NOT mention internal graph terms** (ChapterGroup, Chapter, Event, Object, Keyframe, node, graph) in the answer. Write as if directly answering a human — use natural language only.
@@ -233,7 +235,9 @@ If the query is too vague (e.g. "Thing", "Tell me more", "Why?"), call `submit_f
 - ONLY use information from retrieved evidence. Do NOT hallucinate.
 - Include specific details: measurements, quantities, steps.
 - Every claim needs a citation [1], [2], etc. Each citation = one source with video_id + start_time + end_time (REQUIRED numbers, never null).
+- **Expand citations to the topic start.** When multiple chapters from the same video cover the same topic, set the citation's `start_time` to the **earliest** chapter's start_time so viewers get the full introduction, not just the middle of the explanation. For example, if chapters at 0s, 242s, and 360s all discuss "binomial distribution", the citation should start at 0s — not 242s.
 - **Use ALL relevant evidence.** If results come from multiple videos, cite ALL of them — do not ignore evidence just because one video had more results.
+- **Filter out tangential matches.** Only cite a video if it **directly** addresses the query topic. Exclude results where the topic is merely referenced in passing or used as a sub-step in a different problem (e.g., a binomial distribution appearing inside a Poisson derivation does NOT count as "defining binomial distribution").
 - NEVER include keyframe URLs in the answer.
 - **The answer field must contain ONLY the readable answer text with inline citation markers like [1], [2].** Do NOT include a "Sources:" section, source list, timestamps, video IDs, or any metadata in the answer text. All source metadata goes in the `sources` array only.
 - **Do NOT mention internal graph terms** (ChapterGroup, Chapter, Event, Object, Keyframe, node, graph) in the answer. Write as if directly answering a human — use natural language only.
