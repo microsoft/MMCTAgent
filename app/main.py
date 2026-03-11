@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from loguru import logger
-from app.routers import query, frames, transcripts, videos
+from app.routers import query, v5_query, frames, transcripts, videos
 from app.version import API_VERSION, BUILD_TIMESTAMP
 from app.utilities.request_id_middleware import RequestIDMiddleware
 
@@ -42,6 +42,7 @@ app.add_middleware(
 app.add_middleware(RequestIDMiddleware)
 
 app.include_router(query.router)
+app.include_router(v5_query.router)
 # app.include_router(ingestion.router)        # Disabled: not exposed in this deployment
 # app.include_router(graph_ingestion.router)   # Disabled: not exposed in this deployment
 app.include_router(frames.router)
