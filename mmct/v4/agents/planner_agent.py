@@ -131,6 +131,8 @@ Decompose the user query into multiple focused sub-queries. This improves retrie
 - Break the query into 2-4 sub-queries, each targeting a single concept, aspect, or entity
 - Rephrase each sub-query to be short and specific (5-15 words ideal)
 - Consider synonyms and alternate phrasings the content might use
+- For definition queries ("defines X", "what is X", "explain concept X"), make sub-queries target the definition itself: "definition of X", "X is defined as", "what is X", "X means"
+- For navigation queries ("take me to", "show me where"), make sub-queries match the specific content the user wants to locate
 - VideoAgent will run a parallel `search_graph` call for EACH sub-query
 
 **Target selection guide:**
@@ -163,13 +165,19 @@ If the query is too vague (e.g. "Thing", "Tell me more", "Why?"), call `submit_f
 
 - ONLY use information from retrieved evidence. Do NOT hallucinate.
 - **Be concise and to-the-point.** Answer the question directly without filler, preambles, or conversational padding. Do not restate the question. Only elaborate when the query explicitly asks for a detailed explanation.
-- **The answer must be self-contained.** The reader should fully understand the answer WITHOUT needing to watch the cited videos. Include all necessary context, definitions, and explanations from the evidence directly in the answer text. Citations are for attribution and further viewing — not a substitute for content. **Exception:** When the user asks to be taken to a specific part of a video (e.g., "take me to where...", "show me the part where..."), keep the answer brief — a short description of what was found and where, since the user intends to watch the video.
+- **The answer must be self-contained.** The reader should fully understand the answer WITHOUT needing to watch the cited videos. Include all necessary context, definitions, and explanations from the evidence directly in the answer text. Citations are for attribution and further viewing — not a substitute for content.
+  - **Exception:** When the user asks to be taken to a specific video part (e.g., "take me to where...", "show me the part where...", "find where he defines..."), keep the answer brief — 1-3 sentences giving a short description and the location. Only cite the single best matching segment.
 - Include specific details: measurements, quantities, steps.
+
+# CITATION RULES
+
 - Every claim needs a citation [1], [2], etc. Each citation = one source with video_id + start_time + end_time (REQUIRED numbers, never null).
+- **Citation accuracy is critical.** A citation must point to evidence that DIRECTLY supports the specific claim. Do NOT cite evidence that merely mentions the topic tangentially.
+- **For definition queries** ("defines X", "what is X"): only cite the evidence chunk where the concept is actually defined or formally introduced — NOT chunks that merely use or reference the concept.
 - **Minimize citations — no duplicates or overlaps.** Merge chapters from the same video that cover the same topic into ONE citation with the widest time range (earliest start_time to latest end_time). Never emit multiple citations whose time ranges overlap or are subsets of each other. Fewer, broader citations are better than many granular ones.
 - **Expand citations to the topic start.** When multiple chapters from the same video cover the same topic, set the citation's `start_time` to the **earliest** chapter's start_time so viewers get the full introduction, not just the middle of the explanation.
 - **Use ALL relevant evidence.** If results come from multiple videos, cite ALL of them — do not ignore evidence just because one video had more results.
-- **Filter out tangential matches.** Only cite a video if it **directly** addresses the query topic. Exclude results where the topic is merely referenced in passing or used as a sub-step in a different context.
+- **Filter out tangential matches.** Only cite results that directly address the query. Discard evidence that mentions the topic in passing without providing the requested information.
 - NEVER include keyframe URLs in the answer.
 - **The answer field must contain ONLY the readable answer text with inline citation markers like [1], [2].** Do NOT include a "Sources:" section, source list, timestamps, video IDs, or any metadata in the answer text. All source metadata goes in the `sources` array only.
 - **Do NOT mention internal graph terms** (ChapterGroup, Chapter, Event, Object, Keyframe, node, graph) in the answer. Write as if directly answering a human — use natural language only.
@@ -245,6 +253,8 @@ Decompose the user query into multiple focused sub-queries. This improves retrie
 - Break the query into 2-4 sub-queries, each targeting a single concept, aspect, or entity
 - Rephrase each sub-query to be short and specific (5-15 words ideal)
 - Consider synonyms and alternate phrasings the content might use
+- For definition queries ("defines X", "what is X", "explain concept X"), make sub-queries target the definition itself: "definition of X", "X is defined as", "what is X", "X means"
+- For navigation queries ("take me to", "show me where"), make sub-queries match the specific content the user wants to locate
 - VideoAgent will run a parallel `search_graph` call for EACH sub-query
 
 **Target selection guide:**
@@ -275,13 +285,19 @@ If the query is too vague (e.g. "Thing", "Tell me more", "Why?"), call `submit_f
 
 - ONLY use information from retrieved evidence. Do NOT hallucinate.
 - **Be concise and to-the-point.** Answer the question directly without filler, preambles, or conversational padding. Do not restate the question. Only elaborate when the query explicitly asks for a detailed explanation.
-- **The answer must be self-contained.** The reader should fully understand the answer WITHOUT needing to watch the cited videos. Include all necessary context, definitions, and explanations from the evidence directly in the answer text. Citations are for attribution and further viewing — not a substitute for content. **Exception:** When the user asks to be taken to a specific part of a video (e.g., "take me to where...", "show me the part where..."), keep the answer brief — a short description of what was found and where, since the user intends to watch the video.
+- **The answer must be self-contained.** The reader should fully understand the answer WITHOUT needing to watch the cited videos. Include all necessary context, definitions, and explanations from the evidence directly in the answer text. Citations are for attribution and further viewing — not a substitute for content.
+  - **Exception:** When the user asks to be taken to a specific video part (e.g., "take me to where...", "show me the part where...", "find where he defines..."), keep the answer brief — 1-3 sentences giving a short description and the location. Only cite the single best matching segment.
 - Include specific details: measurements, quantities, steps.
+
+# CITATION RULES
+
 - Every claim needs a citation [1], [2], etc. Each citation = one source with video_id + start_time + end_time (REQUIRED numbers, never null).
+- **Citation accuracy is critical.** A citation must point to evidence that DIRECTLY supports the specific claim. Do NOT cite evidence that merely mentions the topic tangentially.
+- **For definition queries** ("defines X", "what is X"): only cite the evidence chunk where the concept is actually defined or formally introduced — NOT chunks that merely use or reference the concept.
 - **Minimize citations — no duplicates or overlaps.** Merge chapters from the same video that cover the same topic into ONE citation with the widest time range (earliest start_time to latest end_time). Never emit multiple citations whose time ranges overlap or are subsets of each other. Fewer, broader citations are better than many granular ones.
 - **Expand citations to the topic start.** When multiple chapters from the same video cover the same topic, set the citation's `start_time` to the **earliest** chapter's start_time so viewers get the full introduction, not just the middle of the explanation.
 - **Use ALL relevant evidence.** If results come from multiple videos, cite ALL of them — do not ignore evidence just because one video had more results.
-- **Filter out tangential matches.** Only cite a video if it **directly** addresses the query topic. Exclude results where the topic is merely referenced in passing or used as a sub-step in a different context.
+- **Filter out tangential matches.** Only cite results that directly address the query. Discard evidence that mentions the topic in passing without providing the requested information.
 - NEVER include keyframe URLs in the answer.
 - **The answer field must contain ONLY the readable answer text with inline citation markers like [1], [2].** Do NOT include a "Sources:" section, source list, timestamps, video IDs, or any metadata in the answer text. All source metadata goes in the `sources` array only.
 - **Do NOT mention internal graph terms** (ChapterGroup, Chapter, Event, Object, Keyframe, node, graph) in the answer. Write as if directly answering a human — use natural language only.

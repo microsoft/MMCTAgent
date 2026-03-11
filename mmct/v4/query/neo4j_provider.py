@@ -458,8 +458,16 @@ class Neo4jQueryProvider:
             order_clause = "ORDER BY score DESC"
         
         # Build Cypher query - vector search first, then filter
-        # Over-fetch to account for post-filtering
-        search_limit = limit * 3 if post_filter_conditions else limit
+        # Over-fetch to account for post-filtering.
+        # Keyframes (30k+) need a much larger over-fetch than text nodes (~200-2k)
+        # when filtering by video_id, because each video is a small fraction of total.
+        if post_filter_conditions:
+            if node_type == "Keyframe":
+                search_limit = max(limit * 50, 500)
+            else:
+                search_limit = limit * 3
+        else:
+            search_limit = limit
         params["search_limit"] = search_limit
         
         if post_filter_conditions:
