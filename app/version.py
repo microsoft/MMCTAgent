@@ -10,7 +10,7 @@ import os
 from datetime import datetime, timezone
 
 # Fallback values used during local development (no Docker build).
-_DEFAULT_VERSION = "1.4.3"
+_DEFAULT_VERSION = "1.4.4"
 _DEFAULT_BUILD_TIMESTAMP = ""
 
 # At Docker build time these are baked into the image via ENV.

@@ -6,7 +6,6 @@ __pycache__/
 # C extensions
 *.so
 media/
-app/logs*
 keyframes*
 videos/
 cookies.txt
