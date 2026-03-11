@@ -509,15 +509,18 @@ class Neo4jQueryProvider:
     async def find_relevant_videos(
         self,
         query_embedding: List[float],
+        video_ids: Optional[List[str]] = None,
         limit: int = 10,
     ) -> List[Dict[str, Any]]:
         """Find relevant videos by searching ChapterGroup summaries.
         
         Aggregates ChapterGroup results by video_id to find which videos
-        are most relevant to a query.
+        are most relevant to a query. When video_ids is provided, only
+        returns results from those specific videos.
         
         Args:
             query_embedding: Query vector (384-dim).
+            video_ids: Optional list of video IDs to constrain results to.
             limit: Maximum number of videos to return.
             
         Returns:
@@ -529,24 +532,34 @@ class Neo4jQueryProvider:
         chapter_group_type = node_registry.get("ChapterGroup")
         index_name = chapter_group_type.embedding_index_name if chapter_group_type else "chaptergroup_embedding_index"
         
-        query = """
+        # Build optional WHERE clause for video_id filtering
+        where_clause = ""
+        if video_ids:
+            where_clause = "WHERE node.video_id IN $video_ids"
+        
+        query = f"""
         CALL db.index.vector.queryNodes($index_name, $search_limit, $embedding)
         YIELD node, score
+        {where_clause}
         WITH node.video_id AS video_id, 
              MAX(score) AS max_score,
-             COLLECT({summary: node.summary, name: node.name, score: score})[0..3] AS top_groups
+             COLLECT({{summary: node.summary, name: node.name, score: score}})[0..3] AS top_groups
         RETURN video_id, max_score, top_groups
         ORDER BY max_score DESC
         LIMIT $limit
         """
         
+        params = {
+            "index_name": index_name,
+            "search_limit": limit * 5,
+            "embedding": query_embedding,
+            "limit": limit,
+        }
+        if video_ids:
+            params["video_ids"] = video_ids
+        
         try:
-            records = await self._run_read(query, {
-                "index_name": index_name,
-                "search_limit": limit * 5,
-                "embedding": query_embedding,
-                "limit": limit,
-            })
+            records = await self._run_read(query, params)
             return records
             
         except Exception as e:

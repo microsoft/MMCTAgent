@@ -45,27 +45,30 @@ class VideoDiscoveryTool(OutputFormatterMixin):
     async def find_relevant_videos(
         self,
         query: Annotated[str, "Query to find relevant videos for"],
+        video_ids: Annotated[Optional[List[str]], "Optional list of video IDs to constrain discovery to"] = None,
         limit: Annotated[int, "Maximum videos to return"] = 3,
     ) -> str:
         """Find videos relevant to a query by searching ChapterGroup summaries.
         
-        Searches across ALL videos (no video_id filter) to discover
-        which videos contain content related to the query.
+        When video_ids is provided, only returns results from those videos.
+        When omitted, searches across ALL videos.
         
         Args:
             query: Natural language query.
+            video_ids: Optional list of video IDs to filter results.
             limit: Maximum number of videos to return.
             
         Returns:
             JSON string with relevant video_ids and their relevance scores.
         """
         query_preview = query[:50] + "..." if len(query) > 50 else query
-        _tool_log("find_relevant_videos", f"query='{query}' limit={limit}")
+        _tool_log("find_relevant_videos", f"query='{query}' video_ids={video_ids} limit={limit}")
         try:
             query_embedding = await self.embedding_provider.embedding(query)
             
             results = await self.neo4j_provider.find_relevant_videos(
                 query_embedding=query_embedding,
+                video_ids=video_ids,
                 limit=limit,
             )
             
