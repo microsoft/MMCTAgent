@@ -261,9 +261,11 @@ class DenseChapterResponse(BaseModel):
     """Dense chapter extraction response for video analysis.
     
     Extracts core chapter information in a single LLM call:
-    - Detailed summary combining visual and audio content
+    - Timestamped description: primary output with [Xs] markers for citations
     - Scene composition (environment, lighting, camera, spatial layout)
     - OCR data (all visible text with categorization)
+    
+    The summary field is derived by stripping timestamps from the description.
     
     Note: Temporal events, visual actions, and objects are extracted 
     separately by the temporal_graph step.
@@ -271,9 +273,9 @@ class DenseChapterResponse(BaseModel):
     
     model_config = ConfigDict(extra="forbid")
 
-    summary: str = Field(
+    timestamped_description: str = Field(
         ..., 
-        description="Comprehensive detailed summary (3-5 sentences) combining keyframe visuals and transcript content. Include WHAT is happening, WHO is involved, WHERE it takes place, and the context/purpose."
+        description="Timestamped line-by-line description of the chapter. Each line starts with [Xs] (integer seconds from video start) followed by a readable sentence. Cover ALL visual and verbal content. No filler phrases."
     )
     scene_composition: Optional[SceneComposition] = Field(
         None, 
@@ -283,15 +285,25 @@ class DenseChapterResponse(BaseModel):
         None, 
         description="All visible text extracted from keyframes, categorized by type (sign, label, caption, etc.) and persistence"
     )
+
+    @property
+    def summary(self) -> str:
+        """Derive plain summary by stripping [Xs] timestamp markers."""
+        from mmct.utils.timestamps import strip_timestamps
+        return strip_timestamps(self.timestamped_description)
     
     @classmethod
     def get_extraction_guidelines(cls) -> str:
         """Return extraction guidelines for LLM prompts."""
         return """
-### Summary Guidelines
-- Combine visual observations from keyframes with transcript content
-- Describe WHAT is happening, WHO is involved, WHERE it takes place
-- Include relevant context and purpose if apparent
+### Timestamped Description Guidelines
+- Each line starts with [Xs] where X is integer seconds from the video start
+- Use the frame timestamps to assign correct [Xs] values (chronological order)
+- Cover ALL visual and verbal content — zero information loss
+- Write naturally readable sentences — not telegraphic or clipped
+- Remove filler phrases: "the instructor", "the video shows", "viewers learn", "this section covers"
+- Keep all technical terms, formulas, measurements
+- If multiple related points share the same timestamp, combine into one flowing sentence
 - Be specific about actions and outcomes
 
 ### Scene Composition Guidelines
@@ -667,6 +679,10 @@ class GraphChapter(BaseModel):
     summary: Optional[str] = Field(
         default=None,
         description="Summary of the chapter content"
+    )
+    timestamped_description: Optional[str] = Field(
+        default=None,
+        description="Timestamped line-by-line description ([Xs] sentence format)"
     )
     transcript: Optional[str] = Field(
         default=None,

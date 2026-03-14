@@ -197,7 +197,7 @@ The {encoded_count} frames above are shown in chronological order, capturing the
 
 ## TASK
 Analyze the visual content from the frame sequence AND the transcript to extract:
-1. A comprehensive summary combining what you SEE in the frames with what is SAID in the transcript
+1. A timestamped description: each line starts with [Xs] (use frame timestamps above). Cover ALL visual and verbal content in readable sentences.
 2. Scene composition details (environment, lighting, camera angle, spatial layout)
 3. Any visible text in the frames (OCR data)
 
@@ -255,9 +255,9 @@ def build_basic_messages(
         "type": "text",
         "text": f"""Transcript: {transcript or "No transcript"}
 
-Provide a brief summary of what happens in this video segment.
+Provide a timestamped description of what happens in this video segment. Each line should start with [Xs] where X is an integer timestamp in seconds.
 
-Return JSON: {{"summary": "2-3 sentence summary"}}"""
+Return JSON: {{"timestamped_description": "[0s] First thing. [15s] Second thing."}}"""
     })
     
     return [

@@ -134,6 +134,9 @@ class GraphUploadStep(PipelineStep):
                         node_types=["Keyframe"],
                         index_suffix="_image"
                     )
+                # Create fulltext indexes for hybrid keyword search
+                logger.info("Creating fulltext indexes...")
+                await store_provider.create_fulltext_indexes()
             
             # Upload the graph (embeddings already attached to nodes)
             logger.info("Uploading graph...")

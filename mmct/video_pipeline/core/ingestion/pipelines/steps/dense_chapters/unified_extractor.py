@@ -121,7 +121,7 @@ async def extract_chapter_basic(
             return None
         
         return DenseChapterResponse(
-            summary=parsed.get("summary", ""),
+            timestamped_description=parsed.get("timestamped_description", "") or parsed.get("summary", ""),
             scene_composition=None,
             ocr_data=None,
         )
@@ -182,7 +182,7 @@ async def extract_chapter_with_fallback(
     # Last resort: transcript-only
     transcript = chunk.get("transcript", "")
     return DenseChapterResponse(
-        summary=transcript[:500] if transcript else "No content extracted",
+        timestamped_description=transcript[:500] if transcript else "No content extracted",
         scene_composition=None,
         ocr_data=None,
     )
@@ -240,12 +240,15 @@ async def extract_chapters_parallel(
             else:
                 # Merge chunk metadata with extraction result
                 # Note: video_chunking step uses start_time/end_time, normalize to start/end
+                result_data = result.model_dump()
+                # Derive summary from timestamped_description
+                result_data["summary"] = result.summary
                 chapter_data = {
                     "start": chunk.get("start_time", chunk.get("start", 0.0)),
                     "end": chunk.get("end_time", chunk.get("end", 0.0)),
                     "transcript": chunk.get("transcript", ""),
                     "chunk_index": chunk_idx,
-                    **result.model_dump(),
+                    **result_data,
                 }
                 chapters.append(chapter_data)
     

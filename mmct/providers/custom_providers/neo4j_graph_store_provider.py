@@ -465,6 +465,45 @@ class Neo4jGraphStoreProvider(BaseGraphStoreProvider):
             logger.error(f"Failed to create vector indexes: {e}")
             return False
     
+    async def create_fulltext_indexes(self) -> bool:
+        """Create Lucene fulltext indexes for keyword search.
+        
+        Creates fulltext indexes on text properties of Chapter and ChapterGroup
+        nodes. These complement HNSW vector indexes by enabling exact keyword
+        matching via `db.index.fulltext.queryNodes()`.
+        
+        Requires Neo4j 5.x with fulltext index support.
+        """
+        self._ensure_driver()
+        
+        # Define fulltext indexes: (index_name, label, properties)
+        fulltext_indexes = [
+            ("chapter_fulltext_index", "Chapter", ["summary", "timestamped_description", "video_title"]),
+            ("chaptergroup_fulltext_index", "ChapterGroup", ["summary", "name", "video_title"]),
+        ]
+        
+        try:
+            def create_ft_indexes_sync():
+                with self._driver.session(database=self._database) as session:
+                    for index_name, label, properties in fulltext_indexes:
+                        try:
+                            props_str = ", ".join(f"n.{p}" for p in properties)
+                            query = f"""
+                            CREATE FULLTEXT INDEX {index_name} IF NOT EXISTS
+                            FOR (n:{label})
+                            ON EACH [{props_str}]
+                            """
+                            session.run(query)
+                            logger.info(f"Created fulltext index: {index_name} on {label}[{', '.join(properties)}]")
+                        except Exception as e:
+                            logger.warning(f"Could not create fulltext index {index_name}: {e}")
+            
+            await asyncio.to_thread(create_ft_indexes_sync)
+            return True
+        except Exception as e:
+            logger.error(f"Failed to create fulltext indexes: {e}")
+            return False
+    
     async def get_video_stats(
         self,
         video_id: str,
