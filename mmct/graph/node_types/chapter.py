@@ -4,6 +4,7 @@ from typing import Dict, Any, List, Type, Optional
 
 from mmct.graph.base import BaseNodeType, EdgeDefinition, TemporalEdgeDefinition
 from mmct.graph.registry import node_registry
+from mmct.utils.timestamps import strip_timestamps
 
 
 class ChapterNodeType(BaseNodeType):
@@ -30,15 +31,18 @@ class ChapterNodeType(BaseNodeType):
     @property
     def neo4j_properties(self) -> List[str]:
         return [
-            "node_id", "video_id", "chunk_index", "start_time", "end_time",
-            "video_duration", "summary", "group_index"
+            "node_id", "video_id", "video_title", "chunk_index", "start_time", "end_time",
+            "video_duration", "summary", "timestamped_description", "group_index"
         ]
     
     def get_embedding_text(self, attrs: Dict[str, Any]) -> str:
+        ts_desc = attrs.get("timestamped_description", "")
+        if ts_desc:
+            return strip_timestamps(ts_desc)
         return attrs.get("summary", "") or ""
     
     def create_node_properties(self, instance) -> Dict[str, Any]:
-        return {
+        props = {
             "video_id": instance.video_id or "",
             "chunk_index": instance.chunk_index or 0,
             "start_time": instance.start_time or 0.0,
@@ -47,15 +51,26 @@ class ChapterNodeType(BaseNodeType):
             "summary": instance.summary or "",
             "group_index": instance.group_index,
         }
+        ts_desc = getattr(instance, "timestamped_description", None)
+        if ts_desc:
+            props["timestamped_description"] = ts_desc
+        return props
     
     def format_search_result(self, props: Dict[str, Any]) -> Dict[str, Any]:
-        return {
-            "summary": props.get("summary", "") or "",
-            "start_time": props.get("start_time"),
-            "end_time": props.get("end_time"),
+        ts_desc = props.get("timestamped_description")
+        description = ts_desc or props.get("summary", "") or ""
+        result = {
+            "video_title": props.get("video_title"),
+            "summary": description,
             "video_duration": props.get("video_duration"),
             "chunk_index": props.get("chunk_index"),
         }
+        # When timestamped_description exists, omit chapter-level start/end
+        # to force LLM to use the [Xs] markers in the text for citations.
+        if not ts_desc:
+            result["start_time"] = props.get("start_time")
+            result["end_time"] = props.get("end_time")
+        return result
     
     @property
     def time_property(self) -> str:

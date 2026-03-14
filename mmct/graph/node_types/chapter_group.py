@@ -29,7 +29,7 @@ class ChapterGroupNodeType(BaseNodeType):
     @property
     def neo4j_properties(self) -> List[str]:
         return [
-            "node_id", "video_id", "name", "order", "start_time", "end_time",
+            "node_id", "video_id", "video_title", "name", "order", "start_time", "end_time",
             "video_duration", "summary", "topics", "chapter_indices"
         ]
     
@@ -51,6 +51,7 @@ class ChapterGroupNodeType(BaseNodeType):
     
     def format_search_result(self, props: Dict[str, Any]) -> Dict[str, Any]:
         return {
+            "video_title": props.get("video_title"),
             "summary": props.get("summary", "") or "",
             "start_time": props.get("start_time"),
             "end_time": props.get("end_time"),
