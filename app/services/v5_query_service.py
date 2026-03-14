@@ -18,11 +18,25 @@ from app.config import get_settings, get_credentials
 
 
 # Reuse V4's singleton providers (same Neo4j, same embeddings)
+_v5_neo4j_provider = None
+
 def _get_neo4j_provider() -> Neo4jQueryProvider:
-    """Get or create Neo4j provider singleton (shared with V4)."""
-    # Import V4's singleton to reuse the same connection
-    from app.services.v4_query_service import get_neo4j_provider as _v4_neo4j
-    return _v4_neo4j()
+    """Get or create V5 Neo4j provider singleton.
+
+    Uses the same connection credentials as V4 but instantiates the V5
+    Neo4jQueryProvider which has Chapter-level discovery methods.
+    """
+    global _v5_neo4j_provider
+    if _v5_neo4j_provider is None:
+        settings = get_settings()
+        _v5_neo4j_provider = Neo4jQueryProvider(
+            uri=settings.neo4j_uri,
+            username=settings.neo4j_username,
+            password=settings.neo4j_password,
+            database=settings.neo4j_database,
+        )
+        logger.info("V5 Neo4j provider initialized")
+    return _v5_neo4j_provider
 
 
 def _get_text_embedding_provider():

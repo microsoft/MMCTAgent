@@ -173,6 +173,7 @@ If the query is too vague (e.g. "Thing", "Tell me more", "Why?"), call `submit_f
 
 - Every claim needs a citation [1], [2], etc. Each citation = one source with video_id + start_time + end_time (REQUIRED numbers, never null).
 - **Citation accuracy is critical.** A citation must point to evidence that DIRECTLY supports the specific claim. Do NOT cite evidence that merely mentions the topic tangentially.
+- **Use timestamps from evidence for precise citations.** Evidence lines starting with [Xs] contain the exact second where that information appears. Extract start_time from the FIRST relevant [Xs] marker and end_time from the LAST relevant [Xs] marker. Do NOT guess or use round numbers — use the exact [Xs] values from the evidence text.
 - **For definition queries** ("defines X", "what is X"): only cite the evidence chunk where the concept is actually defined or formally introduced — NOT chunks that merely use or reference the concept.
 - **Minimize citations — no duplicates or overlaps.** Merge chapters from the same video that cover the same topic into ONE citation with the widest time range (earliest start_time to latest end_time). Never emit multiple citations whose time ranges overlap or are subsets of each other. Fewer, broader citations are better than many granular ones.
 - **Expand citations to the topic start.** When multiple chapters from the same video cover the same topic, set the citation's `start_time` to the **earliest** chapter's start_time so viewers get the full introduction, not just the middle of the explanation.
@@ -293,6 +294,7 @@ If the query is too vague (e.g. "Thing", "Tell me more", "Why?"), call `submit_f
 
 - Every claim needs a citation [1], [2], etc. Each citation = one source with video_id + start_time + end_time (REQUIRED numbers, never null).
 - **Citation accuracy is critical.** A citation must point to evidence that DIRECTLY supports the specific claim. Do NOT cite evidence that merely mentions the topic tangentially.
+- **Use timestamps from evidence for precise citations.** Evidence lines starting with [Xs] contain the exact second where that information appears. Extract start_time from the FIRST relevant [Xs] marker and end_time from the LAST relevant [Xs] marker. Do NOT guess or use round numbers — use the exact [Xs] values from the evidence text.
 - **For definition queries** ("defines X", "what is X"): only cite the evidence chunk where the concept is actually defined or formally introduced — NOT chunks that merely use or reference the concept.
 - **Minimize citations — no duplicates or overlaps.** Merge chapters from the same video that cover the same topic into ONE citation with the widest time range (earliest start_time to latest end_time). Never emit multiple citations whose time ranges overlap or are subsets of each other. Fewer, broader citations are better than many granular ones.
 - **Expand citations to the topic start.** When multiple chapters from the same video cover the same topic, set the citation's `start_time` to the **earliest** chapter's start_time so viewers get the full introduction, not just the middle of the explanation.

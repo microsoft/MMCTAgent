@@ -6,6 +6,7 @@ Only called when video_scope == "cross" (code-enforced).
 
 from typing import Any, Dict, List
 from datetime import datetime
+import asyncio
 
 from loguru import logger
 
@@ -31,27 +32,55 @@ class VideoDiscoveryExecutor:
     async def discover(
         self,
         query: str,
-        limit: int = 3,
+        limit: int = 8,
     ) -> List[str]:
-        """Find video IDs relevant to a query.
+        """Find video IDs relevant to a query using multi-level discovery.
+
+        Searches both ChapterGroup summaries and Chapter-level content,
+        then merges results to maximize recall across the video corpus.
 
         Args:
             query: Natural language query.
             limit: Maximum videos to return.
 
         Returns:
-            List of relevant video_id strings.
+            List of relevant video_id strings, ranked by best score.
         """
         _log(f"query='{query[:50]}...' limit={limit}")
         try:
             query_embedding = await self.embedding_provider.embedding(query)
-            results = await self.neo4j_provider.find_relevant_videos(
+
+            # Multi-level discovery: search ChapterGroups AND Chapters in parallel
+            cg_task = self.neo4j_provider.find_relevant_videos(
                 query_embedding=query_embedding,
                 limit=limit,
             )
+            ch_task = self.neo4j_provider.find_relevant_videos_by_chapter(
+                query_embedding=query_embedding,
+                limit=limit,
+            )
+            cg_results, ch_results = await asyncio.gather(cg_task, ch_task)
 
-            video_ids = [r.get("video_id") for r in results if r.get("video_id")]
-            _log(f"{_YELLOW}Found {len(video_ids)} relevant videos: {video_ids}{_RESET}")
+            # Merge: best score per video_id across both levels
+            video_scores: Dict[str, float] = {}
+            for r in cg_results:
+                vid = r.get("video_id")
+                if vid:
+                    video_scores[vid] = max(video_scores.get(vid, 0), r.get("max_score", 0))
+            for r in ch_results:
+                vid = r.get("video_id")
+                if vid:
+                    video_scores[vid] = max(video_scores.get(vid, 0), r.get("max_score", 0))
+
+            # Rank by score, take top-limit
+            ranked = sorted(video_scores.items(), key=lambda x: x[1], reverse=True)[:limit]
+            video_ids = [vid for vid, _ in ranked]
+
+            _log(
+                f"{_YELLOW}Found {len(video_ids)} videos "
+                f"(ChapterGroup: {len(cg_results)}, Chapter: {len(ch_results)}, "
+                f"merged: {len(video_scores)}){_RESET}"
+            )
             return video_ids
 
         except Exception as e:
