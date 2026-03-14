@@ -15,87 +15,67 @@ from typing import Any, AsyncGenerator, Dict, List, Optional
 from loguru import logger
 
 
-_DEDUP_GAP = 10  # seconds – ranges within this gap are merged
 
 
 def _dedup_sources(answer: str, sources: List[Dict]) -> tuple[str, List[Dict]]:
-    """Merge citations that reference the same video with overlapping/adjacent ranges.
+    """Merge all citations for the same video into a single citation.
 
-    Two citations are merged when they share a ``video_id`` and their time
-    ranges overlap or are within ``_DEDUP_GAP`` seconds of each other.
-    The answer text is updated so merged citation markers point to the
-    surviving citation numbers.
+    For each video_id, produces one citation whose start_time is the
+    minimum across all original citations and end_time is the maximum.
+    The answer text is updated so all old markers map to the new numbers.
     """
     if len(sources) <= 1:
         return answer, sources
 
     # Group by video_id preserving order of first appearance
+    seen_order: List[str] = []
     groups: Dict[str, List[tuple[int, Dict]]] = defaultdict(list)
     for idx, src in enumerate(sources):
-        groups[src["video_id"]].append((idx, src))
+        vid = src["video_id"]
+        if vid not in groups:
+            seen_order.append(vid)
+        groups[vid].append((idx, src))
 
-    # For each video, merge overlapping/adjacent ranges
-    old_to_new: Dict[int, int] = {}  # old 1-based citation → new 1-based
+    # Merge all citations per video into one
+    old_to_new: Dict[int, int] = {}  # old 1-based → new 1-based
     merged: List[Dict] = []
 
-    for vid, items in groups.items():
-        # Sort by start_time
-        items.sort(key=lambda x: x[1].get("start_time", 0))
-        clusters: List[tuple[List[int], float, float]] = []  # (old_indices, start, end)
+    for vid in seen_order:
+        items = groups[vid]
+        new_num = len(merged) + 1
+        start = min(s.get("start_time", 0) for _, s in items)
+        end = max(s.get("end_time", 0) for _, s in items)
+        for old_idx, _ in items:
+            old_to_new[old_idx + 1] = new_num
+        merged.append({
+            "citation": f"[{new_num}]",
+            "video_id": vid,
+            "start_time": start,
+            "end_time": end,
+        })
 
-        for old_idx, src in items:
-            st = src.get("start_time", 0)
-            et = src.get("end_time", st)
-            if clusters and st <= clusters[-1][2] + _DEDUP_GAP:
-                # Extend current cluster
-                clusters[-1][0].append(old_idx)
-                clusters[-1] = (
-                    clusters[-1][0],
-                    clusters[-1][1],
-                    max(clusters[-1][2], et),
-                )
-            else:
-                clusters.append(([old_idx], st, et))
+    # Valid final citation numbers
+    valid_nums = set(range(1, len(merged) + 1))
 
-        for old_indices, start, end in clusters:
-            new_num = len(merged) + 1
-            for oi in old_indices:
-                old_to_new[oi + 1] = new_num  # 1-based
-            merged.append({
-                "citation": f"[{new_num}]",
-                "video_id": vid,
-                "start_time": start,
-                "end_time": end,
-            })
-
-    # Re-sort merged list by first-appearance order of the original citations
-    first_old = {}
-    for old1, new1 in old_to_new.items():
-        if new1 not in first_old or old1 < first_old[new1]:
-            first_old[new1] = old1
-    merged.sort(key=lambda s: first_old.get(int(s["citation"].strip("[]")), 999))
-
-    # Reassign sequential citation numbers after sorting
-    final_map: Dict[int, int] = {}  # intermediate new → final sequential
-    final_sources: List[Dict] = []
-    for seq, src in enumerate(merged, 1):
-        old_new_num = int(src["citation"].strip("[]"))
-        final_map[old_new_num] = seq
-        final_sources.append({**src, "citation": f"[{seq}]"})
-
-    # Build complete old_1based → final_sequential map
-    full_map: Dict[int, int] = {}
-    for old1, intermediate in old_to_new.items():
-        full_map[old1] = final_map[intermediate]
-
-    # Rewrite citation markers in the answer text
+    # Rewrite citation markers in the answer text; drop orphans
     def _replace_marker(m: re.Match) -> str:
         n = int(m.group(1))
-        return f"[{full_map.get(n, n)}]"
+        mapped = old_to_new.get(n)
+        if mapped is not None:
+            return f"[{mapped}]"
+        # Orphan marker — not in old_to_new but might already be a valid final num
+        if n in valid_nums:
+            return f"[{n}]"
+        return ""  # strip invalid markers
 
     new_answer = re.sub(r"\[(\d+)\]", _replace_marker, answer)
 
-    return new_answer, final_sources
+    # Collapse runs of identical markers: [1][1][1] → [1]
+    new_answer = re.sub(r"(\[\d+\])(?:\s*\1)+", r"\1", new_answer)
+    # Clean up leftover whitespace from removed markers
+    new_answer = re.sub(r"  +", " ", new_answer)
+
+    return new_answer, merged
 
 
 def _format_evidence_compact(evidence: List[Dict[str, Any]]) -> str:
