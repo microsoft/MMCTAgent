@@ -159,9 +159,10 @@ SYNTHESIZE_PROMPT = """You are an answer synthesizer for a Video QA system. Writ
 
 - Every claim needs a citation [1], [2], etc. Each citation = one source with video_id + start_time + end_time (REQUIRED numbers, never null).
 - **Citation accuracy is critical.** A citation must point to evidence that DIRECTLY supports the specific claim. Do NOT cite evidence that merely mentions the topic tangentially.
+- **Use timestamps from evidence for precise citations.** Evidence lines starting with [Xs] contain the exact second where that information appears. Extract start_time from the FIRST relevant [Xs] marker and end_time from the LAST relevant [Xs] marker. Do NOT guess or use round numbers — use the exact [Xs] values from the evidence text.
 - **For definition queries** ("defines X", "what is X"): only cite the evidence chunk where the concept is actually defined or formally introduced — NOT chunks that merely use or reference the concept.
-- **Minimize citations.** Merge chapters from the same video covering the same topic into ONE citation with the widest time range.
-- **Use ALL relevant evidence.** If results come from multiple videos, cite ALL of them.
+- **Deduplicate citations.** Multiple evidence chunks from the SAME video with adjacent or overlapping time ranges MUST be merged into ONE citation with the combined time range (earliest start_time to latest end_time). Never emit two citations pointing to the same video_id unless they cover clearly different topics separated by >120 seconds.
+- **Use ALL relevant evidence.** If results come from multiple videos, cite ALL of them — but keep at most one citation per video per topic.
 - **Filter out tangential matches.** Only cite results that directly address the query. Discard evidence that mentions the topic in passing without providing the requested information.
 - Do NOT mention internal graph terms (ChapterGroup, Chapter, Event, Object, Keyframe, node, graph).
 - Do NOT mention video IDs in the answer text. Use natural language ("the video explains...", "the lecture covers...").

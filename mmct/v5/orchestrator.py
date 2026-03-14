@@ -6,11 +6,145 @@ LLM calls only where intelligence is needed.
 """
 
 import json
+import re
 import time
+from collections import defaultdict
 from datetime import datetime
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
 from loguru import logger
+
+
+_DEDUP_GAP = 10  # seconds – ranges within this gap are merged
+
+
+def _dedup_sources(answer: str, sources: List[Dict]) -> tuple[str, List[Dict]]:
+    """Merge citations that reference the same video with overlapping/adjacent ranges.
+
+    Two citations are merged when they share a ``video_id`` and their time
+    ranges overlap or are within ``_DEDUP_GAP`` seconds of each other.
+    The answer text is updated so merged citation markers point to the
+    surviving citation numbers.
+    """
+    if len(sources) <= 1:
+        return answer, sources
+
+    # Group by video_id preserving order of first appearance
+    groups: Dict[str, List[tuple[int, Dict]]] = defaultdict(list)
+    for idx, src in enumerate(sources):
+        groups[src["video_id"]].append((idx, src))
+
+    # For each video, merge overlapping/adjacent ranges
+    old_to_new: Dict[int, int] = {}  # old 1-based citation → new 1-based
+    merged: List[Dict] = []
+
+    for vid, items in groups.items():
+        # Sort by start_time
+        items.sort(key=lambda x: x[1].get("start_time", 0))
+        clusters: List[tuple[List[int], float, float]] = []  # (old_indices, start, end)
+
+        for old_idx, src in items:
+            st = src.get("start_time", 0)
+            et = src.get("end_time", st)
+            if clusters and st <= clusters[-1][2] + _DEDUP_GAP:
+                # Extend current cluster
+                clusters[-1][0].append(old_idx)
+                clusters[-1] = (
+                    clusters[-1][0],
+                    clusters[-1][1],
+                    max(clusters[-1][2], et),
+                )
+            else:
+                clusters.append(([old_idx], st, et))
+
+        for old_indices, start, end in clusters:
+            new_num = len(merged) + 1
+            for oi in old_indices:
+                old_to_new[oi + 1] = new_num  # 1-based
+            merged.append({
+                "citation": f"[{new_num}]",
+                "video_id": vid,
+                "start_time": start,
+                "end_time": end,
+            })
+
+    # Re-sort merged list by first-appearance order of the original citations
+    first_old = {}
+    for old1, new1 in old_to_new.items():
+        if new1 not in first_old or old1 < first_old[new1]:
+            first_old[new1] = old1
+    merged.sort(key=lambda s: first_old.get(int(s["citation"].strip("[]")), 999))
+
+    # Reassign sequential citation numbers after sorting
+    final_map: Dict[int, int] = {}  # intermediate new → final sequential
+    final_sources: List[Dict] = []
+    for seq, src in enumerate(merged, 1):
+        old_new_num = int(src["citation"].strip("[]"))
+        final_map[old_new_num] = seq
+        final_sources.append({**src, "citation": f"[{seq}]"})
+
+    # Build complete old_1based → final_sequential map
+    full_map: Dict[int, int] = {}
+    for old1, intermediate in old_to_new.items():
+        full_map[old1] = final_map[intermediate]
+
+    # Rewrite citation markers in the answer text
+    def _replace_marker(m: re.Match) -> str:
+        n = int(m.group(1))
+        return f"[{full_map.get(n, n)}]"
+
+    new_answer = re.sub(r"\[(\d+)\]", _replace_marker, answer)
+
+    return new_answer, final_sources
+
+
+def _format_evidence_compact(evidence: List[Dict[str, Any]]) -> str:
+    """Format evidence list as compact text instead of verbose JSON.
+
+    For Chapter nodes with timestamped descriptions ([Xs] markers),
+    chapter-level start/end times are omitted so the LLM must use
+    the specific [Xs] timestamps for citations.
+    """
+    if not evidence:
+        return "No evidence retrieved."
+
+    lines = []
+    for item in evidence:
+        node_type = item.get("node_type", "?")
+        video_id = item.get("video_id", "?")
+        score = item.get("score")
+        start = item.get("start_time")
+        end = item.get("end_time")
+        chunk_idx = item.get("chunk_index")
+        node_id = item.get("node_id", "")
+
+        # Content — pick the main text field by node type
+        content = (
+            item.get("summary")
+            or item.get("transcript")
+            or item.get("description")
+            or ""
+        )
+
+        # Header line
+        parts = [node_type, f"video:{video_id}"]
+        if chunk_idx is not None:
+            parts.append(f"chunk:{chunk_idx}")
+        # Only include chapter-level time range when content lacks [Xs] markers
+        has_inline_timestamps = "[" in content and "s]" in content
+        if start is not None and end is not None and not has_inline_timestamps:
+            parts.append(f"{start}-{end}s")
+        if score is not None:
+            parts.append(f"score:{score:.2f}")
+        parts.append(f"id:{node_id}")
+        header = " | ".join(parts)
+
+        lines.append(f"[{header}]")
+        if content:
+            lines.append(content)
+        lines.append("")  # blank separator
+
+    return "\n".join(lines).rstrip()
 
 from mmct.v5.state_machine import (
     QueryContext,
@@ -358,7 +492,7 @@ class V5Orchestrator:
 
     async def _state_discover_videos(self, ctx: QueryContext) -> QueryState:
         """Discover relevant videos for cross-video scope. No LLM."""
-        discovered = await self._discovery.discover(query=ctx.query, limit=5)
+        discovered = await self._discovery.discover(query=ctx.query, limit=8)
 
         if not discovered:
             logger.warning(f"[{ctx.request_id}] No videos discovered")
@@ -536,7 +670,7 @@ class V5Orchestrator:
         self, ctx: QueryContext, llm: StructuredLLMClient
     ) -> QueryState:
         """LLM writes answer with citations from evidence."""
-        evidence_str = json.dumps(ctx.evidence, indent=2, default=str) if ctx.evidence else "No evidence retrieved."
+        evidence_str = _format_evidence_compact(ctx.evidence)
         image_str = (
             json.dumps(ctx.image_analyses, indent=2, default=str)
             if ctx.image_analyses
@@ -557,10 +691,11 @@ class V5Orchestrator:
             )
             ctx.answer = result.answer
             ctx.sources = [s.model_dump() for s in result.sources]
+            ctx.answer, ctx.sources = _dedup_sources(ctx.answer, ctx.sources)
             _print_state(
                 QueryState.SYNTHESIZE,
                 ctx.request_id,
-                f"answer={len(result.answer)} chars, {len(result.sources)} citations",
+                f"answer={len(result.answer)} chars, {len(ctx.sources)} citations",
             )
         except Exception as e:
             logger.error(f"[{ctx.request_id}] Synthesis failed: {e}")
@@ -575,7 +710,7 @@ class V5Orchestrator:
         self, ctx: QueryContext, llm: StructuredLLMClient
     ) -> QueryState:
         """LLM evaluates answer quality."""
-        evidence_str = json.dumps(ctx.evidence, indent=2, default=str) if ctx.evidence else ""
+        evidence_str = _format_evidence_compact(ctx.evidence)
         user_msg = build_critique_user_message(
             query=ctx.query,
             answer=ctx.answer or "",
@@ -617,7 +752,7 @@ class V5Orchestrator:
     ) -> QueryState:
         """LLM revises answer based on critic feedback."""
         ctx.revise_attempts += 1
-        evidence_str = json.dumps(ctx.evidence, indent=2, default=str) if ctx.evidence else ""
+        evidence_str = _format_evidence_compact(ctx.evidence)
         feedback_str = json.dumps(ctx.critic_feedback, indent=2) if ctx.critic_feedback else ""
 
         user_msg = build_revise_user_message(
@@ -635,10 +770,11 @@ class V5Orchestrator:
             )
             ctx.answer = result.answer
             ctx.sources = [s.model_dump() for s in result.sources]
+            ctx.answer, ctx.sources = _dedup_sources(ctx.answer, ctx.sources)
             _print_state(
                 QueryState.REVISE,
                 ctx.request_id,
-                f"revised answer={len(result.answer)} chars",
+                f"revised answer={len(result.answer)} chars, {len(ctx.sources)} citations",
             )
         except Exception as e:
             logger.warning(f"[{ctx.request_id}] Revision failed: {e}")
