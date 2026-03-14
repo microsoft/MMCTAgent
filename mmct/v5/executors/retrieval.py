@@ -71,15 +71,16 @@ class RetrievalExecutor(OutputFormatterMixin):
             *[self.embedding_provider.embedding(sq) for sq in sub_queries]
         )
 
-        # Parallel: run search for each sub-query
+        # Parallel: run search for each sub-query (hybrid: vector + keyword)
         search_tasks = [
             self.neo4j_provider.search_multiple_granularities(
                 query_embedding=emb,
                 targets=targets,
                 video_ids=video_ids,
                 limit_per_type=limit,
+                query_text=sq,
             )
-            for emb in embeddings
+            for emb, sq in zip(embeddings, sub_queries)
         ]
         all_results = await asyncio.gather(*search_tasks)
 
@@ -164,7 +165,11 @@ class RetrievalExecutor(OutputFormatterMixin):
         all_results: List[Dict[str, list]],
         targets: List[str],
     ) -> List[Dict[str, Any]]:
-        """Merge and deduplicate results from multiple sub-query searches."""
+        """Merge, deduplicate, and diversify results from multiple sub-query searches.
+
+        Guarantees video diversity: reserves the top-scoring result from each
+        discovered video, then fills the remaining slots by global score.
+        """
         seen_ids = set()
         merged = []
 
@@ -198,9 +203,48 @@ class RetrievalExecutor(OutputFormatterMixin):
 
                     merged.append(entry)
 
+        # Video diversity: ensure every discovered video gets representation
+        merged = self._diversify_by_video(merged)
+
         total = len(merged)
-        _log("search", f"{_YELLOW}Found {total} results (deduplicated){_RESET}")
+        _log("search", f"{_YELLOW}Found {total} results (deduplicated, diversified){_RESET}")
         return merged
+
+    @staticmethod
+    def _diversify_by_video(results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Re-rank results to guarantee min-1-per-video representation.
+
+        Strategy:
+        1. Group results by video_id
+        2. Pick the top-scoring result from each video (reserved slots)
+        3. Fill remaining slots from the rest, sorted by score
+        4. Return reserved + remainder
+        """
+        if not results:
+            return results
+
+        from collections import defaultdict
+        by_video: dict = defaultdict(list)
+        for r in results:
+            vid = r.get("video_id") or "unknown"
+            by_video[vid].append(r)
+
+        # Sort each video's results by score descending
+        for vid in by_video:
+            by_video[vid].sort(key=lambda x: x.get("score", 0), reverse=True)
+
+        # Reserve top-1 per video
+        reserved = []
+        remainder = []
+        for vid, items in by_video.items():
+            reserved.append(items[0])
+            remainder.extend(items[1:])
+
+        # Sort reserved by score, remainder by score
+        reserved.sort(key=lambda x: x.get("score", 0), reverse=True)
+        remainder.sort(key=lambda x: x.get("score", 0), reverse=True)
+
+        return reserved + remainder
 
     def _format_node_results(self, results: list, node_type_name: str) -> List[Dict[str, Any]]:
         """Format raw node results with registry-based formatting."""

@@ -38,6 +38,12 @@ from mmct.graph import node_registry
 # Recommended: ef_search >= k (limit) for good results
 DEFAULT_EF_SEARCH = 100
 
+# Fulltext index names for keyword search (Lucene-based)
+FULLTEXT_INDEX_MAP = {
+    "Chapter": "chapter_fulltext_index",
+    "ChapterGroup": "chaptergroup_fulltext_index",
+}
+
 
 @dataclass
 class SearchResult:
@@ -323,8 +329,9 @@ class Neo4jQueryProvider:
         time_range: Optional[Tuple[float, float]] = None,
         limit_per_type: int = 5,
         sort_by_time: bool = False,
+        query_text: Optional[str] = None,
     ) -> Dict[str, List[SearchResult]]:
-        """Search multiple node types in parallel.
+        """Search multiple node types in parallel with hybrid vector + keyword search.
         
         Args:
             query_embedding: Query vector.
@@ -333,6 +340,7 @@ class Neo4jQueryProvider:
             time_range: Optional (start_time, end_time) tuple for temporal filtering.
             limit_per_type: Maximum results per node type.
             sort_by_time: If True, sort results chronologically instead of by score.
+            query_text: Optional raw query text for keyword search (hybrid mode).
             
         Returns:
             Dictionary mapping node type to list of SearchResults.
@@ -346,28 +354,62 @@ class Neo4jQueryProvider:
         if not valid_targets:
             return {}
         
-        # Execute searches in parallel
-        tasks = [
-            self._vector_search(
-                node_type=target,
-                query_embedding=query_embedding,
-                video_ids=video_ids,
-                time_range=time_range,
-                limit=limit_per_type,
-                sort_by_time=sort_by_time,
+        # Build tasks: vector search for all targets + keyword search for eligible targets
+        tasks = []
+        task_labels = []
+        
+        for target in valid_targets:
+            tasks.append(
+                self._vector_search(
+                    node_type=target,
+                    query_embedding=query_embedding,
+                    video_ids=video_ids,
+                    time_range=time_range,
+                    limit=limit_per_type,
+                    sort_by_time=sort_by_time,
+                )
             )
-            for target in valid_targets
-        ]
+            task_labels.append(("vector", target))
+        
+        # Add keyword search for types that have fulltext indexes
+        if query_text:
+            for target in valid_targets:
+                if target in FULLTEXT_INDEX_MAP:
+                    tasks.append(
+                        self._keyword_search(
+                            node_type=target,
+                            query_text=query_text,
+                            video_ids=video_ids,
+                            limit=limit_per_type,
+                        )
+                    )
+                    task_labels.append(("keyword", target))
         
         results = await asyncio.gather(*tasks, return_exceptions=True)
         
-        output = {}
-        for target, result in zip(valid_targets, results):
+        # Collect vector and keyword results per target
+        vector_by_type: Dict[str, List[SearchResult]] = {}
+        keyword_by_type: Dict[str, List[SearchResult]] = {}
+        
+        for (search_type, target), result in zip(task_labels, results):
             if isinstance(result, Exception):
-                logger.error(f"Error searching {target}: {result}")
-                output[target] = []
+                logger.error(f"Error in {search_type} search for {target}: {result}")
+                continue
+            if search_type == "vector":
+                vector_by_type[target] = result
             else:
-                output[target] = result
+                keyword_by_type[target] = result
+        
+        # Merge vector + keyword results per type
+        output = {}
+        for target in valid_targets:
+            vec = vector_by_type.get(target, [])
+            kw = keyword_by_type.get(target, [])
+            if kw:
+                merged = self._merge_search_results(vec, kw)
+                output[target] = merged[:limit_per_type * 2]  # allow more results from hybrid
+            else:
+                output[target] = vec
         
         return output
     
@@ -510,6 +552,100 @@ class Neo4jQueryProvider:
             logger.error(f"HNSW vector search failed for {node_type}: {e}")
             return []
     
+    async def _keyword_search(
+        self,
+        node_type: str,
+        query_text: str,
+        video_ids: Optional[List[str]] = None,
+        limit: int = 5,
+    ) -> List[SearchResult]:
+        """Fulltext keyword search using Lucene indexes.
+        
+        Complements vector search by finding exact keyword matches.
+        Only available for node types with fulltext indexes (Chapter, ChapterGroup).
+        
+        Args:
+            node_type: Type of node to search.
+            query_text: Raw query text for keyword matching.
+            video_ids: Optional video ID filter.
+            limit: Maximum results.
+            
+        Returns:
+            List of SearchResult with Lucene relevance scores.
+        """
+        index_name = FULLTEXT_INDEX_MAP.get(node_type)
+        if not index_name:
+            return []
+        
+        await self._ensure_driver()
+        
+        nt = node_registry.get(node_type)
+        if not nt:
+            return []
+        
+        properties = nt.neo4j_properties
+        prop_return = ", ".join(f"node.{p} AS {p}" for p in properties)
+        
+        params = {
+            "query_text": query_text,
+            "limit": limit,
+        }
+        
+        video_filter = ""
+        if video_ids:
+            video_filter = "WHERE node.video_id IN $video_ids"
+            params["video_ids"] = video_ids
+        
+        query = f"""
+        CALL db.index.fulltext.queryNodes($index_name, $query_text)
+        YIELD node, score
+        {video_filter}
+        RETURN {prop_return}, score
+        ORDER BY score DESC
+        LIMIT $limit
+        """
+        params["index_name"] = index_name
+        
+        try:
+            records = await self._run_read(query, params)
+            
+            results = []
+            for record in records:
+                score = record.pop("score", 0.0)
+                node_id = record.get("node_id", "")
+                results.append(SearchResult(
+                    node_id=node_id,
+                    node_type=node_type,
+                    score=score,
+                    properties=record,
+                ))
+            
+            return results
+            
+        except Exception as e:
+            logger.error(f"Keyword search failed for {node_type}: {e}")
+            return []
+    
+    def _merge_search_results(
+        self,
+        vector_results: List[SearchResult],
+        keyword_results: List[SearchResult],
+    ) -> List[SearchResult]:
+        """Merge vector and keyword search results, deduplicating by node_id.
+        
+        For duplicate nodes, keeps the one with higher score.
+        Results are sorted by score descending.
+        """
+        seen = {}
+        for r in vector_results:
+            seen[r.node_id] = r
+        
+        for r in keyword_results:
+            if r.node_id not in seen or r.score > seen[r.node_id].score:
+                seen[r.node_id] = r
+        
+        return sorted(seen.values(), key=lambda x: x.score, reverse=True)
+    
     # =========================================================================
     # Cross-Video Discovery (1.4)
     # =========================================================================
@@ -574,6 +710,63 @@ class Neo4jQueryProvider:
             logger.error(f"Failed to find relevant videos: {e}")
             return []
     
+    async def find_relevant_videos_by_chapter(
+        self,
+        query_embedding: List[float],
+        video_ids: Optional[List[str]] = None,
+        limit: int = 10,
+    ) -> List[Dict[str, Any]]:
+        """Find relevant videos by searching Chapter-level embeddings.
+
+        Complements ChapterGroup-based discovery by searching at a finer
+        granularity. Chapters contain detailed topic descriptions that may
+        match queries missed by the coarser ChapterGroup summaries.
+
+        Args:
+            query_embedding: Query vector (384-dim).
+            video_ids: Optional list of video IDs to constrain results to.
+            limit: Maximum number of videos to return.
+
+        Returns:
+            List of dicts with video_id and max_score.
+        """
+        await self._ensure_driver()
+
+        chapter_type = node_registry.get("Chapter")
+        index_name = chapter_type.embedding_index_name if chapter_type else "chapter_embedding_index"
+
+        where_clause = ""
+        if video_ids:
+            where_clause = "WHERE node.video_id IN $video_ids"
+
+        query = f"""
+        CALL db.index.vector.queryNodes($index_name, $search_limit, $embedding)
+        YIELD node, score
+        {where_clause}
+        WITH node.video_id AS video_id,
+             MAX(score) AS max_score
+        RETURN video_id, max_score
+        ORDER BY max_score DESC
+        LIMIT $limit
+        """
+
+        params = {
+            "index_name": index_name,
+            "search_limit": limit * 8,
+            "embedding": query_embedding,
+            "limit": limit,
+        }
+        if video_ids:
+            params["video_ids"] = video_ids
+
+        try:
+            records = await self._run_read(query, params)
+            return records
+
+        except Exception as e:
+            logger.error(f"Failed to find relevant videos by chapter: {e}")
+            return []
+
     async def aggregate_video_summary(
         self,
         video_id: str,

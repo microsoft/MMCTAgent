@@ -103,7 +103,7 @@ class GraphSearchTool(OutputFormatterMixin):
             # Get query embedding
             query_embedding = await self.embedding_provider.embedding(query)
             
-            # Execute parallel searches
+            # Execute parallel searches (hybrid: vector + keyword)
             results = await self.neo4j_provider.search_multiple_granularities(
                 query_embedding=query_embedding,
                 targets=list(targets_set),
@@ -111,6 +111,7 @@ class GraphSearchTool(OutputFormatterMixin):
                 time_range=time_range,
                 limit_per_type=limit,
                 sort_by_time=sort_by_time,
+                query_text=query,
             )
             
             # Format results
