@@ -687,8 +687,9 @@ class Neo4jQueryProvider:
         {where_clause}
         WITH node.video_id AS video_id, 
              MAX(score) AS max_score,
-             COLLECT({{summary: node.summary, name: node.name, score: score}})[0..3] AS top_groups
-        RETURN video_id, max_score, top_groups
+             COLLECT({{summary: node.summary, name: node.name, score: score}})[0..3] AS top_groups,
+             COLLECT(node.video_title)[0] AS video_title
+        RETURN video_id, max_score, top_groups, video_title
         ORDER BY max_score DESC
         LIMIT $limit
         """
@@ -744,8 +745,9 @@ class Neo4jQueryProvider:
         YIELD node, score
         {where_clause}
         WITH node.video_id AS video_id,
-             MAX(score) AS max_score
-        RETURN video_id, max_score
+             MAX(score) AS max_score,
+             COLLECT(node.video_title)[0] AS video_title
+        RETURN video_id, max_score, video_title
         ORDER BY max_score DESC
         LIMIT $limit
         """
@@ -766,6 +768,26 @@ class Neo4jQueryProvider:
         except Exception as e:
             logger.error(f"Failed to find relevant videos by chapter: {e}")
             return []
+
+    async def get_video_titles(self, video_ids: List[str]) -> Dict[str, str]:
+        """Fetch video_title for a list of video IDs from ChapterGroup nodes.
+
+        Returns:
+            Dict mapping video_id → video_title (empty string if not found).
+        """
+        if not video_ids:
+            return {}
+        query = """
+        MATCH (cg:ChapterGroup)
+        WHERE cg.video_id IN $video_ids AND cg.video_title IS NOT NULL
+        RETURN DISTINCT cg.video_id AS video_id, cg.video_title AS title
+        """
+        try:
+            records = await self._run_read(query, {"video_ids": video_ids})
+            return {r["video_id"]: r["title"] for r in records}
+        except Exception as e:
+            logger.warning(f"Failed to fetch video titles: {e}")
+            return {}
 
     async def aggregate_video_summary(
         self,
@@ -1089,7 +1111,49 @@ class Neo4jQueryProvider:
             Node type string or None if cannot infer.
         """
         return node_registry.infer_type_from_id(node_id)
-    
+
+    async def get_sibling_chapters(
+        self,
+        chapter_ids: List[str],
+        limit: int = 20,
+    ) -> List[SearchResult]:
+        """Get all sibling Chapter nodes that share a parent ChapterGroup.
+
+        Given one or more Chapter node IDs, finds their parent ChapterGroup(s)
+        and returns ALL chapters in those groups, ordered by chunk_index.
+        """
+        if not chapter_ids:
+            return []
+
+        await self._ensure_driver()
+
+        chapter_nt = node_registry.get("Chapter")
+        properties = chapter_nt.neo4j_properties if chapter_nt else ["node_id", "video_id", "summary"]
+        prop_return = ", ".join(f"sibling.{p} AS {p}" for p in properties)
+
+        query = f"""
+        MATCH (c:Chapter)<-[:HAS_CHAPTER]-(cg:ChapterGroup)-[:HAS_CHAPTER]->(sibling:Chapter)
+        WHERE c.node_id IN $chapter_ids
+        RETURN DISTINCT {prop_return}
+        ORDER BY sibling.video_id, sibling.chunk_index
+        LIMIT $limit
+        """
+        try:
+            records = await self._run_read(query, {"chapter_ids": chapter_ids, "limit": limit})
+            results = []
+            for r in records:
+                props = {p: r.get(p) for p in properties}
+                results.append(SearchResult(
+                    node_id=r["node_id"],
+                    score=0.0,
+                    node_type="Chapter",
+                    properties=props,
+                ))
+            return results
+        except Exception as e:
+            logger.error(f"Failed to get sibling chapters: {e}")
+            return []
+
     async def traverse_relationships(
         self,
         source_ids: List[str],

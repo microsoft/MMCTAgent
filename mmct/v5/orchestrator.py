@@ -492,20 +492,47 @@ class V5Orchestrator:
 
     async def _state_discover_videos(self, ctx: QueryContext) -> QueryState:
         """Discover relevant videos for cross-video scope. No LLM."""
-        discovered = await self._discovery.discover(query=ctx.query, limit=8)
+        ranked = await self._discovery.discover(query=ctx.query, limit=8)
 
-        if not discovered:
+        if not ranked:
             logger.warning(f"[{ctx.request_id}] No videos discovered")
             ctx.answer = "No relevant videos found in the knowledge graph."
             ctx.sources = []
             return QueryState.SUBMIT
 
-        ctx.effective_video_ids = discovered
+        _SUMMARY_KEYWORDS = {"summary", "recap", "review of weeks", "summary of weeks"}
+
+        selected = []
+        demoted = []
+        for vid, score, title in ranked:
+            is_summary = any(kw in title.lower() for kw in _SUMMARY_KEYWORDS)
+            if is_summary:
+                demoted.append((vid, score, title))
+            else:
+                selected.append(vid)
+
+        # Take top 3 non-summary; if fewer than 3, fill from demoted
+        MAX_RETRIEVAL_VIDEOS = 3
+        if len(selected) > MAX_RETRIEVAL_VIDEOS:
+            selected = selected[:MAX_RETRIEVAL_VIDEOS]
+        elif len(selected) < MAX_RETRIEVAL_VIDEOS and demoted:
+            for vid, _, _ in demoted:
+                if len(selected) >= MAX_RETRIEVAL_VIDEOS:
+                    break
+                selected.append(vid)
+
+        ctx.effective_video_ids = selected
         _print_state(
             QueryState.DISCOVER_VIDEOS,
             ctx.request_id,
-            f"found {len(discovered)} videos: {discovered}",
+            f"discovered {len(ranked)} → selected {len(selected)} videos: {selected}",
         )
+        if demoted:
+            _print_state(
+                QueryState.DISCOVER_VIDEOS,
+                ctx.request_id,
+                f"demoted summary videos: {[(v, t) for v, _, t in demoted]}",
+            )
         return QueryState.RETRIEVE
 
     async def _state_retrieve(self, ctx: QueryContext) -> QueryState:
@@ -593,8 +620,8 @@ class V5Orchestrator:
             return self._route_after_expansion(ctx)
 
         # Execute each traversal operation
-        valid_targets = {"ChapterGroup", "Chapter", "Event", "Transcript", "Keyframe", "Object"}
-        for op in result.operations:
+        valid_targets = {"SiblingChapters", "ChapterGroup", "Chapter", "Event", "Transcript", "Keyframe", "Object"}
+        for op in result.operations[:1]:  # at most 1 operation
             if op.target not in valid_targets:
                 logger.warning(f"[{ctx.request_id}] Invalid expansion target: {op.target}")
                 continue
@@ -607,11 +634,17 @@ class V5Orchestrator:
                 f"traversing {len(op.node_ids)} node(s) → {op.target} ({op.reason})",
             )
             try:
-                expanded = await self._retrieval.traverse(
-                    node_ids=op.node_ids,
-                    target=op.target,
-                    limit=20,
-                )
+                if op.target == "SiblingChapters":
+                    expanded = await self._retrieval.get_sibling_chapters(
+                        chapter_ids=op.node_ids,
+                        limit=20,
+                    )
+                else:
+                    expanded = await self._retrieval.traverse(
+                        node_ids=op.node_ids,
+                        target=op.target,
+                        limit=20,
+                    )
                 if expanded:
                     # Deduplicate against existing evidence
                     existing_ids = {e.get("node_id") for e in ctx.evidence}
@@ -620,8 +653,20 @@ class V5Orchestrator:
                     _print_state(
                         QueryState.EXPAND_CONTEXT,
                         ctx.request_id,
-                        f"+{len(new_items)} new results from {op.target} traversal",
+                        f"+{len(new_items)} new results from {op.target}",
                     )
+                    for ni in new_items:
+                        vid = ni.get("video_id", "?")
+                        ntype = ni.get("node_type", "?")
+                        st = ni.get("start_time", "")
+                        et = ni.get("end_time", "")
+                        desc = ni.get("summary") or ni.get("description") or ""
+                        time_range = f" [{st}-{et}s]" if st != "" else ""
+                        _print_state(
+                            QueryState.EXPAND_CONTEXT,
+                            ctx.request_id,
+                            f"  + {ntype} {vid}{time_range}: {desc}",
+                        )
             except Exception as e:
                 logger.warning(f"[{ctx.request_id}] Traversal error: {e}")
 
@@ -695,8 +740,15 @@ class V5Orchestrator:
             _print_state(
                 QueryState.SYNTHESIZE,
                 ctx.request_id,
-                f"answer={len(result.answer)} chars, {len(ctx.sources)} citations",
+                f"answer={len(result.answer)} chars, {len(ctx.sources)} citations"
+                f" (pre-dedup: {len(result.sources)})",
             )
+            for src in ctx.sources:
+                _print_state(
+                    QueryState.SYNTHESIZE,
+                    ctx.request_id,
+                    f"  {src['citation']} {src['video_id']} [{src['start_time']}-{src['end_time']}s]",
+                )
         except Exception as e:
             logger.error(f"[{ctx.request_id}] Synthesis failed: {e}")
             ctx.answer = "Failed to synthesize answer from evidence."

@@ -121,6 +121,20 @@ class RetrievalExecutor(OutputFormatterMixin):
         )
         return self._format_node_results(results, target)
 
+    async def get_sibling_chapters(
+        self,
+        chapter_ids: List[str],
+        limit: int = 20,
+    ) -> List[Dict[str, Any]]:
+        """Get all sibling chapters sharing the same parent ChapterGroup."""
+        _log("siblings", f"chapters={chapter_ids[:3]} → sibling Chapters")
+
+        results = await self.neo4j_provider.get_sibling_chapters(
+            chapter_ids=chapter_ids,
+            limit=limit,
+        )
+        return self._format_node_results(results, "Chapter")
+
     async def search_keyframes(
         self,
         query: str,
@@ -208,6 +222,19 @@ class RetrievalExecutor(OutputFormatterMixin):
 
         total = len(merged)
         _log("search", f"{_YELLOW}Found {total} results (deduplicated, diversified){_RESET}")
+        for i, r in enumerate(merged):
+            vid = r.get("video_id", "?")
+            ntype = r.get("node_type", "?")
+            score = r.get("score", 0)
+            st = r.get("start_time", "")
+            et = r.get("end_time", "")
+            title = r.get("video_title", "")
+            desc = r.get("summary") or r.get("description") or r.get("transcript") or ""
+            time_range = f" [{st}-{et}s]" if st != "" else ""
+            title_str = f" ({title})" if title else ""
+            _log("search", f"  [{i+1}] {ntype} {vid}{time_range} score={score:.4f}{title_str}")
+            if desc:
+                _log("search", f"       {desc}")
         return merged
 
     @staticmethod

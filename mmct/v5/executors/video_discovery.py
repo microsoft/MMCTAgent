@@ -33,7 +33,7 @@ class VideoDiscoveryExecutor:
         self,
         query: str,
         limit: int = 8,
-    ) -> List[str]:
+    ) -> List[tuple[str, float, str]]:
         """Find video IDs relevant to a query using multi-level discovery.
 
         Searches both ChapterGroup summaries and Chapter-level content,
@@ -44,7 +44,7 @@ class VideoDiscoveryExecutor:
             limit: Maximum videos to return.
 
         Returns:
-            List of relevant video_id strings, ranked by best score.
+            List of (video_id, score, video_title) tuples, ranked by score desc.
         """
         _log(f"query='{query[:50]}...' limit={limit}")
         try:
@@ -61,27 +61,37 @@ class VideoDiscoveryExecutor:
             )
             cg_results, ch_results = await asyncio.gather(cg_task, ch_task)
 
-            # Merge: best score per video_id across both levels
+            # Merge: best score per video_id across both levels, collect titles
             video_scores: Dict[str, float] = {}
+            video_titles: Dict[str, str] = {}
             for r in cg_results:
                 vid = r.get("video_id")
                 if vid:
                     video_scores[vid] = max(video_scores.get(vid, 0), r.get("max_score", 0))
+                    if r.get("video_title") and vid not in video_titles:
+                        video_titles[vid] = r["video_title"]
             for r in ch_results:
                 vid = r.get("video_id")
                 if vid:
                     video_scores[vid] = max(video_scores.get(vid, 0), r.get("max_score", 0))
+                    if r.get("video_title") and vid not in video_titles:
+                        video_titles[vid] = r["video_title"]
 
-            # Rank by score, take top-limit
-            ranked = sorted(video_scores.items(), key=lambda x: x[1], reverse=True)[:limit]
-            video_ids = [vid for vid, _ in ranked]
+            # Rank by score, take top-limit — return (video_id, score, title) tuples
+            ranked_scores = sorted(video_scores.items(), key=lambda x: x[1], reverse=True)[:limit]
+            ranked = [
+                (vid, score, video_titles.get(vid, ""))
+                for vid, score in ranked_scores
+            ]
 
             _log(
-                f"{_YELLOW}Found {len(video_ids)} videos "
+                f"{_YELLOW}Found {len(ranked)} videos "
                 f"(ChapterGroup: {len(cg_results)}, Chapter: {len(ch_results)}, "
                 f"merged: {len(video_scores)}){_RESET}"
             )
-            return video_ids
+            for vid, sc, title in ranked:
+                _log(f"  {vid} score={sc:.4f} \"{title}\"")
+            return ranked
 
         except Exception as e:
             logger.error(f"Video discovery failed: {e}")

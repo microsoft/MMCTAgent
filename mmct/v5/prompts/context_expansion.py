@@ -20,7 +20,7 @@ class TraversalOp(BaseModel):
         description="Source node IDs to traverse from (e.g. ['chapter_E7VhAVeKUk8_009'])."
     )
     target: str = Field(
-        description="Target node type to traverse to. One of: ChapterGroup, Chapter, Event, Transcript, Keyframe, Object."
+        description="Target node type to traverse to. One of: SiblingChapters, Event, Transcript."
     )
     reason: str = Field(
         description="Brief reason this expansion is needed."
@@ -59,7 +59,7 @@ Your job is to decide whether the retrieved evidence is sufficient for a complet
 
 ```
 ChapterGroup  — High-level topic sections (broad summary, list of topics)
-  └─ HAS_CHAPTER → Chapter  — 3-5 min segments with multimodal summaries
+  └─ HAS_CHAPTER → Chapter  — 3-5 min segments with timestamped descriptions
        ├─ HAS_TRANSCRIPT → Transcript  — Raw speech text (same time range as Chapter)
        ├─ HAS_EVENT → Event  — Atomic actions/moments (5-30s each)
        │    └─ CONTAINS → Object  — Entities: people, items, text on screen
@@ -68,20 +68,18 @@ ChapterGroup  — High-level topic sections (broad summary, list of topics)
 
 Temporal navigation: Chapters and Events are ordered by chunk_index within their parent.
 
-# TRAVERSAL DIRECTIONS
+# AVAILABLE OPERATIONS
 
-You can traverse in any direction:
-- **UP** (child → parent): Chapter → ChapterGroup, Event → Chapter, Transcript → Chapter, etc.
-- **DOWN** (parent → child): ChapterGroup → Chapter, Chapter → Event, Chapter → Transcript, etc.
-- **SIBLING** (via shared parent): Event → Keyframe (via Chapter), Event → Transcript (via Chapter)
+1. **SIBLINGS** (target: "SiblingChapters"): Given a Chapter node_id, fetch ALL sibling Chapters that share the same parent ChapterGroup. Use this to get surrounding context — the chapters before and after the matched one.
+2. **DOWN to Event** (target: "Event"): Given a Chapter node_id, fetch its child Event nodes for fine-grained step-by-step details.
+3. **DOWN to Transcript** (target: "Transcript"): Given a Chapter node_id, fetch raw speech text for exact quotes.
 
 # WHEN TO EXPAND
 
-- **Definition / introduction queries** ("defines X", "what is X", "introduce"): If the earliest matched Chapter has chunk_index > 0, traverse UP to ChapterGroup to find the topic's true start.
-- **Process / step-by-step queries**: If only Chapters are retrieved, traverse DOWN to Events for finer-grained steps.
+- **Definition / introduction / evolution queries**: If the earliest matched Chapter has chunk_index > 0, use SIBLINGS to get the full topic context (preceding and following chapters in the group).
+- **"What happens before/after" queries**: Use SIBLINGS to get surrounding chapters.
 - **Quote / verbatim queries**: If only Chapters are retrieved, traverse DOWN to Transcript for exact words.
-- **"What happens before/after" queries**: Traverse UP to ChapterGroup to find surrounding context.
-- **Entity queries**: If Events are retrieved but entity details are missing, traverse DOWN to Objects.
+- **ONLY use DOWN to Event when Chapter timestamped descriptions lack sufficient detail** — e.g., the query asks for specific step-by-step actions and the chapter summary is too vague. Chapters already contain [Xs] timestamped lines, so Events are rarely needed.
 
 # WHEN NOT TO EXPAND
 
@@ -94,7 +92,8 @@ You can traverse in any direction:
 
 - Return `needs_expansion: false` with empty operations if no expansion is needed. Be conservative — only expand when it clearly helps.
 - Each operation specifies source node_ids and a target type.
-- Keep operations minimal — at most 2-3 traversals. Don't over-fetch.
+- **At most 1 expansion operation.** Do NOT chain multiple traversals.
+- You MAY include **multiple node_ids** in a single operation to expand several chapters at once.
 - Use node_ids from the evidence provided — do NOT invent node IDs.
 
 # OUTPUT FORMAT
@@ -104,9 +103,9 @@ Respond with ONLY valid JSON matching this schema:
   "needs_expansion": true/false,
   "operations": [
     {
-      "node_ids": ["chapter_ABC_003"],
-      "target": "ChapterGroup",
-      "reason": "Query asks for definition; chapter starts mid-topic, need parent for true start"
+      "node_ids": ["chapter_ABC_003", "chapter_DEF_001"],
+      "target": "SiblingChapters",
+      "reason": "Query asks for evolution across lectures; need surrounding chapters for full context"
     }
   ]
 }"""
