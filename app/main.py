@@ -9,7 +9,7 @@ app = FastAPI(
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
-    openapi_url="/openapi.json"
+    openapi_url="/openapi.json",
 )
 
 app.add_middleware(
@@ -17,7 +17,7 @@ app.add_middleware(
     allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
-    allow_credentials=True
+    allow_credentials=True,
 )
 
 app.include_router(query.router)
@@ -28,7 +28,7 @@ def custom_openapi():
     """Generate custom OpenAPI schema."""
     if app.openapi_schema:
         return app.openapi_schema
-    
+
     openapi_schema = get_openapi(
         title="MMCT Agent API",
         version="1.0.0",
@@ -54,20 +54,15 @@ def custom_openapi():
         tags=[
             {
                 "name": "query",
-                "description": "Query operations for image, video, and document analysis"
+                "description": "Query operations for image, video, and document analysis",
             },
-            {
-                "name": "ingestion",
-                "description": "Document and media ingestion operations"
-            }
-        ]
+            {"name": "ingestion", "description": "Document and media ingestion operations"},
+        ],
     )
-    
+
     # Add custom extensions
-    openapi_schema["info"]["x-logo"] = {
-        "url": "https://example.com/logo.png"
-    }
-    
+    openapi_schema["info"]["x-logo"] = {"url": "https://example.com/logo.png"}
+
     app.openapi_schema = openapi_schema
     return app.openapi_schema
 
@@ -84,7 +79,7 @@ async def root():
         "description": "Multi-modal Critical Thinking Agent Framework",
         "docs_url": "/docs",
         "redoc_url": "/redoc",
-        "openapi_url": "/openapi.json"
+        "openapi_url": "/openapi.json",
     }
 
 
@@ -97,9 +92,25 @@ async def health_check():
 @app.get("/providers", tags=["providers"])
 async def get_supported_providers():
     """Get information about supported providers."""
-    from mmct.providers.factory import provider_factory
-    
     return {
-        "supported_providers": provider_factory.get_supported_providers(),
-        "message": "These are the currently supported providers for each service type"
+        "supported_providers": {
+            "llm": ["AzureLLMProvider", "AzureReasoningLLMProvider", "OpenAILLMProvider"],
+            "embedding": ["AzureEmbeddingProvider", "OpenAIEmbeddingProvider"],
+            "image_embedding": ["ClipImageEmbeddingProvider"],
+            "storage": ["AzureStorageProvider", "LocalStorageProvider"],
+            "vector_db": [
+                "AISearchChapterProvider",
+                "AISearchKeyframesProvider",
+                "AISearchObjectCollectionProvider",
+                "LocalFaissSearchProvider",
+                "GraphRagSearchProvider",
+            ],
+            "transcription": [
+                "AzureSpeechServiceProvider",
+                "AzureWhisperTranscriptionProvider",
+                "OpenAITranscriptionProvider",
+            ],
+            "vision": ["AzureVisionProvider", "OpenAIVisionProvider"],
+        },
+        "message": "These are the currently supported providers for each service type",
     }

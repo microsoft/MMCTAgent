@@ -9,7 +9,7 @@ deployInfra:
   containerRegistry: false
   appServicePremiumPlan: false
   appServiceBasicPlan: false
-  eventHubService: true
+  eventHubService: false
   azureOpenAIService: false
 
 envCreation:
@@ -21,10 +21,10 @@ midentityCreation:
 buildAndPushImagesToACR:
   enabled: true
   buildMainApp: true
-  buildIngestionConsumer: true
+  buildIngestionConsumer: false
 
 deployAppService:
   enabled: false
 
 deployContainerApps:
-  enabled: true
+  enabled: false
