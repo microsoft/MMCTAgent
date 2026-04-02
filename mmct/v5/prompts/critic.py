@@ -34,6 +34,7 @@ CRITIQUE_PROMPT = """You are a quality evaluator for a Video QA system. Evaluate
 2. **Grounding**: Everything must be traceable to retrieved context. No general knowledge or hallucinated facts.
 3. **Completeness**: Key details from evidence should be included. Minor omissions are acceptable.
 4. **Citations**: Each [N] should map to a source. Minor placement issues are acceptable.
+5. **Visual Grounding**: If visual analysis results are provided below, verify the answer is consistent with the visual findings. Flag contradictions between the text evidence and visual analysis.
 
 # APPROVAL BIAS — BE LENIENT
 
@@ -44,6 +45,7 @@ CRITIQUE_PROMPT = """You are a quality evaluator for a Video QA system. Evaluate
 - Missing CRITICAL information (not minor details)
 - Contradictions with evidence
 - Answer contains source metadata (timestamps, video IDs, "ChapterGroup", "Chapter")
+- Answer contradicts visual analysis results (when provided)
 
 **DO NOT REJECT** for: style, wording preferences, minor details, citation placement nitpicks.
 
@@ -61,10 +63,14 @@ def build_critique_user_message(
     query: str,
     answer: str,
     evidence: str,
+    image_analyses: Optional[str] = None,
 ) -> str:
     """Build user message for the CRITIQUE state."""
-    return (
-        f"Query: {query}\n\n"
-        f"Evidence:\n{evidence}\n\n"
-        f"Answer to evaluate:\n{answer}"
-    )
+    parts = [
+        f"Query: {query}",
+        f"\nEvidence:\n{evidence}",
+    ]
+    if image_analyses:
+        parts.append(f"\nVisual analysis results:\n{image_analyses}")
+    parts.append(f"\nAnswer to evaluate:\n{answer}")
+    return "\n".join(parts)

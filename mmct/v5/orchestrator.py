@@ -463,6 +463,25 @@ class V5Orchestrator:
         # Clamp limit
         plan["limit"] = max(1, min(plan.get("limit", 5), 20))
 
+        # Programmatic visual flag safety net — catch queries the LLM under-triggers on
+        if not plan.get("visual"):
+            _VISUAL_KEYWORDS = [
+                "color", "colour", "shape", "size", "appearance",
+                "left", "right", "above", "below", "behind", "between",
+                "how many", "count", "number of",
+                "wearing", "holding", "carrying",
+                "look like", "looks like", "appear", "appears",
+                "position", "located", "placement",
+            ]
+            query_lower = ctx.query.lower()
+            if any(kw in query_lower for kw in _VISUAL_KEYWORDS):
+                plan["visual"] = True
+                _print_state(
+                    QueryState.VALIDATE_PLAN,
+                    ctx.request_id,
+                    "visual flag forced ON by keyword safety net",
+                )
+
         ctx.plan = plan
 
         # Decide next state
@@ -743,10 +762,16 @@ class V5Orchestrator:
     ) -> QueryState:
         """LLM evaluates answer quality."""
         evidence_str = _format_evidence_compact(ctx.evidence)
+        image_str = (
+            json.dumps(ctx.image_analyses, indent=2, default=str)
+            if ctx.image_analyses
+            else None
+        )
         user_msg = build_critique_user_message(
             query=ctx.query,
             answer=ctx.answer or "",
             evidence=evidence_str,
+            image_analyses=image_str,
         )
 
         try:

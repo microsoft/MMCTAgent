@@ -107,14 +107,23 @@ Pick ONE:
 
 # TARGETS
 
-Choose the node type(s) to search:
-- `["Chapter"]` — Default. Answers MOST queries about topics, explanations, comparisons, concepts.
-- `["Chapter", "Event"]` — ONLY for step-by-step processes, specific actions, "what happens when X".
-- `["Transcript"]` — ONLY for verbatim quotes or "what exactly did they say".
-- `["Object"]` — ONLY for "who/what entity appears" queries.
-- `["ChapterGroup"]` — ONLY for very broad discovery ("what topics exist across videos").
+Choose the node type(s) to search based on the query type:
 
-Chapter and Transcript overlap (same time segments). NEVER search both.
+| Query Pattern | Targets | Rationale |
+|---|---|---|
+| Concepts, explanations, comparisons, "how does X work" | `["Chapter"]` | Chapter summaries contain the richest multimodal context |
+| "Who/What is...", "identify the...", entity attributes | `["Object", "Chapter"]` | Object nodes store entity metadata (names, attributes, counts) |
+| "How many...", counting objects/people/items | `["Object", "Event"]` | Object nodes have counts and timestamps; Events capture atomic moments |
+| "What happens when...", step-by-step processes, specific actions | `["Chapter", "Event"]` | Events capture fine-grained actions within chapters |
+| "At what moment...", "When does...", temporal sequences | `["Event", "Chapter"]` | Events have precise timestamps for temporal reasoning |
+| Verbatim quotes, "what exactly did they say" | `["Transcript"]` | Raw speech text for exact wording |
+| Broad discovery, "what topics exist", "summarize all" | `["ChapterGroup"]` | High-level topic groupings across the video |
+
+**Rules:**
+- Chapter and Transcript overlap (same time segments). NEVER search both.
+- When uncertain, include BOTH Chapter and the most relevant specific type (Object or Event).
+- For attribute/appearance queries ("what color", "what does X look like"), ALWAYS include Object.
+- Default to `["Chapter"]` only when no more specific node type applies.
 
 # SUB-QUERIES
 
@@ -127,7 +136,16 @@ Decompose the user query into 2-4 focused sub-queries:
 
 # VISUAL FLAG
 
-Set to true when the query asks about anything VISIBLE — diagrams, charts, tables, formulas on screen, visual layouts, "what does X look like", colors, annotations, or anything that cannot be answered from text summaries alone.
+Set `visual: true` when the query involves ANY of the following — err on the side of enabling it:
+
+- **Attribute perception**: colors, materials, textures, shapes, sizes, appearance ("what color is...", "what does X look like")
+- **Spatial reasoning**: positions, directions, layouts ("left/right", "above/below", "where is X relative to Y")
+- **Counting**: "how many objects/people/items", quantities of visible entities
+- **Object identification**: recognizing or describing specific objects, people, or text on screen
+- **Visual content**: diagrams, charts, tables, formulas, annotations, slides
+- **Verification**: any claim about physical attributes that text summaries might describe vaguely
+
+When in doubt, set `visual: true`. The image analyzer gracefully handles non-visual queries, but a missed visual check cannot be recovered later in the pipeline.
 
 # OUTPUT FORMAT
 
