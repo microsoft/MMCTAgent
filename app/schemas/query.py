@@ -1,55 +1,103 @@
-from pydantic import BaseModel, Field, field_validator
+"""Pydantic request / response schemas for MMCT query endpoints."""
+
+from typing import List, Optional
+
 from mmct.image_pipeline import ImageQnaTools
+from pydantic import BaseModel, Field, field_validator
+
+
+# ---------------------------------------------------------------------------
+# Image query
+# ---------------------------------------------------------------------------
 
 class ImageQueryRequest(BaseModel):
-    query: str = Field(..., min_length=1, example="Describe the image")
-    tools: list[str] = Field(
+    """Request schema for image analysis queries."""
+
+    query: str = Field(..., min_length=1, description="Natural language question about the image")
+    tools: List[str] = Field(
         ...,
-        example=["object_detection", "vit", "ocr", "recog"],
+        description="Analysis tools to run. Available: object_detection, ocr, recog, vit",
+        examples=[["ocr"], ["object_detection", "recog"]],
     )
-    use_critic_agent: bool = Field(..., example=True)
-    stream: bool = Field(..., example=False)
-    
+    use_critic_agent: bool = Field(default=True, description="Enable critic agent for answer validation")
+    stream: bool = Field(default=False, description="Stream agent events as NDJSON")
+
     @field_validator("tools")
-    def split_tools_str(cls, v):
-        if isinstance(v, list) and len(v)==1:
-            # Convert comma-separated string into list
-            return [item.strip() for item in v[0].split(",") if item.strip()]
-        if isinstance(v, list):
-            return v
-        raise ValueError("tools must be a list of strings or comma-separated string")
-    
+    @classmethod
+    def parse_tools(cls, v):
+        """Accept either a list of strings or a single comma-separated string."""
+        if isinstance(v, list) and len(v) == 1:
+            return [t.strip() for t in v[0].split(",") if t.strip()]
+        return v
+
     model_config = {
         "json_schema_extra": {
             "examples": [
                 {
-                    "summary": "Simple usage",
-                    "description": "Query text with ocr tool",
-                    "value": {
-                        "query": "What is written here?",
-                        "tools": ["ocr"],
-                        "use_critic_agent": False,
-                        "stream": False
-                    }
+                    "query": "What text is visible in this image?",
+                    "tools": ["ocr"],
+                    "use_critic_agent": False,
+                    "stream": False,
                 },
                 {
-                    "summary": "Multiple tools usage",
-                    "description": "Use object detection and recognition",
-                    "value": {
-                        "query": "Identify objects",
-                        "tools": ["object_detection","recog"],
-                        "use_critic_agent": True,
-                        "stream": False
-                    }
-                }
+                    "query": "Identify and describe all objects",
+                    "tools": ["object_detection", "recog"],
+                    "use_critic_agent": True,
+                    "stream": False,
+                },
             ]
         }
     }
 
+
+# ---------------------------------------------------------------------------
+# Video query
+# ---------------------------------------------------------------------------
+
 class VideoQueryRequest(BaseModel):
-    query: str
-    index_name: str
-    top_n: int = Field(..., ge=1)
-    use_computer_vision_tool: bool
-    use_critic_agent: bool
-    stream: bool
+    """Request schema for video question-answering queries."""
+
+    query: str = Field(..., min_length=1, description="Natural language question about video content")
+    video_id: Optional[str] = Field(
+        None, description="Scope the search to a specific ingested video"
+    )
+    url: Optional[str] = Field(
+        None, description="Optional video URL to filter search results"
+    )
+    use_critic_agent: bool = Field(default=True, description="Enable critic agent for answer validation")
+    stream: bool = Field(default=False, description="Stream agent events as NDJSON")
+    cache: bool = Field(default=False, description="Enable response caching")
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "query": "What topics are covered in this video?",
+                    "video_id": "Dk1toyI7AJs",
+                    "use_critic_agent": True,
+                    "stream": False,
+                },
+                {
+                    "query": "Summarise the key points",
+                    "use_critic_agent": True,
+                    "stream": True,
+                },
+            ]
+        }
+    }
+
+
+class VideoQueryResponse(BaseModel):
+    """Response schema for video question-answering queries.
+
+    Mirrors the structure returned by VideoAgent. The 'source' field contains
+    references to the video segments used to construct the answer.
+    """
+
+    response: str = Field(..., description="Natural language answer to the query")
+    answer_found: bool = Field(..., description="Whether a relevant answer was found in the video")
+    source: List[dict] = Field(
+        default_factory=list,
+        description="Source segments with video_id, blob_url, url, and timestamps",
+    )
+    tokens: Optional[dict] = Field(None, description="Token usage statistics")
