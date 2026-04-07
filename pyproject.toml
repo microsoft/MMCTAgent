@@ -40,6 +40,8 @@ dependencies = [
     "urllib3>=2.2.0,<3.0.0",
     "requests>=2.31.0,<3.0.0",
     "numpy>=1.24.0,<2.0.0",
+    "oss2==2.19.1",
+    "cachetools>=5.3.0,<6.0.0",
 
     # AI/LLM Core
     "openai>=1.72.0,<2.0.0",
@@ -98,6 +100,9 @@ video-agent = [
     "azure-eventhub>=5.14.0,<6.0.0",
     "azure-eventhub-checkpointstoreblob-aio",
     "scenedetect>=0.6.0,<1.0.0",
+    "fastembed>=0.3.0,<1.0.0",
+    "pyvis>=0.3.0,<1.0.0",
+    "neo4j>=5.0.0,<6.0.0",
 ]
 
 # Complete installation (all features including MCP server)
@@ -127,7 +132,7 @@ docs = [
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["mmct*", "mcp_server*"]
+include = ["mmct*", "mcp_server*", "app*"]
 exclude = ["tests", "tests.*", "*.tests", "*.tests.*"]
 
 [tool.setuptools.package-data]
