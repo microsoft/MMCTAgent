@@ -107,7 +107,8 @@ class VideoAgent:
         url: Optional[str] = None,
         use_critic_agent: Optional[bool] = True,
         stream: bool = False,
-        cache: Optional[bool] = False
+        cache: Optional[bool] = False,
+        use_console: bool = True
     ):
         # Store parameters
         self.query = query
@@ -116,6 +117,7 @@ class VideoAgent:
         self.use_critic_agent = use_critic_agent
         self.stream = stream
         self.cache = cache
+        self.use_console = use_console
         self.provider = provider
 
 
@@ -136,8 +138,13 @@ class VideoAgent:
                 use_critic_agent=self.use_critic_agent,
                 stream=self.stream,
                 provider = self.provider,
-                cache = self.cache
+                cache = self.cache,
+                use_console = self.use_console
             )
+            
+            # If streaming and NOT using console, return the generator directly
+            if self.stream and not self.use_console:
+                return video_qna_response
 
             # Generate final formatted answer using LLM with video_qna response
             formatted_response = await self._generate_final_answer(video_qna_response)
@@ -147,7 +154,7 @@ class VideoAgent:
             return self._create_error_response(f"VideoAgent execution failed: {str(e)}")
         finally:
             pass
-
+            
     async def _generate_final_answer(self, video_qna_response: dict) -> VideoAgentResponse:
         """
         Use LLM to generate a final consolidated and structured answer.
@@ -169,7 +176,7 @@ class VideoAgent:
                 temperature=0.0,  # Use default temperature
                 response_format=VideoAgentResponse
             )
-            return response
+            return response["content"]
 
         except Exception as e:
             return self._create_error_response(f"Error generating final answer: {str(e)}")
@@ -202,12 +209,15 @@ if __name__ == "__main__":
         url = "<placeholder for url>" #Optional
         stream = False
         cache = False
+        use_console = True  # Enable console for local run
+        
         video_agent = VideoAgent(
             query=query,
             url=url,
             use_critic_agent=True,
             stream=stream,
-            cache = cache
+            cache = cache,
+            use_console = use_console
         )
 
         results = await video_agent()

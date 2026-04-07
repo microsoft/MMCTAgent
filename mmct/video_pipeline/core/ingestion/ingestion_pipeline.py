@@ -58,6 +58,14 @@ class IngestionPipeline:
         ] = 4,
         save_local_report: Annotated[bool, "Whether to save the pipeline report locally"] = False,
         verbosity: Annotated[int, "Logging verbosity: 0=Progress Bar Only, 1=Info, 2=Debug"] = 0,
+        playlist_id: Annotated[
+            Optional[str],
+            "Optional playlist ID this video belongs to (e.g. YouTube playlist ID)",
+        ] = None,
+        playlist_order: Annotated[
+            Optional[int],
+            "Optional 1-based position of this video within its playlist",
+        ] = None,
     ):
         try:
             # We delay config fetching logging until we set up the logger level
@@ -103,6 +111,8 @@ class IngestionPipeline:
         self.save_local_report = save_local_report
         self.original_video_path = video_path
         self.verbosity = verbosity
+        self.playlist_id = playlist_id
+        self.playlist_order = playlist_order
 
     async def run(self):
         """Main ingestion pipeline method using the new PipelineRunner."""
@@ -146,6 +156,8 @@ class IngestionPipeline:
                 video_duration=video_duration,
                 user_params={
                     "frame_stacking_grid_size": self.frame_stacking_grid_size,
+                    "playlist_id": self.playlist_id,
+                    "playlist_order": self.playlist_order,
                 },
                 save_local_report=self.save_local_report,
                 verbosity=self.verbosity,
