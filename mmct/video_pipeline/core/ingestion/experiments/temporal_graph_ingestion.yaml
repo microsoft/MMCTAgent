@@ -1,0 +1,297 @@
+# Temporal Graph Ingestion Pipeline
+# 
+# Builds hierarchical temporal knowledge graph with:
+# - ChapterGroups: High-level topic groupings with LLM summaries
+# - Chapters: Video segments with temporal boundaries
+# - Events: Atomic actions extracted from frames + transcript (multimodal)
+# - Objects: Entities extracted from frames + transcript (multimodal, uses transcript for name resolution)
+# 
+# Graph Hierarchy: ChapterGroup → Chapter → Event ↔ Object
+# 
+# Architecture:
+# - Parallel chapter processing (events + objects extracted simultaneously)
+# - Timestamp-based event-object linking (no fuzzy name matching)
+# - Transcript-based name resolution for Objects (e.g., "Jitendra Kumar Kushwaha" not "man in blue shirt")
+# - Batch object deduplication using embedding similarity
+# - Graph upload to Neo4j with BGE-small embeddings (384-dim)
+
+pipeline:
+  name: "temporal_graph_ingestion"
+  description: "Build temporal knowledge graph from video and upload to Neo4j"
+  mode: "sequential"
+
+  steps:
+    # Step 1: Graph store validation — skip if ChapterGroup + Chapter nodes exist
+    - id: "graph_validation"
+      type: "ingestion.graph_validation"
+      params:
+        require_chapter_groups: true
+
+    # Step 2: Compress video
+    - id: "compress"
+      type: "ingestion.compress"
+      params:
+        max_size_mb: 500
+        target_size_mb: 500
+        target_resolution: 720
+        target_fps: 30
+        device: "cuda"
+
+    # Step 3: Transcribe video
+    - id: "transcribe"
+      type: "ingestion.transcribe"
+      params:
+        video_step: "compress"
+        language: "auto"
+        include_timestamps: true
+        include_word_count: true
+
+    # Step 4: Upload transcript to blob storage
+    - id: "transcript_upload"
+      type: "ingestion.transcript_upload"
+      params:
+        source_transcribe_step: "transcribe"
+        container_name: "video-transcript-lively"
+
+    # Step 5: Video Chunking
+    - id: "video_chunking"
+      type: "ingestion.video_chunking"
+      params:
+        chunking_strategy: "transcript"
+        transcript_step: "transcribe"
+        compress_step: "compress"
+        min_chunk_duration: 30
+        max_chunk_duration: 120
+        scene_settings:
+          min_scene_length: 30.0
+          threshold: 60.0
+          max_scene_length: 120.0
+
+    # Step 5: Adaptive extraction planning
+    - id: "extraction_planning"
+      type: "ingestion.extraction_planning"
+      params:
+        video_chunking_step: "video_chunking"
+
+    # Step 6: Uniform frame extraction (1 fps, upload to blob)
+    - id: "uniform_frames"
+      type: "ingestion.uniform_frames"
+      params:
+        compress_step: "compress"
+        container_name: "video-frames-lively"
+        extension: "jpg"
+        upload_batch_size: 5
+
+    # Step 7: Dense keyframe extraction
+    - id: "dense_keyframes"
+      type: "ingestion.dense_keyframes"
+      params:
+        source_step: "video_chunking"
+        extraction_planning_step: "extraction_planning"
+        detect_boundaries: true
+        max_frame_width: 800
+        sample_fps: 2
+        diversity_threshold: 0.15
+
+    # Step 7: Dense chapter generation (multimodal extraction)
+    - id: "dense_chapters"
+      type: "ingestion.dense_chapters"
+      params:
+        source_chunks_step: "video_chunking"
+        source_keyframes_step: "dense_keyframes"
+        extraction_planning_step: "extraction_planning"
+        parallel_chunks: 4
+        max_frames_per_chapter: 12
+
+    # ============================================================
+    # TEMPORAL GRAPH STEPS
+    # ============================================================
+
+    # Step 8: Extract events and objects from dense chapters
+    # - Events: Multimodal (frames + transcript)
+    # - Objects: Multimodal (frames + transcript for name resolution)
+    # - Parallel processing per chapter with batch deduplication
+    # - Timestamp-based event-object linking
+    - id: "temporal_graph"
+      type: "ingestion.temporal_graph"
+      params:
+        source_chapters_step: "dense_chapters"
+        source_keyframes_step: "dense_keyframes"
+        max_events_per_chapter: 10
+        max_objects_per_chapter: 15
+        min_event_duration_ms: 500
+        max_frames_per_chapter: 12
+        max_concurrent_chapters: 4
+        generate_embeddings: true
+        enable_deduplication: true
+        embedding_device: "cpu"
+
+    # Step 9: Group chapters by semantic similarity and temporal proximity
+    - id: "chapter_grouping"
+      type: "ingestion.chapter_grouping"
+      params:
+        source_chapters_step: "dense_chapters"
+        similarity_threshold: 0.7
+        temporal_window: 5
+        generate_summaries: true
+
+    # Step 10: Upload keyframes to blob storage (before graph to have blob URLs)
+    - id: "keyframe_upload"
+      type: "ingestion.keyframe_upload"
+      params:
+        source_keyframes_step: "dense_keyframes"
+        max_concurrent_uploads: 20
+        skip_if_uploaded: true
+
+    # Step 11: Build the hierarchical knowledge graph structure
+    # Creates nodes: ChapterGroup → Chapter → Keyframe, Event ↔ Object
+    # Creates edges:
+    # - Hierarchy: HAS_CHAPTER, IN_GROUP, HAS_EVENT, IN_CHAPTER, HAS_KEYFRAME
+    # - Temporal: NEXT_GROUP, PREV_GROUP, NEXT_CHAPTER, PREV_CHAPTER, NEXT_EVENT, PREV_EVENT
+    # - Event-Object: CONTAINS, APPEARS_IN
+    # - Semantic: SIMILAR_TO, CAUSES, RESULT_OF
+    - id: "graph_construction"
+      type: "ingestion.graph_construction"
+      params:
+        source_step: "temporal_graph"
+        source_chapters_step: "dense_chapters"
+        source_groups_step: "chapter_grouping"
+        source_keyframes_step: "keyframe_upload"
+        batch_size: 50
+        # Similarity linking
+        event_similarity_threshold: 0.85
+        max_similar_links_per_event: 3
+        enable_similarity_linking: true
+        # Causal linking
+        enable_causal_linking: true
+        max_causal_links_per_event: 1
+        causal_high_confidence_threshold: 0.8
+        causal_low_confidence_threshold: 0.65
+        causal_llm_validation: true
+        causal_max_temporal_gap_seconds: 30.0
+        skip_adjacent_events: true
+        apply_transitive_reduction: true
+        # Graph provider (in-memory)
+        graph_provider: "networkx"
+        persist_path: "./media/temporal_graphs"
+
+    # Step 12: Upload graph to Neo4j with embeddings
+    # Embeds nodes using:
+    # - BGE-small (384-dim) for text nodes: ChapterGroup, Chapter, Event, Object
+    # - QdrantCLIP (512-dim) for image nodes: Keyframe
+    # Embedding strategy by node type:
+    # - ChapterGroup: summary field
+    # - Chapter: summary field
+    # - Event: description field
+    # - Object: name + attributes
+    # - Keyframe: image embedding from filepath
+    - id: "graph_upload"
+      type: "ingestion.graph_upload"
+      params:
+        graph_step: "graph_construction"
+        provider: "neo4j"
+        # Neo4j connection from environment:
+        # NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD, NEO4J_DATABASE
+        neo4j_database: "neo4j"
+        # Batch sizes
+        embedding_batch_size: 32
+        node_batch_size: 100
+        edge_batch_size: 500
+        # Options
+        clear_existing: true
+        create_indexes: true
+
+    # Step 13: Export outputs to local JSON files and HTML visualization
+    - id: "dense_export"
+      type: "ingestion.dense_export"
+      params:
+        transcribe_step: "transcribe"
+        dense_chapters_step: "dense_chapters"
+        dense_keyframes_step: "dense_keyframes"
+        chapter_grouping_step: "chapter_grouping"
+        graph_step: "graph_construction"
+        include_transcript: true
+        include_dense_chapters: true
+        include_keyframes: true
+        include_chapter_groups: true
+        include_transcript_nodes: true
+        include_events: true
+        include_objects: true
+        include_graph_json: true
+        include_graph_html: true
+        pretty_print: true
+
+    # Step 14: Cleanup temporary files
+    # Removes all temporary files created during pipeline execution:
+    # - Compressed video (media/compressed/{video_id}.mp4)
+    # - Audio files (media/{video_id}.wav, .mp3)
+    # - Dense keyframes ({output_dir}/dense_keyframes/)
+    # - Transcript files (media/transcript_{video_id}.srt)
+    - id: "cleanup"
+      type: "ingestion.cleanup"
+      params:
+        keep_keyframes: false   # Set true to keep extracted keyframe images
+        keep_compressed: false  # Set true to keep compressed video file
+
+# Feature flags
+features:
+  dense_captioning: true
+  temporal_graph: true
+  chapter_grouping: true
+  graph_construction: true
+  neo4j_upload: true
+  keyframe_upload: true
+
+# Graph configuration
+graph_config:
+  # Temporal graph extraction
+  max_events_per_chapter: 10
+  max_objects_per_chapter: 15
+  max_frames_per_chapter: 12
+  max_concurrent_chapters: 4
+  embedding_device: "cpu"
+  
+  # Chapter grouping
+  chapter_similarity_threshold: 0.7
+  chapter_temporal_window: 5
+  
+  # Graph construction
+  # Node types: ChapterGroup, Chapter, Event, Object
+  # Edge types: HAS_CHAPTER, IN_GROUP, HAS_EVENT, IN_CHAPTER,
+  #             NEXT_GROUP, PREV_GROUP, NEXT_CHAPTER, PREV_CHAPTER,
+  #             NEXT, PREVIOUS, CONTAINS, APPEARS_IN,
+  #             SIMILAR_TO, CAUSES, RESULT_OF
+  event_similarity_threshold: 0.85
+  max_similar_links_per_event: 3
+  max_causal_links_per_event: 1
+  causal_high_confidence_threshold: 0.8
+  causal_low_confidence_threshold: 0.65
+  causal_max_temporal_gap_seconds: 30.0
+  skip_adjacent_events: true
+  apply_transitive_reduction: true
+  
+  # Object deduplication
+  object_dedup_similarity_threshold: 0.80
+  
+  # Neo4j upload
+  # Embeddings: BGE-small (384-dim) for all node types
+  embedding_batch_size: 32
+  node_batch_size: 100
+  edge_batch_size: 500
+
+# Output configuration
+outputs:
+  # JSON exports
+  transcript_txt: true
+  transcript_srt: true
+  dense_chapters_json: true
+  keyframes_json: true
+  keyframe_images: true
+  chapter_groups_json: true
+  events_json: true
+  objects_json: true
+  graph_json: true
+  # HTML visualization
+  graph_html: true
+  # Export path
+  export_base_path: "./media/dense_export"
