@@ -7,6 +7,11 @@ from .keyframes_vector_db_provider import BaseKeyframesVectorDBProvider
 from .transcription_provider import BaseTranscriptionProvider
 from .vision_provider import BaseVisionProvider
 from .storage_provider import BaseStorageProvider
+from .event_vector_db_provider import BaseEventVectorDBProvider
+from .object_vector_db_provider import BaseObjectVectorDBProvider
+from .graph_db_provider import BaseGraphDBProvider
+from .group_vector_db_provider import BaseGroupVectorDBProvider
+from .graph_store_provider import BaseGraphStoreProvider
 
 __all__ = [
     'BaseLLMProvider',
@@ -18,4 +23,9 @@ __all__ = [
     'BaseVisionProvider',
     'BaseTranscriptionProvider',
     'BaseStorageProvider',
+    'BaseEventVectorDBProvider',
+    'BaseObjectVectorDBProvider',
+    'BaseGraphDBProvider',
+    'BaseGroupVectorDBProvider',
+    'BaseGraphStoreProvider',
 ]
