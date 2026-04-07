@@ -114,6 +114,8 @@ class VideoQnA:
         url (Optional[str]): URL of the video to filter search results.
         use_critic_agent (bool, optional): Whether to use the critic agent for answer refinement. Defaults to True.
         cache (bool, optional): Whether to enable caching for model responses. Defaults to True.
+        use_console (bool, optional):
+            Use Console for output display. Defaults to True.
     """
 
     def __init__(
@@ -124,12 +126,14 @@ class VideoQnA:
         url: Optional[str] = None,
         use_critic_agent: bool = True,
         cache: bool = True,
+        use_console: bool = True,
     ):
         self.query = query
         self.video_id = video_id
         self.use_critic_agent = use_critic_agent
         self.url = url
         self.cache = cache
+        self.use_console = use_console
         self.provider = provider
         self.model_client = self.provider.llm_provider.get_autogen_client()
 
@@ -295,6 +299,7 @@ async def video_qna(
     stream: Annotated[bool, "Set to True to return the response as a stream."] = False,
     provider: VideoAgentProviderConfig = None,
     cache: Annotated[bool, "Set to True to enable cache for model responses."] = True,
+    use_console: Annotated[bool, "Set to True to use Console for streaming output."] = True,
 ):
     """
     Video QnA with comprehensive multi-tool support for video analysis using Swarm orchestration.
@@ -322,11 +327,14 @@ async def video_qna(
         stream (bool): Set to True to return the response as a stream. Defaults to False.
         providers (VideoAgentProviderConfig): Provider configuration containing all required providers.
         cache (bool): Set to True to enable cache for model responses. Defaults to True.
+        use_console (bool): Set to True to use Console for streaming output. Defaults to True.
 
     Returns:
         Dict containing:
         - result: Parsed response dict with answer, source, and videos
         - tokens: Token usage information
+        OR
+        AsyncGenerator if stream=True and use_console=False
     """
 
     video_qna_instance = VideoQnA(
@@ -336,9 +344,14 @@ async def video_qna(
         use_critic_agent=use_critic_agent,
         provider=provider,
         cache=cache,
+        use_console=use_console,
     )
     if stream:
         response_generator = await video_qna_instance.run_stream()
+        
+        if not use_console:
+            return response_generator
+            
         messages = await Console(response_generator)
 
         # Return the final result in consistent format
@@ -384,6 +397,7 @@ if __name__ == "__main__":
     # url = "<placeholder for url to filter out the results>" #Optional
     use_critic_agent = True
     stream = True
+    use_console = True  # Enable console for local run
 
     result = asyncio.run(
         video_qna(
@@ -393,5 +407,13 @@ if __name__ == "__main__":
             use_critic_agent=use_critic_agent,
             stream=stream,
             cache=False,
+            use_console=use_console,
         )
     )
+    
+    if stream and not use_console:
+        # If user chooses to handle stream iteration manually
+        async def iterate():
+             async for chunk in result:
+                 print(chunk)
+        asyncio.run(iterate())
