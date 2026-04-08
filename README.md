@@ -132,6 +132,11 @@ Published on **arXiv** – [arxiv.org/abs/2405.18358](https://arxiv.org/abs/2405
     
    Install FFmpeg
 
+   **macOS (Homebrew):**
+   ```bash
+   brew install ffmpeg
+   ```
+
    **Linux/Ubuntu:**
    ```bash
    sudo apt-get update
