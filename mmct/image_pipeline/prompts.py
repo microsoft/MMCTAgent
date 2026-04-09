@@ -121,7 +121,9 @@ async def get_critic_system_prompt(includeMetaGuidelines = True):
             Do not respond with any statement like: ``If you have any further questions or need additional assistance, feel free to ask!``
     """
     if includeMetaGuidelines:
-          prompt+=META_GUIDELINES  
+        prompt += META_GUIDELINES
+    
+    return prompt
         
 async def get_critic_tool_prompt(query, conversation):
     prompt = f"""
