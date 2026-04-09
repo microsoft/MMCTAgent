@@ -13,11 +13,16 @@ This step:
 4. Uploads the embedded graph via the configured provider
 """
 
+from __future__ import annotations
+
 import time
 from typing import Dict, Any, Optional, List, Tuple
 
 from loguru import logger
-import networkx as nx
+try:
+    import networkx as nx  # type: ignore
+except ImportError:  # pragma: no cover
+    nx = None
 
 from ..base import PipelineStep, StepContext, StepResult
 from ..registry import register_step
@@ -64,6 +69,10 @@ class GraphUploadStep(PipelineStep):
         Returns:
             StepResult with upload statistics.
         """
+        if nx is None:
+            raise ImportError(
+                "networkx is required for graph upload. Install with the `video-agent` extra."
+            )
         # Get source step
         graph_step: str = self.get_param(
             "graph_step", context, default="graph_construction"
@@ -341,7 +350,7 @@ class GraphUploadStep(PipelineStep):
         # Fall back to environment
         if not neo4j_uri or not neo4j_password:
             try:
-                from app.config.provider_config import get_settings
+                from config.provider_config import get_settings
                 settings = get_settings()
                 neo4j_uri = neo4j_uri or settings.neo4j_uri
                 neo4j_username = neo4j_username or settings.neo4j_username

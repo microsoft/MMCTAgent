@@ -148,8 +148,7 @@ Focus on what viewers will learn or see in this section."""
         )
         
         try:
-            messages = [{"role": "user", "content": prompt}]
-            response = await llm_provider.generate_json(messages)
+            response = await llm_provider.generate_json(prompt)
             return response.get("summary", "")
         except Exception as e:
             logger.warning(f"Summary generation failed: {e}")
@@ -221,8 +220,7 @@ Focus on what viewers will learn or see in this section."""
         )
         
         try:
-            messages = [{"role": "user", "content": prompt}]
-            response = await llm_provider.generate_json(messages)
+            response = await llm_provider.generate_json(prompt)
             group.summary = response.get("summary", "")
             
             # Update metadata with theme if available

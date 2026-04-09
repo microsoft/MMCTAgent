@@ -6,57 +6,43 @@ Importing this module registers all built-in steps with the framework.
 
 # Import all step modules to trigger @register_step decorators
 
-# Core steps
 from .transcription_step import TranscriptionStep
+
+from .graph_validation.step import GraphValidationStep
 from .compress.step import CompressionStep
+from .transcript_upload.step import TranscriptUploadStep
 from .video_chunking.step import VideoChunkingStep
+from .extraction_planning.step import ExtractionPlanningStep
+from .uniform_frames.step import UniformFrameExtractionStep
+
+# Backwards compatible step types are still registered, but codebase naming prefers non-prefixed names.
+from .keyframes.step import KeyframeExtractionStep
+from .chapters.step import ChapterGenerationStep
+
+from .temporal_graph.step import TemporalGraphStep
+from .chapter_grouping.step import ChapterGroupingStep
+from .keyframe_upload.step import KeyframeUploadStep
+from .graph_construction.step import GraphConstructionStep
+from .graph_upload.step import GraphUploadStep
+
+from .export.step import ExportStep
 from .cleanup.step import CleanupStep
-
-# Extraction planning
-from .extraction_planning import ExtractionPlanningStep
-
-# Dense captioning steps
-from .dense_keyframes import DenseKeyframeExtractionStep
-from .dense_chapters import DenseChapterGenerationStep
-from .dense_export import DenseExportStep
-
-# Temporal graph steps
-from .temporal_graph import TemporalGraphStep
-from .chapter_grouping import ChapterGroupingStep
-from .graph_construction import GraphConstructionStep
-from .graph_upload import GraphUploadStep
-from .graph_validation import GraphValidationStep
-
-# Upload steps
-from .keyframe_upload import KeyframeUploadStep
-
-# Uniform frame extraction
-from .uniform_frames import UniformFrameExtractionStep
-
-# Transcript upload
-from .transcript_upload import TranscriptUploadStep
 
 __all__ = [
     "TranscriptionStep",
+    "GraphValidationStep",
     "CompressionStep",
+    "TranscriptUploadStep",
     "VideoChunkingStep",
-    "CleanupStep",
-    # Extraction planning
     "ExtractionPlanningStep",
-    # Dense captioning steps
-    "DenseKeyframeExtractionStep",
-    "DenseChapterGenerationStep",
-    "DenseExportStep",
-    # Temporal graph steps
+    "UniformFrameExtractionStep",
+    "KeyframeExtractionStep",
+    "ChapterGenerationStep",
     "TemporalGraphStep",
     "ChapterGroupingStep",
     "GraphConstructionStep",
     "GraphUploadStep",
-    "GraphValidationStep",
-    # Upload steps
     "KeyframeUploadStep",
-    # Uniform frame extraction
-    "UniformFrameExtractionStep",
-    # Transcript upload
-    "TranscriptUploadStep",
+    "ExportStep",
+    "CleanupStep",
 ]

@@ -1,4 +1,4 @@
-"""Dense chapter generation with multimodal extraction and parallel processing."""
+"""Chapter generation with multimodal extraction and parallel processing."""
 
 from typing import Optional, List, Dict, Any, Tuple
 from ..base import PipelineStep, StepContext, StepResult
@@ -6,7 +6,7 @@ from ..registry import register_step
 from mmct.video_pipeline.core.ingestion.models import (
     ExtractionCircuitBreaker, 
     ExtractionPlan,
-    DenseChapterResponse,
+    ChapterResponse,
 )
 from mmct.providers.base import BaseLLMProvider
 from .unified_extractor import (
@@ -16,29 +16,29 @@ from .unified_extractor import (
 )
 
 
-@register_step("ingestion.dense_chapters")
-class DenseChapterGenerationStep(PipelineStep):
+@register_step("ingestion.chapters")
+class ChapterGenerationStep(PipelineStep):
     """
-    Dense chapter generation with multimodal extraction.
+    Chapter generation with multimodal extraction.
     
     Features:
     - Multimodal LLM (frames + transcript) for accurate extraction
     - Frames stacked chronologically for visual continuity
     - Parallel processing of chunks
-    - Returns DenseChapterResponse instances
+    - Returns ChapterResponse instances
     
     Params:
         source_chunks_step: Step ID for video chunks (default: "video_chunking")
-        source_keyframes_step: Step ID for keyframes (default: "dense_keyframes")
+        source_keyframes_step: Step ID for keyframes (default: "keyframes")
         parallel_chunks: Parallel batch size (default: 4)
         max_frames_per_chapter: Max frames per chapter (default: 12)
     """
     
-    step_type = "ingestion.dense_chapters"
-    description = "Generate dense chapters with multimodal extraction."
+    step_type = "ingestion.chapters"
+    description = "Generate chapters with multimodal extraction."
     
     async def run(self, context: StepContext) -> StepResult:
-        """Execute dense chapter generation."""
+        """Execute chapter generation."""
         # Get extraction plan
         extraction_plan: Optional[ExtractionPlan] = context.data_store.get(
             "extraction_planning", "extraction_plan"
@@ -54,10 +54,8 @@ class DenseChapterGenerationStep(PipelineStep):
         source_chunks_step = self.get_param("source_chunks_step", context, default="video_chunking")
         video_chunks: List[Dict[str, Any]] = context.data_store.get(source_chunks_step, "video_chunks") or []
         
-        source_keyframes_step = self.get_param("source_keyframes_step", context, default="dense_keyframes")
-        keyframes_data: List[Dict[str, Any]] = context.data_store.get(source_keyframes_step, "keyframes_per_chunk")
-        if not keyframes_data:
-            keyframes_data = context.data_store.get("keyframes", "keyframes_per_chunk") or []
+        source_keyframes_step = self.get_param("source_keyframes_step", context, default="keyframes")
+        keyframes_data: List[Dict[str, Any]] = context.data_store.get(source_keyframes_step, "keyframes_per_chunk") or []
         
         if not video_chunks:
             context.logger.warning("No video chunks found")
@@ -65,7 +63,6 @@ class DenseChapterGenerationStep(PipelineStep):
                 step_id=self.step_id,
                 outputs={"chapters": [], "failed_chapters": []},
                 metrics={"total_chapters": 0, "success_rate": 0.0},
-                success=False,
             )
         
         # Get config
@@ -80,7 +77,6 @@ class DenseChapterGenerationStep(PipelineStep):
             (idx, chunk, keyframes_data[idx] if idx < len(keyframes_data) else {})
             for idx, chunk in enumerate(video_chunks)
         ]
-        
         # Extract chapters (returns dicts with chunk metadata merged)
         chapters, failed = await extract_chapters_parallel(
             chunks_with_keyframes=chunks_with_keyframes,
@@ -115,3 +111,5 @@ class DenseChapterGenerationStep(PipelineStep):
                 "success_rate": success_rate,
             },
         )
+
+

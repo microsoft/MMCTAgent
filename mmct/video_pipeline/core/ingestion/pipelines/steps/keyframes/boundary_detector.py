@@ -1,9 +1,13 @@
 """Action boundary detection for keyframes using visual analysis."""
 
-import cv2
 import numpy as np
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
+
+try:
+    import cv2  # type: ignore
+except ImportError:  # pragma: no cover
+    cv2 = None
 
 
 @dataclass
@@ -37,6 +41,12 @@ def detect_action_boundaries(
     """
     if thresholds is None:
         thresholds = BoundaryThresholds()
+
+    if cv2 is None:
+        raise ImportError(
+            "opencv-python (or opencv-python-headless) is required for boundary detection. "
+            "Install with the `video-agent` extra."
+        )
 
     boundaries = []
 

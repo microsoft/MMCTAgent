@@ -1,18 +1,16 @@
 """Uniform frame extraction step.
 
 Extracts frames from video at a uniform 1 fps rate (no filtering),
-then uploads each frame to Azure Blob Storage container 'video-frames-lively'.
+then uploads each frame to the configured storage provider.
 
 Blob path convention:
     <normalized-video-id>/<timestamp_second>/frame.jpg
 
-The step creates its own AzureStorageProvider instance targeting the
-dedicated container (created automatically if it does not exist).
+Uses the injected `context.provider.storage_provider`.
 """
 
 import os
 import re
-import cv2
 import asyncio
 from typing import Dict, List, Any, Optional
 
@@ -20,7 +18,12 @@ from loguru import logger
 
 from ..base import PipelineStep, StepContext, StepResult
 from ..registry import register_step
-from mmct.providers.azure_providers.storage_provider import AzureStorageProvider
+from mmct.providers.base.storage_provider import BaseStorageProvider
+
+try:
+    import cv2  # type: ignore
+except ImportError:  # pragma: no cover
+    cv2 = None
 
 
 # Characters invalid in Azure blob path segments (control chars, backslash, etc.)
@@ -46,6 +49,12 @@ def _extract_frames_at_1fps(
     Returns a list of dicts with keys:
         timestamp_second (int), filepath (str), filename (str)
     """
+    if cv2 is None:
+        raise ImportError(
+            "opencv-python (or opencv-python-headless) is required for uniform frame extraction. "
+            "Install with the `video-agent` extra."
+        )
+
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         raise ValueError(f"Cannot open video: {video_path}")
@@ -136,7 +145,7 @@ class UniformFrameExtractionStep(PipelineStep):
         )
 
         # --- 2. Build a storage provider for the dedicated container ---
-        storage_provider: Optional[AzureStorageProvider] = getattr(
+        storage_provider: Optional[BaseStorageProvider] = getattr(
             context.provider, "storage_provider", None
         )
         if storage_provider is None:
@@ -146,16 +155,6 @@ class UniformFrameExtractionStep(PipelineStep):
                 outputs={"frames": frames, "error": "No storage provider"},
                 metrics={"total_frames": len(frames), "uploaded": 0},
             )
-
-        # Create a new provider instance reusing the same account / credentials
-        # but targeting the dedicated container.
-        frame_storage = AzureStorageProvider(
-            storage_account_name=storage_provider.storage_account_name,
-            keyframe_container_name=container_name,
-            credentials=storage_provider.credentials,
-            blob_connection_string=storage_provider.blob_connection_string
-            if not storage_provider.credentials else None,
-        )
 
         # --- 3. Upload frames in batches ---
         batch_size: int = self.get_param("upload_batch_size", context, default=5)
@@ -167,7 +166,7 @@ class UniformFrameExtractionStep(PipelineStep):
             ts = frame["timestamp_second"]
             blob_name = f"{norm_id}/{ts}/frame.{extension}"
             try:
-                blob_url = await frame_storage.upload_file(
+                blob_url = await storage_provider.upload_file(
                     file_name=blob_name,
                     src_file_path=frame["filepath"],
                     folder_name=container_name,
@@ -182,8 +181,6 @@ class UniformFrameExtractionStep(PipelineStep):
         for i in range(0, len(frames), batch_size):
             batch = frames[i : i + batch_size]
             await asyncio.gather(*[_upload(f) for f in batch])
-
-        await frame_storage.close()
 
         context.logger.info(
             f"Uploaded {uploaded_count}/{len(frames)} frames "

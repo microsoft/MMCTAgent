@@ -1,15 +1,12 @@
-import os
-from typing import Optional, Annotated, Dict
+from typing import Optional, Annotated, Any
 from loguru import logger
 
-from mmct.config.providers import IngestionProviderConfig
 from mmct.video_pipeline.core.ingestion.languages import Languages
 from mmct.video_pipeline.utils.helper import (
     get_media_folder,
+    get_file_hash,
 )
-from mmct.video_pipeline.core.ingestion.utils.helper import (
-    get_video_duration,
-)
+from mmct.video_pipeline.core.ingestion.utils.helper import get_video_duration
 from mmct.utils.logging_config import log_manager
 from mmct.video_pipeline.core.ingestion.pipelines import (
     PipelineRunner,
@@ -31,8 +28,8 @@ class IngestionPipeline:
         video_path: Annotated[str, "Local path to the video file to be ingested"],
         video_id: Annotated[str, "Unique identifier (hash) for the video"],
         provider: Annotated[
-            IngestionProviderConfig,
-            "Configuration object containing all service providers",
+            Any,
+            "Provider bundle object containing all required providers as attributes",
         ],
         language: Annotated[
             Optional[Languages],

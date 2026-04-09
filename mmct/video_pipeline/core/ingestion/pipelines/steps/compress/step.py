@@ -11,7 +11,11 @@ from .video_compression import VideoCompressor
 @register_step("ingestion.compress")
 class CompressionStep(PipelineStep):
     """
-    Compress video if file size exceeds threshold.
+    Compress video if file size exceeds threshold or codec is incompatible.
+
+    Videos encoded with codecs that OpenCV cannot decode (e.g. AV1) are
+    always transcoded to H.264 regardless of file size so that downstream
+    keyframe-extraction steps can read them.
 
     Params:
         max_size_mb: Maximum video size in MB before compression (default: 500)
@@ -19,7 +23,7 @@ class CompressionStep(PipelineStep):
     """
 
     step_type = "ingestion.compress"
-    description = "Compress video if size exceeds threshold"
+    description = "Compress video if size exceeds threshold or codec is incompatible"
 
     async def run(self, context: StepContext) -> StepResult:
         """Execute video compression if needed."""
@@ -57,9 +61,7 @@ class CompressionStep(PipelineStep):
 
             file_size_mb = os.path.getsize(video_path) / (1024 * 1024)
 
-            if file_size_mb <= max_size_mb:
-                return video_path
-
+            # Build a lightweight compressor to probe the input codec.
             media_folder = await get_media_folder()
             compressed_dir = os.path.join(media_folder, "compressed")
             os.makedirs(compressed_dir, exist_ok=True)
@@ -70,6 +72,18 @@ class CompressionStep(PipelineStep):
                 output_dir=compressed_dir,
                 device=device,
             )
+
+            needs_transcode = compressor.needs_transcode()
+            needs_compress = file_size_mb > max_size_mb
+
+            if needs_transcode:
+                codec = compressor.get_video_codec()
+                context.logger.info(
+                    f"Codec '{codec}' is not supported by OpenCV — transcoding to H.264"
+                )
+
+            if not needs_transcode and not needs_compress:
+                return video_path
 
             await asyncio.to_thread(compressor.compress)
 

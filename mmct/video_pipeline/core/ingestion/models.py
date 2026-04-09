@@ -257,8 +257,8 @@ class ExtractionCircuitBreaker:
         return False
 
 
-class DenseChapterResponse(BaseModel):
-    """Dense chapter extraction response for video analysis.
+class ChapterResponse(BaseModel):
+    """Chapter extraction response for video analysis.
     
     Extracts core chapter information in a single LLM call:
     - Timestamped description: primary output with [Xs] markers for citations
@@ -354,6 +354,10 @@ class ChapterCreationResponse(BaseModel):
 
     def __str__(self, transcript: str = None) -> str:
         """
+
+
+# Backwards compatible alias (old name)
+DenseChapterResponse = ChapterResponse
         Generate a human-readable string representation of the chapter information
         formatted in natural language for creating text embeddings.
 

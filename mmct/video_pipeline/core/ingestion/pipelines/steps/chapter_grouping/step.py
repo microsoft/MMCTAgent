@@ -40,7 +40,7 @@ class ChapterGroupingStep(PipelineStep):
     - Group embedding computation
     
     Params:
-        source_chapters_step: Step ID for source chapters (default: "dense_enrichment")
+        source_chapters_step: Step ID for source chapters (default: "chapters")
         similarity_threshold: Cosine similarity threshold for grouping (default: 0.7)
         temporal_window: Maximum chapter distance for grouping (default: 5)
         generate_summaries: Whether to generate LLM summaries (default: True)
@@ -60,11 +60,13 @@ class ChapterGroupingStep(PipelineStep):
         """
         # Get source chapters with fallback chain
         source_step: str = self.get_param(
-            "source_chapters_step", context, default="dense_chapters"
+            "source_chapters_step", context, default="chapters"
         )
         chapters: List[Dict[str, Any]] = (
             context.data_store.get(source_step, "raw_chapters")
             or context.data_store.get(source_step, "chapters")
+            or context.data_store.get("dense_chapters", "raw_chapters")
+            or context.data_store.get("dense_chapters", "chapters")
             or []
         )
         

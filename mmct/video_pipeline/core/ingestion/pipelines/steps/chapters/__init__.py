@@ -1,5 +1,5 @@
-"""Dense chapter generation with unified extraction."""
+"""Chapter generation with unified extraction."""
 
-from .step import DenseChapterGenerationStep
+from .step import ChapterGenerationStep
 
-__all__ = ["DenseChapterGenerationStep"]
+__all__ = ["ChapterGenerationStep"]

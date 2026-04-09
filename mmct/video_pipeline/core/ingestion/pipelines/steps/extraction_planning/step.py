@@ -36,7 +36,7 @@ class ExtractionPlanningStep(PipelineStep):
         
         transcript_words: int = context.data_store.get("transcribe", "word_count") or 0
         
-        # Default frames per chapter - will be refined by dense_keyframes step later
+        # Default frames per chapter - will be refined by the keyframes step later
         # This provides an initial estimate for planning
         frames_data: int = self.get_param("default_frames_per_chapter", context, default=8)
         

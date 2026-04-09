@@ -9,8 +9,14 @@ from typing import Any, Dict, List, Optional
 import re
 
 from loguru import logger
-from scenedetect import SceneManager, VideoManager
-from scenedetect.detectors import AdaptiveDetector, ContentDetector
+try:
+    from scenedetect import SceneManager, VideoManager  # type: ignore
+    from scenedetect.detectors import AdaptiveDetector, ContentDetector  # type: ignore
+except ImportError:  # pragma: no cover
+    SceneManager = None
+    VideoManager = None
+    AdaptiveDetector = None
+    ContentDetector = None
 
 from ..base import PipelineStep, StepContext, StepResult
 from ..registry import register_step
@@ -29,6 +35,11 @@ class SceneChunk:
 
 
 def _build_detector(params: Dict[str, Any], frame_rate: float):
+    if AdaptiveDetector is None or ContentDetector is None:
+        raise ImportError(
+            "scenedetect is required for scene-based chunking. "
+            "Install with the `video-agent` extra (includes `scenedetect`)."
+        )
     detector_type = str(params.get("detector", "content")).lower()
     min_scene_len_seconds = float(params.get("min_scene_length", 2.0))
     min_scene_len_frames = max(1, int(frame_rate * min_scene_len_seconds))
@@ -48,6 +59,11 @@ def _build_detector(params: Dict[str, Any], frame_rate: float):
 
 
 def _detect_scenes(video_path: Path, params: Dict[str, Any]) -> List[SceneChunk]:
+    if SceneManager is None or VideoManager is None:
+        raise ImportError(
+            "scenedetect is required for scene-based chunking. "
+            "Install with the `video-agent` extra (includes `scenedetect`)."
+        )
     video_manager = VideoManager([str(video_path)])
     downscale = int(params.get("downscale", 2))
     if downscale > 1:

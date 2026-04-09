@@ -82,9 +82,9 @@ pipeline:
         extension: "jpg"
         upload_batch_size: 5
 
-    # Step 7: Dense keyframe extraction
-    - id: "dense_keyframes"
-      type: "ingestion.dense_keyframes"
+    # Step 7: Keyframe extraction
+    - id: "keyframes"
+      type: "ingestion.keyframes"
       params:
         source_step: "video_chunking"
         extraction_planning_step: "extraction_planning"
@@ -93,12 +93,12 @@ pipeline:
         sample_fps: 2
         diversity_threshold: 0.15
 
-    # Step 7: Dense chapter generation (multimodal extraction)
-    - id: "dense_chapters"
-      type: "ingestion.dense_chapters"
+    # Step 7: Chapter generation (multimodal extraction)
+    - id: "chapters"
+      type: "ingestion.chapters"
       params:
         source_chunks_step: "video_chunking"
-        source_keyframes_step: "dense_keyframes"
+        source_keyframes_step: "keyframes"
         extraction_planning_step: "extraction_planning"
         parallel_chunks: 4
         max_frames_per_chapter: 12
@@ -107,7 +107,7 @@ pipeline:
     # TEMPORAL GRAPH STEPS
     # ============================================================
 
-    # Step 8: Extract events and objects from dense chapters
+    # Step 8: Extract events and objects from chapters
     # - Events: Multimodal (frames + transcript)
     # - Objects: Multimodal (frames + transcript for name resolution)
     # - Parallel processing per chapter with batch deduplication
@@ -115,8 +115,8 @@ pipeline:
     - id: "temporal_graph"
       type: "ingestion.temporal_graph"
       params:
-        source_chapters_step: "dense_chapters"
-        source_keyframes_step: "dense_keyframes"
+        source_chapters_step: "chapters"
+        source_keyframes_step: "keyframes"
         max_events_per_chapter: 10
         max_objects_per_chapter: 15
         min_event_duration_ms: 500
@@ -130,7 +130,7 @@ pipeline:
     - id: "chapter_grouping"
       type: "ingestion.chapter_grouping"
       params:
-        source_chapters_step: "dense_chapters"
+        source_chapters_step: "chapters"
         similarity_threshold: 0.7
         temporal_window: 5
         generate_summaries: true
@@ -139,7 +139,7 @@ pipeline:
     - id: "keyframe_upload"
       type: "ingestion.keyframe_upload"
       params:
-        source_keyframes_step: "dense_keyframes"
+        source_keyframes_step: "keyframes"
         max_concurrent_uploads: 20
         skip_if_uploaded: true
 
@@ -154,7 +154,7 @@ pipeline:
       type: "ingestion.graph_construction"
       params:
         source_step: "temporal_graph"
-        source_chapters_step: "dense_chapters"
+        source_chapters_step: "chapters"
         source_groups_step: "chapter_grouping"
         source_keyframes_step: "keyframe_upload"
         batch_size: 50
@@ -202,16 +202,16 @@ pipeline:
         create_indexes: true
 
     # Step 13: Export outputs to local JSON files and HTML visualization
-    - id: "dense_export"
-      type: "ingestion.dense_export"
+    - id: "export"
+      type: "ingestion.export"
       params:
         transcribe_step: "transcribe"
-        dense_chapters_step: "dense_chapters"
-        dense_keyframes_step: "dense_keyframes"
+        chapters_step: "chapters"
+        keyframes_step: "keyframes"
         chapter_grouping_step: "chapter_grouping"
         graph_step: "graph_construction"
         include_transcript: true
-        include_dense_chapters: true
+        include_chapters: true
         include_keyframes: true
         include_chapter_groups: true
         include_transcript_nodes: true
@@ -225,7 +225,7 @@ pipeline:
     # Removes all temporary files created during pipeline execution:
     # - Compressed video (media/compressed/{video_id}.mp4)
     # - Audio files (media/{video_id}.wav, .mp3)
-    # - Dense keyframes ({output_dir}/dense_keyframes/)
+    # - Keyframes ({output_dir}/keyframes/) and legacy dense_keyframes/
     # - Transcript files (media/transcript_{video_id}.srt)
     - id: "cleanup"
       type: "ingestion.cleanup"
@@ -235,7 +235,7 @@ pipeline:
 
 # Feature flags
 features:
-  dense_captioning: true
+  captioning: true
   temporal_graph: true
   chapter_grouping: true
   graph_construction: true
@@ -284,7 +284,7 @@ outputs:
   # JSON exports
   transcript_txt: true
   transcript_srt: true
-  dense_chapters_json: true
+  chapters_json: true
   keyframes_json: true
   keyframe_images: true
   chapter_groups_json: true
@@ -294,4 +294,4 @@ outputs:
   # HTML visualization
   graph_html: true
   # Export path
-  export_base_path: "./media/dense_export"
+  export_base_path: "./media/export"

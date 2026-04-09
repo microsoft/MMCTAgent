@@ -1,4 +1,4 @@
-"""Dense chapter extraction with multimodal LLM support.
+"""Chapter extraction with multimodal LLM support.
 
 This module handles LLM calls and response parsing.
 All prompt/message construction is in prompts.py.
@@ -15,9 +15,9 @@ from mmct.providers.base import BaseLLMProvider
 from mmct.video_pipeline.core.ingestion.models import (
     ExtractionPlan,
     ExtractionCircuitBreaker,
-    DenseChapterResponse,
+    ChapterResponse,
 )
-from .prompts import build_dense_messages, build_basic_messages
+from .prompts import build_chapter_messages, build_basic_messages
 
 logger = logging.getLogger(__name__)
 
@@ -25,33 +25,33 @@ DEFAULT_PARALLEL_CHUNKS = 4
 DEFAULT_MAX_FRAMES_PER_CHAPTER = 12
 
 
-def parse_llm_response(response: Any) -> Optional[DenseChapterResponse]:
-    """Parse LLM response into DenseChapterResponse instance.
+def parse_llm_response(response: Any) -> Optional[ChapterResponse]:
+    """Parse LLM response into ChapterResponse instance.
     
     Args:
         response: Raw response from LLM provider
         
     Returns:
-        DenseChapterResponse instance or None on failure
+        ChapterResponse instance or None on failure
     """
     content = response
     if isinstance(response, dict) and "content" in response:
         content = response["content"]
     
-    if isinstance(content, DenseChapterResponse):
+    if isinstance(content, ChapterResponse):
         return content
     
     if isinstance(content, BaseModel):
-        return DenseChapterResponse.model_validate(content.model_dump())
+        return ChapterResponse.model_validate(content.model_dump())
     
     if isinstance(content, dict):
-        return DenseChapterResponse.model_validate(content)
+        return ChapterResponse.model_validate(content)
     
     if isinstance(content, str):
         try:
             content = content.strip('```json').strip('```')
             parsed = json.loads(content)
-            return DenseChapterResponse.model_validate(parsed)
+            return ChapterResponse.model_validate(parsed)
         except (json.JSONDecodeError, Exception) as e:
             logger.warning(f"Failed to parse response: {e}")
             return None
@@ -59,13 +59,13 @@ def parse_llm_response(response: Any) -> Optional[DenseChapterResponse]:
     return None
 
 
-async def extract_chapter_dense(
+async def extract_chapter(
     chunk: Dict[str, Any],
     keyframes: Dict[str, Any],
     llm_provider: BaseLLMProvider,
     max_frames: int = DEFAULT_MAX_FRAMES_PER_CHAPTER,
-) -> Optional[DenseChapterResponse]:
-    """Extract dense chapter data using multimodal LLM.
+) -> Optional[ChapterResponse]:
+    """Extract chapter data using multimodal LLM.
     
     Args:
         chunk: Chunk data with transcript
@@ -74,18 +74,18 @@ async def extract_chapter_dense(
         max_frames: Maximum frames to send
         
     Returns:
-        DenseChapterResponse instance or None on failure
+        ChapterResponse instance or None on failure
     """
-    messages = build_dense_messages(chunk, keyframes, max_frames)
+    messages = build_chapter_messages(chunk, keyframes, max_frames)
     
     try:
         response = await llm_provider.chat_completion(
             messages,
-            response_format=DenseChapterResponse,
+            response_format=ChapterResponse,
         )
         return parse_llm_response(response)
     except Exception as e:
-        logger.error(f"Dense extraction failed: {e}")
+        logger.error(f"Chapter extraction failed: {e}")
         return None
 
 
@@ -93,7 +93,7 @@ async def extract_chapter_basic(
     chunk: Dict[str, Any],
     keyframes: Dict[str, Any],
     llm_provider: BaseLLMProvider,
-) -> Optional[DenseChapterResponse]:
+) -> Optional[ChapterResponse]:
     """Simplified extraction with fewer frames.
     
     Args:
@@ -102,7 +102,7 @@ async def extract_chapter_basic(
         llm_provider: LLM provider instance
         
     Returns:
-        DenseChapterResponse instance or None on failure
+        ChapterResponse instance or None on failure
     """
     messages = build_basic_messages(chunk, keyframes, max_frames=4)
     
@@ -120,7 +120,7 @@ async def extract_chapter_basic(
         else:
             return None
         
-        return DenseChapterResponse(
+        return ChapterResponse(
             timestamped_description=parsed.get("timestamped_description", "") or parsed.get("summary", ""),
             scene_composition=None,
             ocr_data=None,
@@ -137,8 +137,8 @@ async def extract_chapter_with_fallback(
     circuit_breaker: ExtractionCircuitBreaker,
     extraction_plan: Optional[ExtractionPlan],
     max_frames: int = DEFAULT_MAX_FRAMES_PER_CHAPTER,
-) -> Optional[DenseChapterResponse]:
-    """Extract with fallback: dense -> basic -> transcript-only.
+) -> Optional[ChapterResponse]:
+    """Extract with fallback: multimodal -> basic -> transcript-only.
     
     Args:
         chunk: Chunk data with transcript
@@ -149,17 +149,17 @@ async def extract_chapter_with_fallback(
         max_frames: Maximum frames to send
         
     Returns:
-        DenseChapterResponse instance or None
+        ChapterResponse instance or None
     """
     if not circuit_breaker.should_allow_request():
         return await extract_chapter_basic(chunk, keyframes, llm_provider)
     
     max_retries = extraction_plan.max_retries_per_chapter if extraction_plan else 3
     
-    # Try dense extraction
+    # Try multimodal extraction
     for attempt in range(max_retries):
         try:
-            result = await extract_chapter_dense(chunk, keyframes, llm_provider, max_frames)
+            result = await extract_chapter(chunk, keyframes, llm_provider, max_frames)
             if result:
                 circuit_breaker.record_success()
                 return result
@@ -181,7 +181,7 @@ async def extract_chapter_with_fallback(
     
     # Last resort: transcript-only
     transcript = chunk.get("transcript", "")
-    return DenseChapterResponse(
+    return ChapterResponse(
         timestamped_description=transcript[:500] if transcript else "No content extracted",
         scene_composition=None,
         ocr_data=None,

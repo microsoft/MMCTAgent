@@ -1,6 +1,6 @@
 """Keyframe upload pipeline step.
 
-Uploads keyframe images to blob storage with metadata for the dense captioning pipeline.
+Uploads keyframe images to blob storage with metadata for the ingestion pipeline.
 """
 
 from .step import KeyframeUploadStep

@@ -1,7 +1,6 @@
-"""Dense keyframe extraction with action boundary detection."""
+"""Keyframe extraction with action boundary detection."""
 
 import os
-import cv2
 import asyncio
 import numpy as np
 from typing import Dict, List, Any, Tuple, Optional
@@ -12,10 +11,15 @@ from ..registry import register_step
 from .boundary_detector import detect_action_boundaries, BoundaryThresholds
 from mmct.video_pipeline.core.ingestion.models import ExtractionPlan
 
+try:
+    import cv2  # type: ignore
+except ImportError:  # pragma: no cover
+    cv2 = None
+
 
 @dataclass
-class DenseKeyframeConfig:
-    """Configuration for dense keyframe extraction."""
+class KeyframeConfig:
+    """Configuration for keyframe extraction."""
 
     motion_threshold: float = 0.8  # Motion score threshold for keyframe selection
     sample_fps: int = 2  # Frames per second to analyze
@@ -27,6 +31,11 @@ class DenseKeyframeConfig:
 
 def _get_video_properties(video_path: str) -> Dict[str, Any]:
     """Get basic video properties."""
+    if cv2 is None:
+        raise ImportError(
+            "opencv-python (or opencv-python-headless) is required for keyframe extraction. "
+            "Install with the `video-agent` extra."
+        )
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         raise ValueError(f"Cannot open video: {video_path}")
@@ -95,7 +104,7 @@ def _extract_keyframes_from_video(
     start_time: float,
     end_time: float,
     target_frames: int,
-    config: DenseKeyframeConfig,
+    config: KeyframeConfig,
     output_dir: str,
     chunk_id: str,
 ) -> List[Dict[str, Any]]:
@@ -207,7 +216,7 @@ def _extract_keyframes_from_video(
 def _select_diverse_keyframes(
     candidates: List[Dict[str, Any]],
     target_count: int,
-    config: DenseKeyframeConfig,
+    config: KeyframeConfig,
 ) -> List[Dict[str, Any]]:
     """
     Select diverse keyframes using a combination of motion scores and temporal coverage.
@@ -272,8 +281,8 @@ def _select_diverse_keyframes(
     return selected
 
 
-@register_step("ingestion.dense_keyframes")
-class DenseKeyframeExtractionStep(PipelineStep):
+@register_step("ingestion.keyframes")
+class KeyframeExtractionStep(PipelineStep):
     """
     Enhanced keyframe extraction with action boundary detection.
     
@@ -295,11 +304,11 @@ class DenseKeyframeExtractionStep(PipelineStep):
         boundary_motion_threshold: Threshold for motion-based boundary detection (default: 2.0)
     """
 
-    step_type = "ingestion.dense_keyframes"
+    step_type = "ingestion.keyframes"
     description = "Extract keyframes with action boundary detection."
 
     async def run(self, context: StepContext) -> StepResult:
-        """Execute dense keyframe extraction."""
+        """Execute keyframe extraction."""
         # Get extraction plan with proper typing
         extraction_plan: Optional[ExtractionPlan] = context.data_store.get(
             "extraction_planning", "extraction_plan"
@@ -310,7 +319,7 @@ class DenseKeyframeExtractionStep(PipelineStep):
         frames_per_chapter = self.get_param("frames_per_chapter", context, default=frames_per_chapter)
 
         # Build config
-        config = DenseKeyframeConfig(
+        config = KeyframeConfig(
             motion_threshold=self.get_param("motion_threshold", context, default=0.8),
             sample_fps=self.get_param("sample_fps", context, default=2),
             max_frame_width=self.get_param("max_frame_width", context, default=800),
@@ -354,7 +363,7 @@ class DenseKeyframeExtractionStep(PipelineStep):
             )
 
         # Output directory for keyframes
-        output_base: str = os.path.join(context.output_dir, "dense_keyframes")
+        output_base: str = os.path.join(context.output_dir, "keyframes")
         os.makedirs(output_base, exist_ok=True)
 
         # Process chunks in parallel
@@ -444,3 +453,5 @@ class DenseKeyframeExtractionStep(PipelineStep):
             },
             artifacts=all_artifacts,
         )
+
+

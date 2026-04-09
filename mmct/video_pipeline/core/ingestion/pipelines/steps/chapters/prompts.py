@@ -1,5 +1,5 @@
 """
-Dense chapter extraction prompts and multimodal message building.
+Chapter extraction prompts and multimodal message building.
 
 All prompt strings and message construction logic lives here.
 The extractor module only handles LLM calls and response parsing.
@@ -17,10 +17,10 @@ logger = logging.getLogger(__name__)
 # SYSTEM PROMPTS
 # =============================================================================
 
-DENSE_SYSTEM_PROMPT = (
-    "You are a VideoAnalyzerGPT specialized in dense video chapter analysis. "
+SYSTEM_PROMPT = (
+    "You are a VideoAnalyzerGPT specialized in video chapter analysis. "
     "Analyze the provided sequence of frames (in chronological order) along with the transcript "
-    "to produce a comprehensive DenseChapterResponse. "
+    "to produce a comprehensive ChapterResponse. "
     "Pay attention to visual continuity between frames - they show a progression of the scene. "
     "Extract scene composition details from the visual content and any visible text (OCR)."
 )
@@ -103,10 +103,10 @@ def get_sorted_frames(keyframes: Dict[str, Any], max_frames: int) -> List[Dict[s
 
 
 def get_schema_string() -> str:
-    """Get the DenseChapterResponse JSON schema as a string."""
-    from mmct.video_pipeline.core.ingestion.models import DenseChapterResponse
+    """Get the ChapterResponse JSON schema as a string."""
+    from mmct.video_pipeline.core.ingestion.models import ChapterResponse
     
-    schema = DenseChapterResponse.model_json_schema()
+    schema = ChapterResponse.model_json_schema()
     
     def clean_schema(obj):
         if isinstance(obj, dict):
@@ -136,20 +136,20 @@ def get_schema_string() -> str:
 
 def get_guidelines() -> str:
     """Get extraction guidelines from the model."""
-    from mmct.video_pipeline.core.ingestion.models import DenseChapterResponse
-    return DenseChapterResponse.get_extraction_guidelines()
+    from mmct.video_pipeline.core.ingestion.models import ChapterResponse
+    return ChapterResponse.get_extraction_guidelines()
 
 
 # =============================================================================
 # MULTIMODAL MESSAGE BUILDERS
 # =============================================================================
 
-def build_dense_messages(
+def build_chapter_messages(
     chunk: Dict[str, Any],
     keyframes: Dict[str, Any],
     max_frames: int = 12,
 ) -> List[Dict[str, Any]]:
-    """Build multimodal messages for dense chapter extraction.
+    """Build multimodal messages for chapter extraction.
     
     Frames are stacked in chronological order for visual continuity.
     
@@ -215,9 +215,14 @@ Return ONLY valid JSON, no additional text."""
     user_content.append({"type": "text", "text": text_content})
     
     return [
-        {"role": "system", "content": DENSE_SYSTEM_PROMPT},
+        {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": user_content},
     ]
+
+
+# Backwards compatible aliases (old names)
+DENSE_SYSTEM_PROMPT = SYSTEM_PROMPT
+build_dense_messages = build_chapter_messages
 
 
 def build_basic_messages(

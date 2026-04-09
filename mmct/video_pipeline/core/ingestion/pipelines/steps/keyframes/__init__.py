@@ -1,11 +1,11 @@
-"""Dense keyframe extraction with action boundary detection."""
+"""Keyframe extraction with action boundary detection."""
 
-from .step import DenseKeyframeExtractionStep, DenseKeyframeConfig
+from .step import KeyframeExtractionStep, KeyframeConfig
 from .boundary_detector import detect_action_boundaries, BoundaryThresholds
 
 __all__ = [
-    "DenseKeyframeExtractionStep",
-    "DenseKeyframeConfig",
+    "KeyframeExtractionStep",
+    "KeyframeConfig",
     "detect_action_boundaries",
     "BoundaryThresholds",
 ]

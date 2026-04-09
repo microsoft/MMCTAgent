@@ -67,8 +67,8 @@ class TemporalGraphStep(PipelineStep):
     - Configurable concurrency for parallel chapter processing
     
     Params:
-        source_chapters_step: Step ID for chapters (default: "dense_chapters")
-        source_keyframes_step: Step ID for keyframes (default: "dense_keyframes")
+        source_chapters_step: Step ID for chapters (default: "chapters")
+        source_keyframes_step: Step ID for keyframes (default: "keyframes")
         max_events_per_chapter: Maximum events per chapter (default: 10)
         max_objects_per_chapter: Maximum objects per chapter (default: 15)
         min_event_duration_ms: Minimum event duration in ms (default: 500)
@@ -100,13 +100,15 @@ class TemporalGraphStep(PipelineStep):
             StepResult containing extracted events and deduplicated objects
         """
         source_step: str = self.get_param(
-            "source_chapters_step", context, default="dense_chapters"
+            "source_chapters_step", context, default="chapters"
         )
         chapters: List[Dict[str, Any]] = (
             context.data_store.get(source_step, "raw_chapters") 
             or context.data_store.get(source_step, "chapters")
             or []
         )
+        
+
         
         if not chapters:
             chapters = context.data_store.get("chapter_enrichment", "raw_chapters") or []
@@ -139,13 +141,14 @@ class TemporalGraphStep(PipelineStep):
         
         # Get keyframes data for visual extraction
         source_keyframes_step = self.get_param(
-            "source_keyframes_step", context, default="dense_keyframes"
+            "source_keyframes_step", context, default="keyframes"
         )
         keyframes_data: List[Dict[str, Any]] = (
             context.data_store.get(source_keyframes_step, "keyframes_per_chunk")
             or context.data_store.get("keyframes", "keyframes_per_chunk")
             or []
         )
+
         
         # Get configuration parameters
         max_events = self.get_param(

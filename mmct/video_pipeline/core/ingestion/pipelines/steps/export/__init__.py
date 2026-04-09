@@ -1,12 +1,12 @@
-"""Dense export pipeline step.
+"""Export pipeline step.
 
 Exports pipeline outputs to local files:
-- Dense chapters, events, objects as JSON
+- Chapters, events, objects as JSON
 - Interactive HTML graph visualization using pyvis
 
-Output directory: {output_dir}/dense_export/{video_id}/
+Output directory: {output_dir}/export/{video_id}/
 """
 
-from .step import DenseExportStep
+from .step import ExportStep
 
-__all__ = ["DenseExportStep"]
+__all__ = ["ExportStep"]

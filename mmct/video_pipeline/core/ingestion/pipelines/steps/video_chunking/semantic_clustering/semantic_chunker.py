@@ -12,9 +12,13 @@ import numpy as np
 from typing import List
 from loguru import logger
 from pydantic import BaseModel
-from sklearn.metrics.pairwise import cosine_similarity
 from dotenv import load_dotenv, find_dotenv
 from mmct.providers.base import BaseEmbeddingProvider
+
+try:
+    from sklearn.metrics.pairwise import cosine_similarity  # type: ignore
+except ImportError:  # pragma: no cover
+    cosine_similarity = None
 
 
 class TranscriptSegment(BaseModel):
@@ -142,6 +146,11 @@ class SemanticChunker:
 
     async def _calculate_cosine_similarity(self, vec1, vec2):
         """Computes cosine similarity between two vectors asynchronously."""
+        if cosine_similarity is None:
+            raise ImportError(
+                "scikit-learn is required for transcript-based semantic chunking. "
+                "Install with the `video-agent` extra."
+            )
         return cosine_similarity(np.array(vec1).reshape(1, -1), np.array(vec2).reshape(1, -1))[0][0]
 
     async def _calculate_chunk_centroid(self, embeddings):
@@ -379,8 +388,8 @@ class SemanticChunker:
             return segments
 
         result = []
-        # Initialize prev_end_time to first segment's start_time to avoid incorrect gaps for Part B
-        prev_end_time = segments[0].start_time
+        # Start from 0.0 so first chapter covers video start even if transcript starts later
+        prev_end_time = 0.0
 
         for segment in segments:
             # Check if there's a gap between previous segment and current

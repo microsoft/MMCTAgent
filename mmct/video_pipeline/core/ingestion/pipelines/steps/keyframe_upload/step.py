@@ -1,10 +1,10 @@
 """Keyframe Upload pipeline step.
 
-Uploads keyframe images from dense_keyframes step to blob storage with metadata.
+Uploads keyframe images from the keyframes step to blob storage with metadata.
 Creates blob URLs for each keyframe that can be used by downstream steps.
 
 Data flow:
-- Input: keyframes_per_chunk from dense_keyframes step
+- Input: keyframes_per_chunk from keyframes step
 - Output: Updated keyframes with blob_url for each image
 """
 
@@ -24,11 +24,11 @@ from mmct.providers.base.storage_provider import BaseStorageProvider
 class KeyframeUploadStep(PipelineStep):
     """Pipeline step for uploading keyframe images to blob storage.
     
-    Reads keyframes from dense_keyframes step and uploads each image
+    Reads keyframes from keyframes step and uploads each image
     to blob storage, updating the metadata with blob URLs.
     
     Params:
-        source_keyframes_step: Step ID for keyframes (default: "dense_keyframes")
+        source_keyframes_step: Step ID for keyframes (default: "keyframes")
         max_concurrent_uploads: Maximum parallel uploads (default: 20)
         container_name: Blob container name (default: from storage_provider)
         skip_if_uploaded: Skip keyframes that already have blob_url (default: True)
@@ -48,13 +48,13 @@ class KeyframeUploadStep(PipelineStep):
         """
         # Get source step
         source_step: str = self.get_param(
-            "source_keyframes_step", context, default="dense_keyframes"
+            "source_keyframes_step", context, default="keyframes"
         )
         
         # Get keyframes data
-        keyframes_per_chunk: List[Dict[str, Any]] = (
-            context.data_store.get(source_step, "keyframes_per_chunk") or []
-        )
+        keyframes_per_chunk: List[Dict[str, Any]] = context.data_store.get(
+            source_step, "keyframes_per_chunk"
+        ) or context.data_store.get("dense_keyframes", "keyframes_per_chunk") or []
         
         if not keyframes_per_chunk:
             logger.warning("No keyframes found to upload")

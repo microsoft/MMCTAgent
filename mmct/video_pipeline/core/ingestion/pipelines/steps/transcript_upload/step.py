@@ -6,8 +6,8 @@ to Azure Blob Storage container 'video-transcript-lively'.
 Blob path convention:
     <normalized-video-id>/transcript.srt
 
-The step creates its own AzureStorageProvider instance targeting the
-dedicated container (created automatically if it does not exist).
+Uses the injected `context.provider.storage_provider` to upload to the
+configured object store (Azure or otherwise).
 """
 
 import os
@@ -19,7 +19,7 @@ from loguru import logger
 
 from ..base import PipelineStep, StepContext, StepResult
 from ..registry import register_step
-from mmct.providers.azure_providers.storage_provider import AzureStorageProvider
+from mmct.providers.base.storage_provider import BaseStorageProvider
 
 
 _BLOB_INVALID_RE = re.compile(r'[^a-zA-Z0-9\-_.]')
@@ -83,7 +83,7 @@ class TranscriptUploadStep(PipelineStep):
             )
 
         # Build storage provider for the dedicated container
-        storage_provider: Optional[AzureStorageProvider] = getattr(
+        storage_provider: Optional[BaseStorageProvider] = getattr(
             context.provider, "storage_provider", None
         )
         if storage_provider is None:
@@ -96,18 +96,10 @@ class TranscriptUploadStep(PipelineStep):
                 metrics={"uploaded": 0},
             )
 
-        transcript_storage = AzureStorageProvider(
-            storage_account_name=storage_provider.storage_account_name,
-            keyframe_container_name=container_name,
-            credentials=storage_provider.credentials,
-            blob_connection_string=storage_provider.blob_connection_string
-            if not storage_provider.credentials else None,
-        )
-
         blob_name = f"{norm_id}/transcript.srt"
 
         try:
-            blob_url = await transcript_storage.upload_file(
+            blob_url = await storage_provider.upload_file(
                 file_name=blob_name,
                 src_file_path=upload_path,
                 folder_name=container_name,
@@ -117,7 +109,6 @@ class TranscriptUploadStep(PipelineStep):
             logger.error(f"Transcript upload failed: {exc}")
             blob_url = None
         finally:
-            await transcript_storage.close()
             if tmp_created:
                 os.unlink(upload_path)
 

@@ -1,11 +1,11 @@
-"""Dense export pipeline step.
+"""Export pipeline step.
 
 Exports pipeline outputs to local files:
-- Dense chapters as JSON (from dense_chapters step)
+- Chapters as JSON (from chapters step)
 - Events, objects, and graph structure as JSON (from graph_construction step)
 - Interactive HTML graph visualization using pyvis
 
-Output directory: {output_dir}/dense_export/{run_id}_{video_id}/
+Output directory: {output_dir}/export/{run_id}_{video_id}/
 """
 
 import os
@@ -753,32 +753,32 @@ def _generate_neo4j_style_html(
 </html>'''
 
 
-@register_step("ingestion.dense_export")
-class DenseExportStep(PipelineStep):
+@register_step("ingestion.export")
+class ExportStep(PipelineStep):
     """Export pipeline outputs to local JSON files and HTML visualization.
     
     Extracts data from the constructed graph and exports:
     - Transcript text and SRT file (from transcribe step)
-    - Dense chapters JSON (from dense_chapters step)
+    - Chapters JSON (from chapters step)
     - Chapter groups JSON (from chapter_grouping step)
     - Transcript nodes JSON (Transcript nodes from graph - verbal content per chapter)
     - Events JSON (Event nodes from graph)
     - Objects JSON (Object nodes from graph)
     - Graph JSON (full graph structure)
     - Interactive HTML visualization (using pyvis)
-    - Keyframes metadata JSON and image files (from dense_keyframes step)
+    - Keyframes metadata JSON and image files (from keyframes step)
     
-    Output: {output_dir}/dense_export/{video_id}/
+    Output: {output_dir}/export/{video_id}/
     
     Params:
         transcribe_step: Step ID for transcription (default: "transcribe")
-        dense_chapters_step: Step ID for dense chapters (default: "dense_chapters")
-        dense_keyframes_step: Step ID for keyframes (default: "dense_keyframes")
+        chapters_step: Step ID for chapters (default: "chapters")
+        keyframes_step: Step ID for keyframes (default: "keyframes")
         chapter_grouping_step: Step ID for chapter groups (default: "chapter_grouping")
         graph_step: Step ID for constructed graph (default: "graph_construction")
-        output_subdir: Subdirectory under output_dir (default: "dense_export")
+        output_subdir: Subdirectory under output_dir (default: "export")
         include_transcript: Export transcript text and SRT file (default: True)
-        include_dense_chapters: Export dense chapters JSON (default: True)
+        include_chapters: Export chapters JSON (default: True)
         include_chapter_groups: Export chapter groups JSON (default: True)
         include_transcript_nodes: Export transcript nodes JSON (default: True)
         include_events: Export events JSON (default: True)
@@ -789,23 +789,25 @@ class DenseExportStep(PipelineStep):
         pretty_print: Format JSON with indentation (default: True)
     """
     
-    step_type = "ingestion.dense_export"
+    step_type = "ingestion.export"
     description = "Export pipeline outputs to JSON files and HTML visualization."
     
     async def run(self, context: StepContext) -> StepResult:
-        """Execute dense export."""
+        """Execute export."""
         import shutil
         
         # Get parameters
         transcribe_step = self.get_param("transcribe_step", context, default="transcribe")
-        dense_chapters_step = self.get_param("dense_chapters_step", context, default="dense_chapters")
-        dense_keyframes_step = self.get_param("dense_keyframes_step", context, default="dense_keyframes")
+        chapters_step = self.get_param("chapters_step", context, default="chapters")
+        keyframes_step = self.get_param("keyframes_step", context, default="keyframes")
         chapter_grouping_step = self.get_param("chapter_grouping_step", context, default="chapter_grouping")
         graph_step = self.get_param("graph_step", context, default="graph_construction")
-        output_subdir = self.get_param("output_subdir", context, default="dense_export")
+        output_subdir = self.get_param("output_subdir", context, default="export")
         
         include_transcript = self.get_param("include_transcript", context, default=True)
-        include_dense_chapters = self.get_param("include_dense_chapters", context, default=True)
+        include_chapters = self.get_param("include_chapters", context, default=None)
+        if include_chapters is None:
+            include_chapters = True
         include_chapter_groups = self.get_param("include_chapter_groups", context, default=True)
         include_events = self.get_param("include_events", context, default=True)
         include_objects = self.get_param("include_objects", context, default=True)
@@ -832,7 +834,7 @@ class DenseExportStep(PipelineStep):
             "run_id": run_id,
             "files_exported": 0,
             "transcript_word_count": 0,
-            "dense_chapters_count": 0,
+            "chapters_count": 0,
             "chapter_groups_count": 0,
             "graph_chapter_groups_count": 0,
             "graph_chapters_count": 0,
@@ -874,23 +876,26 @@ class DenseExportStep(PipelineStep):
                     except Exception as e:
                         logger.warning(f"Failed to copy SRT file: {e}")
         
-        # Export dense chapters
-        if include_dense_chapters:
-            dense_chapters = (
-                context.data_store.get(dense_chapters_step, "raw_chapters")
-                or context.data_store.get(dense_chapters_step, "chapters")
+        # Export chapters
+        if include_chapters:
+            chapters = (
+                context.data_store.get(chapters_step, "raw_chapters")
+                or context.data_store.get(chapters_step, "chapters")
                 or []
             )
-            if dense_chapters:
-                filepath = self._export_json(export_dir, "dense_chapters.json", dense_chapters, indent)
+            if chapters:
+                filepath = self._export_json(export_dir, "chapters.json", chapters, indent)
                 exported_files.append(filepath)
-                metrics["dense_chapters_count"] = len(dense_chapters)
+                metrics["chapters_count"] = len(chapters)
                 metrics["files_exported"] += 1
-                logger.info(f"Exported {len(dense_chapters)} dense chapters")
+                logger.info(f"Exported {len(chapters)} chapters")
         
         # Export keyframes metadata and images
         if include_keyframes:
-            keyframes_data = context.data_store.get(dense_keyframes_step, "keyframes_per_chunk") or []
+            keyframes_data = (
+                context.data_store.get(keyframes_step, "keyframes_per_chunk")
+                or []
+            )
             if keyframes_data:
                 # Create keyframes subdirectory
                 keyframes_dir = os.path.join(export_dir, "keyframes")
@@ -1088,3 +1093,5 @@ class DenseExportStep(PipelineStep):
             edges.append({"source": source, "target": target, "type": edge_type, "properties": props})
         
         return {"nodes": nodes, "edges": edges}
+
+

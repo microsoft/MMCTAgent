@@ -73,11 +73,11 @@ class GraphConstructionStep(PipelineStep):
     
     Node Types:
     - ChapterGroup: High-level topic groupings (from chapter_grouping step)
-    - Chapter: Video segments with multimodal summary (from dense_chapters step)
+    - Chapter: Video segments with multimodal summary (from chapters step)
     - Transcript: Raw verbal content for verbal-only queries (created from Chapter.transcript)
     - Event: Atomic actions (from temporal_graph step)
     - Object: Entities (from temporal_graph step)
-    - Keyframe: Visual frames (from dense_keyframes step)
+    - Keyframe: Visual frames (from keyframes step)
     
     Edge Types (GraphBuilder):
     - NEXT_GROUP/PREV_GROUP: ChapterGroup temporal sequence
@@ -96,9 +96,9 @@ class GraphConstructionStep(PipelineStep):
     
     Params:
         source_step: Step ID for events/objects (default: "temporal_graph")
-        source_chapters_step: Step ID for chapters (default: "dense_chapters")
+        source_chapters_step: Step ID for chapters (default: "chapters")
         source_groups_step: Step ID for chapter groups (default: "chapter_grouping")
-        source_keyframes_step: Step ID for keyframes (default: "dense_keyframes")
+        source_keyframes_step: Step ID for keyframes (default: "keyframes")
         graph_provider: Graph provider type (default: "networkx")
         batch_size: Batch size for node/edge creation (default: 50)
         event_similarity_threshold: Min similarity for SIMILAR_TO (default: 0.75)
@@ -130,13 +130,13 @@ class GraphConstructionStep(PipelineStep):
             "source_step", context, default="temporal_graph"
         )
         source_chapters_step: str = self.get_param(
-            "source_chapters_step", context, default="dense_chapters"
+            "source_chapters_step", context, default="chapters"
         )
         source_groups_step: str = self.get_param(
             "source_groups_step", context, default="chapter_grouping"
         )
         source_keyframes_step: str = self.get_param(
-            "source_keyframes_step", context, default="dense_keyframes"
+            "source_keyframes_step", context, default="keyframes"
         )
         
         # Get events and objects from temporal_graph step
@@ -160,6 +160,8 @@ class GraphConstructionStep(PipelineStep):
             context.data_store.get(source_groups_step, "chapters")  # Updated chapters with group_index
             or context.data_store.get(source_chapters_step, "raw_chapters")
             or context.data_store.get(source_chapters_step, "chapters")
+            or context.data_store.get("dense_chapters", "raw_chapters")
+            or context.data_store.get("dense_chapters", "chapters")
             or []
         )
         
@@ -173,7 +175,9 @@ class GraphConstructionStep(PipelineStep):
         
         # Get keyframes from dense_keyframes step
         keyframes_data: List[Dict[str, Any]] = (
-            context.data_store.get(source_keyframes_step, "keyframes_per_chunk") or []
+            context.data_store.get(source_keyframes_step, "keyframes_per_chunk")
+            or context.data_store.get("dense_keyframes", "keyframes_per_chunk")
+            or []
         )
         
         # Get video_id early for model creation

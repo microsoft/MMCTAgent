@@ -2,11 +2,10 @@
 Helper functions specific to video ingestion pipeline.
 """
 
-import os
 import subprocess
 import aiofiles
 from loguru import logger
-from mmct.providers.base import BaseChapterVectorDBProvider
+from typing import Any
 
 
 async def get_video_duration(video_path: str) -> float:
@@ -106,7 +105,7 @@ def parse_srt_timestamps(srt_content: str) -> list:
     return segments
 
 
-async def check_video_already_ingested(hash_id: str, search_provider:BaseChapterVectorDBProvider) -> bool:
+async def check_video_already_ingested(hash_id: str, search_provider: Any) -> bool:
     """
     Check if a video with the given hash_id already exists in the search index.
 
