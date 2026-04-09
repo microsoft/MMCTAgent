@@ -19,7 +19,7 @@ from mmct.image_pipeline.prompts import (
 from mmct.utils.error_handler import ProviderException, ConfigurationException
 from mmct.utils.error_handler import handle_exceptions
 from mmct.image_pipeline.prompts import IMAGE_AGENT_SYSTEM_PROMPT, ImageAgentResponse
-from mmct.config.providers import ImageAgentProviderConfig
+from mmct.image_pipeline.config import ImageAgentProviderConfig
 from loguru import logger
 from dotenv import load_dotenv, find_dotenv
 load_dotenv(find_dotenv(),override=True)
@@ -52,11 +52,13 @@ class ImageAgent:
         List of tools to use. Defaults to all available tools.
     disable_console_log (bool, optional):
         Disable console logs. Defaults to False.
+    use_console (bool, optional):
+        Use Console for output display. Defaults to True.
 
     Example Usage:
     --------------
     >>> from mmct.image_pipeline import ImageAgent, ImageQnaTools
-    >>> from mmct.config.providers import ImageAgentProviderConfig
+    >>> from mmct.image_pipeline.config import ImageAgentProviderConfig
     >>> from mmct.providers.azure import AzureLLMProvider
     >>> provider_config = ImageAgentProviderConfig(
     >>> llm_provider = AzureLLMProvider(endpoint = "<endpoint>", api_version = "<api-version>", 
@@ -68,7 +70,8 @@ class ImageAgent:
     >>>         query="What dishes are listed under House Special?",
     >>>         provider=provider_config,
     >>>         tools=[ImageQnaTools.ocr, ImageQnaTools.vit],
-    >>>         use_critic_agent=True
+    >>>         use_critic_agent=True,
+    >>>         use_console=True
     >>>     )
     >>>     result = await image_qna()
     >>>     print(result)
@@ -88,7 +91,8 @@ class ImageAgent:
             ImageQnaTools.recog,
             ImageQnaTools.vit,
         ],
-        disable_console_log: Annotated[bool, "boolean flag to disable console logs"] = False
+        disable_console_log: Annotated[bool, "boolean flag to disable console logs"] = False,
+        use_console: Annotated[bool, "Use Console for output display"] = True
     ):
         try:
             # Initialize logger for this instance
@@ -104,6 +108,7 @@ class ImageAgent:
             self.stream = stream
             self.tools_enum = tools
             self.disable_console_log = disable_console_log
+            self.use_console = use_console
             
             # Configure console logging
             if not disable_console_log:
@@ -373,7 +378,7 @@ class ImageAgent:
         Main execution method for the ImageAgent.
         
         Returns:
-            Formatted ImageAgentResponse
+            Formatted ImageAgentResponse or Stream Generator
             
         Raises:
             ProviderException: If execution fails
@@ -381,6 +386,9 @@ class ImageAgent:
         try:
             if self.stream:
                 response_generator = await self.run_stream()
+                if not self.use_console:
+                    return response_generator
+                    
                 self.result = await Console(response_generator)
                 if isinstance(self.result,TaskResult):
                     self.result = self.result.messages[-1]
@@ -404,6 +412,7 @@ if __name__ == "__main__":
     ]
     use_critic_agent = True
     stream = True
+    use_console = True  # Enable console for local run
 
     image_qna = ImageAgent(
             image_path=image_path,
@@ -411,7 +420,16 @@ if __name__ == "__main__":
             tools=tools,
             use_critic_agent=use_critic_agent,
             stream=stream,
+            use_console=use_console,
             # disable_console_log=False
         )
-    res = asyncio.run(image_qna())
-    print(res)
+    
+    if stream and not use_console:
+        async def iterate_stream():
+            stream_gen = await image_qna()
+            async for chunk in stream_gen:
+                print(chunk)
+        asyncio.run(iterate_stream())
+    else:
+        res = asyncio.run(image_qna())
+        print(res)
