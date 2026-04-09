@@ -6,6 +6,9 @@ __pycache__/
 # C extensions
 *.so
 media/
+keyframes*
+videos/
+cookies.txt
 
 # Distribution / packaging
 .Python
@@ -28,6 +31,8 @@ share/python-wheels/
 MANIFEST
 mmct_faiss_indices/
 mmct/tests/results/
+test/
+pytest.ini
 local_storage/
 *.mp4
 # PyInstaller
@@ -136,6 +141,9 @@ celerybeat.pid
 .venv
 env/
 venv/
+
+# Deployment artifacts (generated at deploy time)
+.generated-container-app.yaml
 ENV/
 env.bak/
 venv.bak/

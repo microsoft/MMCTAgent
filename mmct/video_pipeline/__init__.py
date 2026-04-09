@@ -1,15 +1,20 @@
 """
 Video Pipeline Module
 
-This package exposes the main public API for video ingestion and querying.
+This package exposes the public API for video ingestion and query.
 """
 
 from .core.ingestion.ingestion_pipeline import IngestionPipeline
 from .core.ingestion.languages import Languages
-from .agents.video_agent import VideoAgent
+from .graph.orchestrator import GraphOrchestrator
+from .query_pipeline import QueryPipelineMode, VideoQueryPipeline
+from .state.orchestrator import StateOrchestrator
 
 __all__ = [
     "IngestionPipeline",
     "Languages",
-    "VideoAgent",
+    "GraphOrchestrator",
+    "QueryPipelineMode",
+    "StateOrchestrator",
+    "VideoQueryPipeline",
 ]
