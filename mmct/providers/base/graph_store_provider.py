@@ -4,10 +4,15 @@ Provides interface for bulk graph upload/sync operations to external graph datab
 This is different from BaseGraphDBProvider which is for CRUD operations.
 """
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional
 
-import networkx as nx
+try:
+    import networkx as nx  # type: ignore
+except ImportError:  # pragma: no cover
+    nx = None
 
 
 class BaseGraphStoreProvider(ABC):

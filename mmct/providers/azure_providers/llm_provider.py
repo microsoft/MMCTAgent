@@ -18,7 +18,7 @@ class AzureLLMProvider(BaseLLMProvider):
         endpoint: str,
         deployment_name: str,
         model_name: Optional[str] = None,
-        api_version: str = "2024-08-01-preview",
+        api_version: str = "2024-12-01-preview",
         credentials: Optional[Union[AzureKeyCredential, AsyncTokenCredential]] = None,
         api_key: Optional[str] = None,
         timeout: Optional[int] = 200,
@@ -119,17 +119,35 @@ class AzureLLMProvider(BaseLLMProvider):
                 and isinstance(response_format, type)
                 and issubclass(response_format, BaseModel)
             ):
-                response = await self.client.chat.completions.parse(
+                # Build JSON schema with all properties required (Azure OpenAI requirement)
+                schema = self._build_strict_schema(response_format)
+                
+                response = await self.client.chat.completions.create(
                     model=self.deployment_name,
                     messages=messages,
                     temperature=temperature,
                     max_tokens=max_tokens,
-                    response_format=response_format,
+                    response_format={
+                        "type": "json_schema",
+                        "json_schema": {
+                            "name": response_format.__name__,
+                            "strict": True,
+                            "schema": schema,
+                        }
+                    },
                     **filtered_kwargs,
                 )
+                
+                # Parse the JSON response into the Pydantic model
+                import json
+                content = response.choices[0].message.content
+                if isinstance(content, str):
+                    parsed = response_format.model_validate(json.loads(content))
+                else:
+                    parsed = content
 
                 return {
-                    "content": response.choices[0].message.parsed,
+                    "content": parsed,
                     "usage": response.usage.model_dump() if response.usage else None,
                     "model": response.model,
                     "finish_reason": response.choices[0].finish_reason,
@@ -159,10 +177,74 @@ class AzureLLMProvider(BaseLLMProvider):
             logger.error(f"Azure OpenAI chat completion failed: {e}")
             raise ProviderException(f"Azure OpenAI chat completion failed: {e}")
 
+    def _build_strict_schema(self, model: type) -> dict:
+        """
+        Build a JSON schema with all properties required for Azure OpenAI strict mode.
+        
+        Azure OpenAI structured outputs require all properties in the schema
+        to be listed in the 'required' array. This method generates a schema
+        and recursively makes all properties required.
+        
+        Args:
+            model: The Pydantic model class
+            
+        Returns:
+            JSON schema dict with all properties required
+        """
+        schema = model.model_json_schema()
+        self._make_schema_strict(schema)
+        return schema
+    
+    def _make_schema_strict(self, schema: dict) -> None:
+        """Recursively make schema strict for Azure OpenAI (adds additionalProperties: false)."""
+        
+        # Ensure top-level is strict
+        if "type" in schema and schema["type"] == "object":
+            schema["additionalProperties"] = False
+        
+        # Process $defs first
+        if "$defs" in schema:
+            for def_schema in schema["$defs"].values():
+                self._make_schema_strict(def_schema)
+        
+        # Make properties required
+        if "properties" in schema:
+            schema["required"] = list(schema["properties"].keys())
+            
+            # Recurse nested objects
+            for prop_schema in schema["properties"].values():
+                if isinstance(prop_schema, dict) and prop_schema.get("type") == "object":
+                    self._make_schema_strict(prop_schema)
+        
+        # Handle array items
+        if "items" in schema and isinstance(schema["items"], dict):
+            self._make_schema_strict(schema["items"])
+        
+        # Handle anyOf/oneOf/allOf
+        for key in ("anyOf", "oneOf", "allOf"):
+            if key in schema:
+                for item in schema[key]:
+                    if isinstance(item, dict):
+                        self._make_schema_strict(item)
+        
+        # Handle additionalProperties objects
+        if "additionalProperties" in schema and isinstance(schema["additionalProperties"], dict):
+            self._make_schema_strict(schema["additionalProperties"])
+
     def get_autogen_client(self, **kwargs):
         """Get autogen-compatible client for Azure OpenAI."""
         try:
-            temperature = kwargs.get("temperature", 0)
+            model = self.model_name if self.model_name else self.deployment_name
+
+            # Provide model_info for custom deployment names not recognized by autogen
+            model_info = {
+                "vision": True,
+                "function_calling": True,
+                "json_output": True,
+                "family": "gpt-5",
+                "structured_output": True,
+                "multiple_system_messages": True,
+            }
 
             if self.credentials is not None:
                 # Use credentials with token-based authentication
@@ -171,22 +253,22 @@ class AzureLLMProvider(BaseLLMProvider):
                 )
                 return AzureOpenAIChatCompletionClient(
                     azure_deployment=self.deployment_name,
-                    model=self.model_name if self.model_name else self.deployment_name,
+                    model=model,
                     api_version=self.api_version,
                     azure_endpoint=self.endpoint,
                     azure_ad_token_provider=token_provider,
                     timeout=self.timeout,
-                    temperature=temperature,
+                    model_info=model_info,
                 )
             else:
                 return AzureOpenAIChatCompletionClient(
                     azure_deployment=self.deployment_name,
-                    model=self.model_name if self.model_name else self.deployment_name,
+                    model=model,
                     api_version=self.api_version,
                     azure_endpoint=self.endpoint,
                     api_key=self.api_key,
                     timeout=self.timeout,
-                    temperature=temperature,
+                    model_info=model_info,
                 )
         except Exception as e:
             raise ProviderException(f"Failed to create Azure OpenAI autogen client: {e}")
@@ -196,3 +278,39 @@ class AzureLLMProvider(BaseLLMProvider):
         if self.client:
             logger.info("Closing Azure OpenAI LLM client")
             await self.client.close()
+
+    async def generate_json(self, prompt: str, **kwargs) -> Dict[str, Any]:
+        """
+        Generate a JSON response from a prompt.
+        
+        Args:
+            prompt: The prompt to send to the LLM
+            **kwargs: Additional arguments passed to chat_completion
+            
+        Returns:
+            Parsed JSON response as a dictionary
+        """
+        import json
+        
+        messages = [{"role": "user", "content": prompt}]
+        
+        # Request JSON output format
+        response = await self.chat_completion(
+            messages=messages,
+            response_format={"type": "json_object"},
+            **kwargs,
+        )
+        
+        content = response.get("content", "{}")
+        
+        # Parse JSON response
+        if isinstance(content, str):
+            try:
+                return json.loads(content)
+            except json.JSONDecodeError as e:
+                logger.warning(f"Failed to parse JSON response: {e}")
+                return {}
+        elif isinstance(content, dict):
+            return content
+        
+        return {}

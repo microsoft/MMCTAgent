@@ -57,7 +57,7 @@ class AzureStorageProvider(BaseStorageProvider):
         self.blob_connection_string = blob_connection_string
         self.storage_account_name = storage_account_name
         self.keyframe_container_name = keyframe_container_name
-        self.storage_account_url = f"https://{self.storage_account_name}.blob.core.windows.net/"
+        self.storage_account_url = f"https://{self.storage_account_name}.blob.core.windows.net"
         self.service_client = self._initialize()
 
     def _initialize(self):

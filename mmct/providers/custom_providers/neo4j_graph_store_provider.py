@@ -12,12 +12,17 @@ Note: Embedding generation is handled by the graph_upload step, not this provide
 This provider expects nodes to already have 'embedding' attributes when uploaded.
 """
 
+from __future__ import annotations
+
 import asyncio
 import json
 from typing import List, Dict, Any, Optional
 
 from loguru import logger
-import networkx as nx
+try:
+    import networkx as nx  # type: ignore
+except ImportError:  # pragma: no cover
+    nx = None
 
 from mmct.providers.base.graph_store_provider import BaseGraphStoreProvider
 
@@ -130,6 +135,11 @@ class Neo4jGraphStoreProvider(BaseGraphStoreProvider):
         Returns:
             Dict with upload statistics.
         """
+        if nx is None:
+            raise ImportError(
+                "networkx is required for graph upload. Install with the `video-agent` extra."
+            )
+
         self._ensure_driver()
         
         stats = {
@@ -409,25 +419,31 @@ class Neo4jGraphStoreProvider(BaseGraphStoreProvider):
         dimension: int = 384,
         node_types: Optional[List[str]] = None,
         index_suffix: str = "",
+        m: int = 16,
+        ef_construction: int = 128,
         **kwargs
     ) -> bool:
-        """Create vector indexes for node types.
-
-        Creates cosine similarity vector indexes for embedding-based search.
-        Compatible with Neo4j 5.11+. HNSW tuning parameters (m, ef_construction)
-        were removed in Neo4j 5.18 and are no longer accepted as index config keys.
-
+        """Create HNSW vector indexes for node types.
+        
+        Creates HNSW (Hierarchical Navigable Small World) vector indexes
+        with cosine similarity for embedding-based search.
+        Requires Neo4j 5.11+ with vector index support.
+        
         Args:
             dimension: Embedding dimension (default: 384 for BGE-small).
             node_types: List of node types to index (default: text node types).
             index_suffix: Suffix to add to index names (e.g., "_image").
+            m: HNSW M parameter - max connections per node (default: 16).
+                Higher = better recall but more memory/slower indexing.
+            ef_construction: HNSW efConstruction - search depth during build (default: 128).
+                Higher = better index quality but slower indexing.
         """
         self._ensure_driver()
-
+        
         # Default to text-based node types if not specified
         if node_types is None:
             node_types = ["ChapterGroup", "Chapter", "Transcript", "Event", "Object"]
-
+        
         try:
             def create_indexes_sync():
                 with self._driver.session(database=self._database) as session:
@@ -441,15 +457,18 @@ class Neo4jGraphStoreProvider(BaseGraphStoreProvider):
                             OPTIONS {{
                                 indexConfig: {{
                                     `vector.dimensions`: {dimension},
-                                    `vector.similarity_function`: 'cosine'
+                                    `vector.similarity_function`: 'cosine',
+                                    `vector.hnsw.m`: {m},
+                                    `vector.hnsw.ef_construction`: {ef_construction}
                                 }}
                             }}
                             """
                             session.run(query)
-                            logger.info(f"Created vector index: {index_name} (dim={dimension}, cosine)")
+                            logger.info(f"Created HNSW vector index: {index_name} (dim={dimension}, m={m}, ef={ef_construction})")
                         except Exception as e:
+                            # Index may already exist or Neo4j version doesn't support it
                             logger.warning(f"Could not create index {index_name}: {e}")
-
+            
             await asyncio.to_thread(create_indexes_sync)
             return True
         except Exception as e:

@@ -232,8 +232,8 @@ class NetworkXGraphProvider(BaseGraphDBProvider):
         neighbors = []
         
         if direction in ("out", "both"):
-            for target in self._graph.successors(node_id):
-                edge_data = self._graph.edges[node_id, target]
+            # MultiDiGraph out_edges returns (u, v, key, data) when keys=True, data=True
+            for _, target, key, edge_data in self._graph.out_edges(node_id, data=True, keys=True):
                 if edge_type and edge_data.get("_type") != edge_type:
                     continue
                 
@@ -256,8 +256,8 @@ class NetworkXGraphProvider(BaseGraphDBProvider):
                 })
         
         if direction in ("in", "both"):
-            for source in self._graph.predecessors(node_id):
-                edge_data = self._graph.edges[source, node_id]
+            # MultiDiGraph in_edges returns (u, v, key, data) when keys=True, data=True
+            for source, _, key, edge_data in self._graph.in_edges(node_id, data=True, keys=True):
                 if edge_type and edge_data.get("_type") != edge_type:
                     continue
                 

@@ -9,28 +9,23 @@ class BaseLLMProvider(ABC):
         """Generate chat completion response."""
         pass
 
-    async def generate_json(self, messages: List[Dict], **kwargs) -> Dict[str, Any]:
-        """Generate a JSON-parsed response via chat_completion.
-
-        Convenience wrapper that calls chat_completion with json_object response
-        format and returns the parsed dict. Subclasses may override for stricter
-        schema enforcement.
-        """
-        import json
-        response = await self.chat_completion(
-            messages=messages,
-            response_format={"type": "json_object"},
-            **kwargs,
-        )
-        content = response.get("content", "{}")
-        if isinstance(content, str):
-            return json.loads(content)
-        # Already parsed (e.g. structured output path returned a dict/model)
-        if hasattr(content, "model_dump"):
-            return content.model_dump()
-        return content
-
     @abstractmethod
     def get_autogen_client(self, **kwargs):
         """Get autogen-compatible client for the LLM provider."""
+        pass
+
+    @abstractmethod
+    async def generate_json(self, prompt: str, **kwargs) -> Dict[str, Any]:
+        """
+        Generate a JSON response from a prompt.
+        
+        This is a convenience method that wraps chat_completion with JSON output format.
+        
+        Args:
+            prompt: The prompt to send to the LLM
+            **kwargs: Additional arguments passed to chat_completion
+            
+        Returns:
+            Parsed JSON response as a dictionary
+        """
         pass
