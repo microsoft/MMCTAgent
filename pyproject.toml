@@ -25,8 +25,10 @@ dependencies = [
     # Web Framework & API
     "fastapi>=0.115.0,<1.0.0",
     "uvicorn[standard]>=0.32.0,<1.0.0",
+    "oss2==2.19.1",
     "python-multipart>=0.0.20,<1.0.0",
-
+    "fastmcp==2.11.3",
+    "autogen-ext[mcp]",
     # Data Validation & Configuration
     "pydantic>=2.8.0,<3.0.0",
     "pydantic-settings>=2.5.0,<3.0.0",
@@ -40,7 +42,6 @@ dependencies = [
     "urllib3>=2.2.0,<3.0.0",
     "requests>=2.31.0,<3.0.0",
     "numpy>=1.24.0,<2.0.0",
-    "oss2==2.19.1",
     "cachetools>=5.3.0,<6.0.0",
 
     # AI/LLM Core
@@ -52,6 +53,11 @@ dependencies = [
     "autogen-agentchat>=0.4.9.0,<1.0.0",
     "autogen-core>=0.4.9.0,<1.0.0",
     "autogen-ext>=0.4.9.0,<1.0.0",
+
+    # test
+    "pytest",
+    "pytest-asyncio",
+    "pytest-mock",
 ]
 
 [project.optional-dependencies]
@@ -79,6 +85,7 @@ video-agent = [
     "torch",
     "torchvision",
     "transformers>=4.30.0,<5.0.0",
+    "fastembed>=0.3.0,<1.0.0",
     # Video-specific libraries
     "opencv-python-headless>=4.8.0.0,<5.0.0",
     "ffmpeg-python",
@@ -90,6 +97,10 @@ video-agent = [
     "faiss-cpu",
     "datasets>=2.20.0,<3.0.0",
     "accelerate==1.10.1",
+    # Graph visualization
+    "pyvis>=0.3.0,<1.0.0",
+    # Graph database
+    "neo4j>=5.0.0,<6.0.0",
     # Azure providers (for cloud-based transcription, search, storage)
     "azure-identity>=1.19.0,<2.0.0",
     "azure-core>=1.32.0,<2.0.0",
@@ -100,17 +111,8 @@ video-agent = [
     "azure-eventhub>=5.14.0,<6.0.0",
     "azure-eventhub-checkpointstoreblob-aio",
     "scenedetect>=0.6.0,<1.0.0",
-    "fastembed>=0.3.0,<1.0.0",
-    "pyvis>=0.3.0,<1.0.0",
-    "neo4j>=5.0.0,<6.0.0",
 ]
 
-# Complete installation (all features including MCP server)
-all = [
-    "mmct[image-agent,video-agent]",
-    "fastmcp==2.11.3",
-    "autogen-ext[mcp]",
-]
 
 # Development tools
 dev = [
@@ -132,7 +134,7 @@ docs = [
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["mmct*", "mcp_server*", "app*"]
+include = ["mmct*", "mcp_server*", "api*", "config*"]
 exclude = ["tests", "tests.*", "*.tests", "*.tests.*"]
 
 [tool.setuptools.package-data]
