@@ -39,10 +39,10 @@ async def run_image_query(
             query=query,
             provider=provider_config,
             use_critic_agent=use_critic_agent,
-            stream=False,
+            stream=True,
             tools=tools,
-            disable_console_log=True,
-            use_console=False,
+            disable_console_log=False,
+            use_console=True,
         )
 
         response = await agent()  # returns ImageAgentResponse

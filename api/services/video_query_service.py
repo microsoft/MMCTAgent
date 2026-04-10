@@ -2,7 +2,7 @@
 
 import json
 import uuid
-from typing import Any, AsyncGenerator, Dict, Optional
+from typing import Any, AsyncGenerator, Dict, Optional, Union
 
 from fastapi import HTTPException
 from loguru import logger
@@ -14,7 +14,7 @@ from mmct.video_pipeline.query_pipeline import QueryPipelineMode, VideoQueryPipe
 async def run_video_query(
     query: str,
     mode: QueryPipelineMode,
-    video_id: str,
+    video_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Execute a one-shot video query against the stored knowledge graph.
@@ -45,7 +45,7 @@ async def run_video_query(
 async def stream_video_query(
     query: str,
     mode: QueryPipelineMode,
-    video_id: str,
+    video_id: Optional[str] = None,
 ) -> AsyncGenerator[str, None]:
     """
     Yield SSE-formatted JSON strings from VideoQueryPipeline.query_stream().

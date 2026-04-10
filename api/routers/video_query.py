@@ -1,5 +1,7 @@
 """Routers for POST /video-query and POST /video-query/stream."""
 
+from typing import Optional
+
 from fastapi import APIRouter, Form
 from sse_starlette.sse import EventSourceResponse
 
@@ -16,28 +18,28 @@ router = APIRouter()
     summary="Query a video",
     description=(
         "Ask a natural language question about a previously ingested video. "
-        "Provide the **video_id** returned by the ingestion endpoint. "
-        "Choose **graph** mode for agentic graph traversal or **state** mode for "
-        "deterministic LangGraph execution."
+        "Optionally provide the **video_id** returned by the ingestion endpoint to scope the query to a single video. "
+        "Choose **graph_agent** mode for agentic graph traversal or **graph_state** mode for "
+        "deterministic state machine execution."
     ),
     openapi_extra={
         "requestBody": {
             "content": {
                 "application/x-www-form-urlencoded": {
                     "examples": {
-                        "graph_mode": {
-                            "summary": "Graph-mode query",
+                        "graph_agent_mode": {
+                            "summary": "Graph-agent mode query",
                             "value": {
                                 "query": "What are the main topics covered in this video?",
-                                "mode": "graph",
+                                "mode": "graph_agent",
                                 "video_id": "a3f2c1d8e9b74052abc123def456789012345678901234567890abcdef012345",
                             },
                         },
-                        "state_mode": {
-                            "summary": "State-mode query",
+                        "graph_state_mode": {
+                            "summary": "Graph-state mode query",
                             "value": {
                                 "query": "What happens at the 2-minute mark?",
-                                "mode": "state",
+                                "mode": "graph_state",
                                 "video_id": "a3f2c1d8e9b74052abc123def456789012345678901234567890abcdef012345",
                             },
                         },
@@ -53,13 +55,13 @@ async def video_query(
         description="Natural language question about the video content",
         examples=["What are the key takeaways from this video?"],
     ),
-    video_id: str = Form(
-        ...,
-        description="Video ID returned by the ingestion endpoint",
+    video_id: Optional[str] = Form(
+        None,
+        description="Video ID returned by the ingestion endpoint. Omit to query across all ingested videos.",
     ),
     mode: QueryPipelineMode = Form(
-        QueryPipelineMode.STATE,
-        description="Pipeline mode: **graph** (agentic knowledge-graph traversal) or **state** (LangGraph state machine)",
+        QueryPipelineMode.GRAPH_STATE,
+        description="Pipeline mode: **graph_agent** (agentic knowledge-graph traversal) or **graph_state** (deterministic state machine)",
     ),
 ):
     return await run_video_query(query=query, mode=mode, video_id=video_id)
@@ -82,13 +84,13 @@ async def video_query_stream(
         description="Natural language question about the video content",
         examples=["Summarise the presenter's main argument."],
     ),
-    video_id: str = Form(
-        ...,
-        description="Video ID returned by the ingestion endpoint",
+    video_id: Optional[str] = Form(
+        None,
+        description="Video ID returned by the ingestion endpoint. Omit to query across all ingested videos.",
     ),
     mode: QueryPipelineMode = Form(
-        QueryPipelineMode.STATE,
-        description="Pipeline mode: **graph** or **state**",
+        QueryPipelineMode.GRAPH_STATE,
+        description="Pipeline mode: **graph_agent** or **graph_state**",
     ),
 ):
     async def event_generator():
