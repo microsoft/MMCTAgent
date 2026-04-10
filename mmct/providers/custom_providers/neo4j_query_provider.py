@@ -22,7 +22,7 @@ from typing import List, Dict, Any, Optional, Tuple
 
 from loguru import logger
 
-from mmct.graph import node_registry
+from mmct.video_pipeline.core.graph import node_registry
 from mmct.providers.base.graph_query_provider import BaseGraphQueryProvider, SearchResult
 
 

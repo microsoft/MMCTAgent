@@ -1,17 +1,44 @@
-from mmct.providers.base import BaseLLMProvider
+"""Azure OpenAI LLM provider implementation.
+
+This module provides the AzureLLMProvider class, which implements the 
+BaseLLMProvider interface for integrating with Azure OpenAI services, 
+including support for structured outputs and AutoGen clients.
+"""
+
+import json
+from typing import Dict, Any, List, Union, Optional
 from loguru import logger
-from openai import AsyncAzureOpenAI, AzureOpenAI
+from openai import AsyncAzureOpenAI
 from azure.identity import get_bearer_token_provider
 from azure.core.credentials import AzureKeyCredential
 from azure.core.credentials_async import AsyncTokenCredential
-from mmct.utils.error_handler import ProviderException, ConfigurationException
-from typing import Dict, Any, List, Union, Optional
-from mmct.utils.error_handler import handle_exceptions, convert_exceptions
+from pydantic import BaseModel
+
+from mmct.providers.base import BaseLLMProvider
+from mmct.utils.error_handler import ProviderException, ConfigurationException, handle_exceptions, convert_exceptions
 from autogen_ext.models.openai import AzureOpenAIChatCompletionClient
 
 
 class AzureLLMProvider(BaseLLMProvider):
-    """Azure OpenAI LLM provider implementation."""
+    """Azure OpenAI LLM provider implementation.
+
+    This provider handles authentication (Key or Token-based), client 
+    initialization, and response generation via Azure OpenAI. It supports 
+    strict JSON schemas for structured outputs and provides an interface 
+    for AutoGen's multi-agent framework.
+
+    Attributes:
+        endpoint (str): The Azure OpenAI service endpoint.
+        deployment_name (str): The name of the specific LLM deployment.
+        api_version (str): The version of the Azure OpenAI API to use.
+        credentials (Union[AzureKeyCredential, AsyncTokenCredential], optional): 
+            Identity-based credentials.
+        api_key (str, optional): Key-based authentication string.
+        timeout (int): Global request timeout in seconds.
+        max_retries (int): Maximum retry attempts for failed requests.
+        model_name (str, optional): The underlying model name (e.g., gpt-4o).
+        client (AsyncAzureOpenAI): The initialized async client.
+    """
 
     def __init__(
         self,
@@ -24,20 +51,23 @@ class AzureLLMProvider(BaseLLMProvider):
         timeout: Optional[int] = 200,
         max_retries: Optional[int] = 2,
     ):
-        """Initialize AzureLLMProvider.
+        """Initializes the AzureLLMProvider.
 
         Args:
-            endpoint: Azure OpenAI endpoint URL
-            deployment_name: Name of the LLM deployment
-            api_version: Azure OpenAI API version (default: 2024-08-01-preview)
-            credentials: Azure credentials for token-based authentication (mutually exclusive with api_key)
-            api_key: API key for key-based authentication (mutually exclusive with credentials)
-            timeout: Request timeout in seconds (default: 200)
-            max_retries: Maximum number of retry attempts (default: 2)
+            endpoint: Azure OpenAI endpoint URL.
+            deployment_name: Name of the LLM deployment.
+            model_name: Friendly name for the model (e.g., 'gpt-4o').
+            api_version: Azure OpenAI API version.
+            credentials: Azure credentials for token-based authentication.
+                Mutually exclusive with `api_key`.
+            api_key: API key for key-based authentication.
+                Mutually exclusive with `credentials`.
+            timeout: Request timeout in seconds.
+            max_retries: Maximum number of retry attempts.
 
         Raises:
-            ConfigurationException: If neither credentials nor api_key is provided,
-                                   or if both are provided, or if required fields are missing
+            ConfigurationException: If required fields are missing or if both
+                `credentials` and `api_key` are provided.
         """
 
         if not endpoint:
@@ -67,8 +97,15 @@ class AzureLLMProvider(BaseLLMProvider):
         self.model_name = model_name
         self.client = self._initialize_client()
 
-    def _initialize_client(self):
-        """Initialize Azure OpenAI client with either credentials or API key."""
+    def _initialize_client(self) -> AsyncAzureOpenAI:
+        """Initializes the Azure OpenAI client with either credentials or API key.
+
+        Returns:
+            AsyncAzureOpenAI: The initialized asynchronous client.
+
+        Raises:
+            ProviderException: If client initialization fails.
+        """
         try:
             if self.credentials is not None:
                 # Use credentials with token-based authentication
@@ -96,30 +133,45 @@ class AzureLLMProvider(BaseLLMProvider):
 
     @handle_exceptions(retries=3, exceptions=(Exception,))
     @convert_exceptions({Exception: ProviderException})
-    async def chat_completion(self, messages: List[Dict], **kwargs) -> Dict[str, Any]:
-        """Generate chat completion using Azure OpenAI."""
-        try:
+    async def chat_completion(self, messages: List[Dict[str, str]], **kwargs: Any) -> Dict[str, Any]:
+        """Generates a chat completion using Azure OpenAI.
 
-            temperature = kwargs.get("temperature",0)
-            max_tokens = kwargs.get("max_tokens",4000)
+        Supports standard completion as well as structured outputs via 
+        Pydantic models in the `response_format` argument.
+
+        Args:
+            messages: A list of message dictionaries.
+            **kwargs: Additional parameters like temperature, max_tokens, 
+                and response_format. If `response_format` is a Pydantic 
+                BaseModel class, the provider will enforce structured output 
+                using Azure OpenAI's strict JSON mode.
+
+        Returns:
+            Dict[str, Any]: A response dictionary containing content, usage, 
+                model, and finish reason.
+
+        Raises:
+            ProviderException: If the completion request fails.
+        """
+        try:
+            temperature = kwargs.get("temperature", 0)
+            max_tokens = kwargs.get("max_tokens", 4000)
             response_format = kwargs.get("response_format")
 
-            # Remove temperature, max_tokens, and response_format from kwargs to avoid duplicate arguments
+            # Remove parameters to avoid duplicate arguments in the API call
             filtered_kwargs = {
                 k: v
                 for k, v in kwargs.items()
                 if k not in ["temperature", "max_tokens", "response_format"]
             }
 
-            # Check if response_format is a BaseModel - if so, use parse() instead of create()
-            from pydantic import BaseModel
-
+            # Handle structured outputs if response_format is a Pydantic model class
             if (
                 response_format
                 and isinstance(response_format, type)
                 and issubclass(response_format, BaseModel)
             ):
-                # Build JSON schema with all properties required (Azure OpenAI requirement)
+                # Build strict JSON schema (required for Azure OpenAI structured output)
                 schema = self._build_strict_schema(response_format)
                 
                 response = await self.client.chat.completions.create(
@@ -138,8 +190,6 @@ class AzureLLMProvider(BaseLLMProvider):
                     **filtered_kwargs,
                 )
                 
-                # Parse the JSON response into the Pydantic model
-                import json
                 content = response.choices[0].message.content
                 if isinstance(content, str):
                     parsed = response_format.model_validate(json.loads(content))
@@ -153,7 +203,7 @@ class AzureLLMProvider(BaseLLMProvider):
                     "finish_reason": response.choices[0].finish_reason,
                 }
             else:
-                # Standard completion without structured output
+                # Standard completion
                 completion_kwargs = {
                     "model": self.deployment_name,
                     "messages": messages,
@@ -177,27 +227,28 @@ class AzureLLMProvider(BaseLLMProvider):
             logger.error(f"Azure OpenAI chat completion failed: {e}")
             raise ProviderException(f"Azure OpenAI chat completion failed: {e}")
 
-    def _build_strict_schema(self, model: type) -> dict:
-        """
-        Build a JSON schema with all properties required for Azure OpenAI strict mode.
-        
-        Azure OpenAI structured outputs require all properties in the schema
-        to be listed in the 'required' array. This method generates a schema
-        and recursively makes all properties required.
-        
+    def _build_strict_schema(self, model: type) -> Dict[str, Any]:
+        """Generates a JSON schema compatible with Azure OpenAI Strict mode.
+
+        Azure OpenAI structured outputs require all properties to be present 
+        in the 'required' array and disallow 'additionalProperties'.
+
         Args:
-            model: The Pydantic model class
-            
+            model: The Pydantic model class to convert.
+
         Returns:
-            JSON schema dict with all properties required
+            Dict[str, Any]: The converted strict JSON schema.
         """
         schema = model.model_json_schema()
         self._make_schema_strict(schema)
         return schema
     
-    def _make_schema_strict(self, schema: dict) -> None:
-        """Recursively make schema strict for Azure OpenAI (adds additionalProperties: false)."""
-        
+    def _make_schema_strict(self, schema: Dict[str, Any]) -> None:
+        """Recursively enforces strict mode on a JSON schema dictionary.
+
+        Args:
+            schema: The schema dictionary to modify in-place.
+        """
         # Ensure top-level is strict
         if "type" in schema and schema["type"] == "object":
             schema["additionalProperties"] = False
@@ -210,7 +261,13 @@ class AzureLLMProvider(BaseLLMProvider):
         # Make properties required
         if "properties" in schema:
             schema["required"] = list(schema["properties"].keys())
-            
+
+            # Strip sibling keywords from $ref properties for Azure compatibility
+            for prop_schema in schema["properties"].values():
+                if isinstance(prop_schema, dict) and "$ref" in prop_schema:
+                    prop_schema.pop("description", None)
+                    prop_schema.pop("title", None)
+
             # Recurse nested objects
             for prop_schema in schema["properties"].values():
                 if isinstance(prop_schema, dict) and prop_schema.get("type") == "object":
@@ -220,7 +277,7 @@ class AzureLLMProvider(BaseLLMProvider):
         if "items" in schema and isinstance(schema["items"], dict):
             self._make_schema_strict(schema["items"])
         
-        # Handle anyOf/oneOf/allOf
+        # Handle combinations
         for key in ("anyOf", "oneOf", "allOf"):
             if key in schema:
                 for item in schema[key]:
@@ -231,23 +288,32 @@ class AzureLLMProvider(BaseLLMProvider):
         if "additionalProperties" in schema and isinstance(schema["additionalProperties"], dict):
             self._make_schema_strict(schema["additionalProperties"])
 
-    def get_autogen_client(self, **kwargs):
-        """Get autogen-compatible client for Azure OpenAI."""
+    def get_autogen_client(self, **kwargs: Any) -> AzureOpenAIChatCompletionClient:
+        """Returns an AutoGen-compatible client for Azure OpenAI.
+
+        Args:
+            **kwargs: Additional overrides for the completion client.
+
+        Returns:
+            AzureOpenAIChatCompletionClient: The configured AutoGen client.
+
+        Raises:
+            ProviderException: If client creation fails.
+        """
         try:
             model = self.model_name if self.model_name else self.deployment_name
 
-            # Provide model_info for custom deployment names not recognized by autogen
+            # Explicit capabilities for deployment-agnostic mapping
             model_info = {
                 "vision": True,
                 "function_calling": True,
                 "json_output": True,
-                "family": "gpt-5",
+                "family": "gpt-4o",
                 "structured_output": True,
                 "multiple_system_messages": True,
             }
 
             if self.credentials is not None:
-                # Use credentials with token-based authentication
                 token_provider = get_bearer_token_provider(
                     self.credentials, "https://cognitiveservices.azure.com/.default"
                 )
@@ -273,28 +339,24 @@ class AzureLLMProvider(BaseLLMProvider):
         except Exception as e:
             raise ProviderException(f"Failed to create Azure OpenAI autogen client: {e}")
 
-    async def close(self):
-        """Close the LLM client and cleanup resources."""
+    async def close(self) -> None:
+        """Closes the Azure OpenAI client and releases underlying resources."""
         if self.client:
             logger.info("Closing Azure OpenAI LLM client")
             await self.client.close()
 
-    async def generate_json(self, prompt: str, **kwargs) -> Dict[str, Any]:
-        """
-        Generate a JSON response from a prompt.
-        
+    async def generate_json(self, prompt: str, **kwargs: Any) -> Dict[str, Any]:
+        """Generates a JSON response from a prompt.
+
         Args:
-            prompt: The prompt to send to the LLM
-            **kwargs: Additional arguments passed to chat_completion
-            
+            prompt: The instruction to send to the LLM.
+            **kwargs: Parameters passed to `chat_completion`.
+
         Returns:
-            Parsed JSON response as a dictionary
+            Dict[str, Any]: The parsed JSON response.
         """
-        import json
-        
         messages = [{"role": "user", "content": prompt}]
         
-        # Request JSON output format
         response = await self.chat_completion(
             messages=messages,
             response_format={"type": "json_object"},
@@ -303,7 +365,6 @@ class AzureLLMProvider(BaseLLMProvider):
         
         content = response.get("content", "{}")
         
-        # Parse JSON response
         if isinstance(content, str):
             try:
                 return json.loads(content)

@@ -306,7 +306,7 @@ class GraphUploadStep(PipelineStep):
             Text string to embed.
         """
         # Try registry first
-        from mmct.graph import node_registry
+        from mmct.video_pipeline.core.graph import node_registry
         nt = node_registry.get(node_type)
         if nt:
             return nt.get_embedding_text(attrs)
