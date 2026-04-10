@@ -5,19 +5,28 @@ from typing import Annotated, Any, AsyncGenerator, Dict, List, Optional
 
 from config.provider_config import get_query_pipeline_providers
 from mmct.utils.error_handler import ConfigurationException
-from mmct.video_pipeline.graph.orchestrator import GraphOrchestrator
-from mmct.video_pipeline.state.orchestrator import StateOrchestrator
+from mmct.video_pipeline.graph_agent.orchestrator import GraphOrchestrator
+from mmct.video_pipeline.graph_state.orchestrator import StateOrchestrator
 
 
 class QueryPipelineMode(str, Enum):
     """Available query pipeline implementations."""
 
-    GRAPH = "graph"
-    STATE = "state"
+    GRAPH_AGENT = "graph_agent"
+    GRAPH_STATE = "graph_state"
 
 
 class VideoQueryPipeline:
-    """Enum-selected wrapper over graph/state query orchestrators."""
+    """Unified entry point for querying video content using MMCT pipelines.
+
+    The VideoQueryPipeline acts as a high-level wrapper that orchestrates 
+    video-based question answering using either an agentic swarm (`GRAPH_AGENT`) 
+    or a deterministic state machine (`GRAPH_STATE`). It handles dependency 
+    injection and provides both asynchronous and streaming query interfaces.
+
+    Attributes:
+        mode (QueryPipelineMode): The active orchestration strategy (Agent vs State).
+    """
 
     def __init__(
         self,
@@ -37,6 +46,29 @@ class VideoQueryPipeline:
             "Hydrate missing dependencies from config.provider_config",
         ] = False,
     ) -> None:
+        """Initializes the VideoQueryPipeline with selected mode and providers.
+
+        Args:
+            mode: The pipeline execution mode (GRAPH_AGENT or GRAPH_STATE).
+            model_client: Client for generating chat completions. Required if 
+                `use_provider_defaults` is False.
+            neo4j_provider: Provider for interacting with the Neo4j video graph.
+                Required if `use_provider_defaults` is False.
+            embedding_provider: Provider for generating text embeddings.
+                Required if `use_provider_defaults` is False.
+            image_embedding_provider: Provider for image-based semantic search.
+            storage_provider: Provider for retrieving stored assets (keyframes, etc.).
+            image_llm_provider: Provider for vision-language tasks (e.g., GPT-4V).
+            use_critic: Whether to run a critic/revision cycle on the final answer.
+            max_turns: Maximum conversation turns for agent-based reasoning.
+            video_catalog: Pre-populated catalog of videos for the planner.
+            use_provider_defaults: If True, automatically fetches providers from
+                centralized configuration if not explicitly provided.
+
+        Raises:
+            ConfigurationException: If required dependencies are missing and
+                cannot be hydrated from defaults.
+        """
         self.mode = QueryPipelineMode(mode)
 
         if use_provider_defaults:
@@ -67,7 +99,9 @@ class VideoQueryPipeline:
             )
 
         orchestrator_cls = (
-            GraphOrchestrator if self.mode == QueryPipelineMode.GRAPH else StateOrchestrator
+            GraphOrchestrator
+            if self.mode == QueryPipelineMode.GRAPH_AGENT
+            else StateOrchestrator
         )
         self._orchestrator = orchestrator_cls(
             model_client=model_client,
@@ -88,6 +122,19 @@ class VideoQueryPipeline:
         video_ids: Annotated[Optional[List[str]], "Multi-video scope"] = None,
         request_id: Annotated[str, "Optional request correlation ID"] = "",
     ) -> Dict[str, Any]:
+        """Executes a natural language query against the video knowledge graph.
+
+        Args:
+            user_query: The question to answer based on visual and textual content.
+            video_id: Optional ID to restrict the search to a specific video.
+            video_ids: Optional list of IDs to restrict the search to a subset
+                of videos.
+            request_id: Optional unique identifier for tracking the request.
+
+        Returns:
+            Dict[str, Any]: The structured response containing the answer,
+                evidence, and metadata.
+        """
         return await self._orchestrator.query(
             user_query=user_query,
             video_id=video_id,
@@ -102,6 +149,18 @@ class VideoQueryPipeline:
         video_ids: Annotated[Optional[List[str]], "Multi-video scope"] = None,
         request_id: Annotated[str, "Optional request correlation ID"] = "",
     ) -> AsyncGenerator[Dict[str, Any], None]:
+        """Executes a query and returns an asynchronous generator for streaming updates.
+
+        Args:
+            user_query: The question to answer based on video content.
+            video_id: Optional ID to restrict search.
+            video_ids: Optional list of IDs to restrict search.
+            request_id: Optional correlation ID.
+
+        Returns:
+            AsyncGenerator[Dict[str, Any], None]: A generator yielding status
+                updates and the final query results.
+        """
         return self._orchestrator.query_stream(
             user_query=user_query,
             video_id=video_id,
