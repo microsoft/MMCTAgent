@@ -36,6 +36,7 @@ from mmct.providers.custom_providers import (
     FastEmbedArcticEmbeddingProvider,
 )
 from mmct.providers.custom_providers.neo4j_graph_store_provider import Neo4jGraphStoreProvider
+from mmct.image_pipeline.config import ImageAgentProviderConfig
 
 
 @dataclass(frozen=True)
@@ -296,3 +297,10 @@ def get_query_pipeline_providers() -> QueryPipelineProviders:
         storage_provider=get_storage_provider(),
         image_llm_provider=llm_provider,
     )
+
+
+@lru_cache(maxsize=1)
+def get_image_agent_provider() -> ImageAgentProviderConfig:
+    """Return a singleton ImageAgentProviderConfig."""
+    logger.info("Initializing ImageAgentProviderConfig")
+    return ImageAgentProviderConfig(llm_provider=get_llm_provider())
