@@ -6,7 +6,7 @@ from .base import PipelineStep, StepContext, StepResult
 from .registry import register_step
 from mmct.video_pipeline.utils.helper import get_media_folder
 from mmct.video_pipeline.core.ingestion.utils.helper import (
-    load_srt,
+    load_transcript,
 )
 
 
@@ -40,7 +40,7 @@ class TranscriptionStep(PipelineStep):
             if context.transcript_path:
                 # Use existing transcript as-is
                 context.logger.debug(f"Using provided transcript: {context.transcript_path}")
-                transcript = await load_srt(context.transcript_path)
+                transcript = await load_transcript(context.transcript_path)
                 transcript_path = context.transcript_path
 
             else:
