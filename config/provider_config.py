@@ -77,23 +77,28 @@ class ProviderEnvSettings(BaseSettings):
     llm_deployment_name: Optional[str] = Field(default=None)
     llm_model_name: Optional[str] = Field(default=None)
     llm_api_version: Optional[str] = Field(default="2024-08-01-preview")
+    llm_api_key: Optional[str] = Field(default=None)
 
     # Embedding Service Settings
     embedding_service_endpoint: Optional[str] = Field(default=None)
     embedding_service_deployment_name: Optional[str] = Field(default=None)
     embedding_service_api_version: Optional[str] = Field(default="2024-08-01-preview")
+    embedding_service_api_key: Optional[str] = Field(default=None)
 
     # Storage Settings
     storage_account_name: Optional[str] = Field(default=None)
     keyframe_container_name: Optional[str] = Field(default=None)
+    storage_access_key: Optional[str] = Field(default=None)
 
     # Speech Service Settings
     speech_service_resource_id: Optional[str] = Field(default=None)
     speech_service_region: Optional[str] = Field(default=None)
+    speech_service_api_key: Optional[str] = Field(default=None)
 
     # Transcription Settings
     transcription_provider: str = Field(default="azure", validation_alias="TRANSCRIPTION_PROVIDER")
     whisper_deployment_name: Optional[str] = Field(default=None)
+    transcription_api_key: Optional[str] = Field(default=None)
 
     # Neo4j Graph Database Settings
     neo4j_uri: str = Field(default="bolt://localhost:7687")
@@ -123,13 +128,23 @@ def get_llm_provider() -> AzureLLMProvider:
     """Return a singleton AzureLLMProvider."""
     settings = get_settings()
     logger.info("Initializing AzureLLMProvider")
-    return AzureLLMProvider(
-        endpoint=settings.llm_endpoint,
-        deployment_name=settings.llm_deployment_name,
-        model_name=settings.llm_model_name,
-        api_version=settings.llm_api_version,
-        credentials=resolve_credentials(),
-    )
+
+    # Construct provider args, using API key if provided and not a placeholder
+    kwargs = {
+        "endpoint": settings.llm_endpoint,
+        "deployment_name": settings.llm_deployment_name,
+        "model_name": settings.llm_model_name,
+        "api_version": settings.llm_api_version,
+    }
+
+    api_key = settings.llm_api_key
+    if api_key and not api_key.startswith("<your") and api_key.strip():
+        kwargs["api_key"] = api_key
+    else:
+        logger.debug("LLM_API_KEY not provided or placeholder — falling back to identity")
+        kwargs["credentials"] = resolve_credentials()
+
+    return AzureLLMProvider(**kwargs)
 
 
 @lru_cache(maxsize=1)
@@ -141,13 +156,23 @@ def get_reasoning_llm_provider() -> AzureReasoningLLMProvider:
     """
     settings = get_settings()
     logger.info("Initializing AzureReasoningLLMProvider")
-    return AzureReasoningLLMProvider(
-        endpoint=settings.llm_endpoint,
-        deployment_name=settings.llm_deployment_name,
-        model_name=settings.llm_model_name,
-        api_version=settings.llm_api_version,
-        credentials=resolve_credentials(),
-    )
+
+    # Construct provider args, using API key if provided and not a placeholder
+    kwargs = {
+        "endpoint": settings.llm_endpoint,
+        "deployment_name": settings.llm_deployment_name,
+        "model_name": settings.llm_model_name,
+        "api_version": settings.llm_api_version,
+    }
+
+    api_key = settings.llm_api_key
+    if api_key and not api_key.startswith("<your") and api_key.strip():
+        kwargs["api_key"] = api_key
+    else:
+        logger.debug("LLM_API_KEY not provided or placeholder — falling back to identity")
+        kwargs["credentials"] = resolve_credentials()
+
+    return AzureReasoningLLMProvider(**kwargs)
 
 
 @lru_cache(maxsize=1)
@@ -155,12 +180,21 @@ def get_embedding_provider() -> AzureEmbeddingProvider:
     """Return a singleton AzureEmbeddingProvider."""
     settings = get_settings()
     logger.info("Initializing AzureEmbeddingProvider")
-    return AzureEmbeddingProvider(
-        endpoint=settings.embedding_service_endpoint,
-        deployment_name=settings.embedding_service_deployment_name,
-        api_version=settings.embedding_service_api_version,
-        credentials=resolve_credentials(),
-    )
+
+    kwargs = {
+        "endpoint": settings.embedding_service_endpoint,
+        "deployment_name": settings.embedding_service_deployment_name,
+        "api_version": settings.embedding_service_api_version,
+    }
+
+    api_key = settings.embedding_service_api_key
+    if api_key and not api_key.startswith("<your") and api_key.strip():
+        kwargs["api_key"] = api_key
+    else:
+        logger.debug("EMBEDDING_SERVICE_API_KEY not provided — falling back to identity")
+        kwargs["credentials"] = resolve_credentials()
+
+    return AzureEmbeddingProvider(**kwargs)
 
 
 @lru_cache(maxsize=1)
@@ -168,11 +202,21 @@ def get_storage_provider() -> AzureStorageProvider:
     """Return a singleton AzureStorageProvider."""
     settings = get_settings()
     logger.info("Initializing AzureStorageProvider")
-    return AzureStorageProvider(
-        storage_account_name=settings.storage_account_name,
-        keyframe_container_name=settings.keyframe_container_name,
-        credentials=resolve_credentials(),
-    )
+
+    kwargs = {
+        "storage_account_name": settings.storage_account_name,
+        "keyframe_container_name": settings.keyframe_container_name,
+    }
+
+    storage_key = settings.storage_access_key
+    if storage_key and not storage_key.startswith("<your") and storage_key.strip():
+        # Passing as connection string (provider currently expects this)
+        kwargs["blob_connection_string"] = storage_key
+    else:
+        logger.debug("STORAGE_ACCESS_KEY not provided — falling back to identity")
+        kwargs["credentials"] = resolve_credentials()
+
+    return AzureStorageProvider(**kwargs)
 
 
 @lru_cache(maxsize=1)
@@ -180,12 +224,21 @@ def get_speech_provider() -> AzureSpeechServiceProvider:
     """Return a singleton AzureSpeechServiceProvider."""
     settings = get_settings()
     logger.info("Initializing AzureSpeechServiceProvider")
-    return AzureSpeechServiceProvider(
-        speech_service_resource_id=settings.speech_service_resource_id,
-        speech_service_region=settings.speech_service_region,
-        credentials=resolve_credentials(),
-        llm_provider=get_llm_provider(),
-    )
+
+    kwargs = {
+        "speech_service_resource_id": settings.speech_service_resource_id,
+        "speech_service_region": settings.speech_service_region,
+        "llm_provider": get_llm_provider(),
+    }
+
+    api_key = settings.speech_service_api_key
+    if api_key and not api_key.startswith("<your") and api_key.strip():
+        kwargs["api_key"] = api_key
+    else:
+        logger.debug("SPEECH_SERVICE_API_KEY not provided — falling back to identity")
+        kwargs["credentials"] = resolve_credentials()
+
+    return AzureSpeechServiceProvider(**kwargs)
 
 
 @lru_cache(maxsize=1)
@@ -193,12 +246,21 @@ def get_whisper_provider() -> WhisperTranscriptionProvider:
     """Return a singleton WhisperTranscriptionProvider."""
     settings = get_settings()
     logger.info("Initializing WhisperTranscriptionProvider")
-    return WhisperTranscriptionProvider(
-        endpoint=settings.llm_endpoint,
-        api_version=settings.llm_api_version,
-        deployment_name=settings.whisper_deployment_name,
-        credentials=resolve_credentials(),
-    )
+
+    kwargs = {
+        "endpoint": settings.llm_endpoint,
+        "api_version": settings.llm_api_version,
+        "deployment_name": settings.whisper_deployment_name,
+    }
+
+    api_key = settings.transcription_api_key
+    if api_key and not api_key.startswith("<your") and api_key.strip():
+        kwargs["api_key"] = api_key
+    else:
+        logger.debug("TRANSCRIPTION_API_KEY not provided — falling back to identity")
+        kwargs["credentials"] = resolve_credentials()
+
+    return WhisperTranscriptionProvider(**kwargs)
 
 
 @lru_cache(maxsize=1)

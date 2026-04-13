@@ -196,7 +196,7 @@ class IngestionPipeline:
             self.logger.info(f"Video ID: {self.video_id}, Duration: {video_duration:.2f}s")
 
             # Create StepContext for this execution
-            context = StepContext(
+            self.context = StepContext(
                 video_path=self.video_path,
                 provider=self.provider,
                 data_store=StepDataStore(),
@@ -217,7 +217,7 @@ class IngestionPipeline:
             )
 
             # Instantiate PipelineRunner
-            runner = PipelineRunner(pipeline_config=pipeline_config, context=context)
+            runner = PipelineRunner(pipeline_config=pipeline_config, context=self.context)
 
             self.logger.info(f"Starting pipeline execution for {self.video_id}...")
             report = await runner.run()
