@@ -682,11 +682,19 @@ class GraphChapter(BaseModel):
     )
     summary: Optional[str] = Field(
         default=None,
-        description="Summary of the chapter content"
+        description="Summary of the chapter content (legacy; prefer timestamped_description)"
     )
     timestamped_description: Optional[str] = Field(
         default=None,
         description="Timestamped line-by-line description ([Xs] sentence format)"
+    )
+    scene_composition: Optional[str] = Field(
+        default=None,
+        description="Human-readable scene description (environment, lighting, camera angle)"
+    )
+    ocr_data: Optional[str] = Field(
+        default=None,
+        description="Human-readable visible text extracted from keyframes"
     )
     transcript: Optional[str] = Field(
         default=None,

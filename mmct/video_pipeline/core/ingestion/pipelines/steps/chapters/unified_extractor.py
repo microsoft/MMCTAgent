@@ -241,8 +241,6 @@ async def extract_chapters_parallel(
                 # Merge chunk metadata with extraction result
                 # Note: video_chunking step uses start_time/end_time, normalize to start/end
                 result_data = result.model_dump()
-                # Derive summary from timestamped_description
-                result_data["summary"] = result.summary
                 chapter_data = {
                     "start": chunk.get("start_time", chunk.get("start", 0.0)),
                     "end": chunk.get("end_time", chunk.get("end", 0.0)),

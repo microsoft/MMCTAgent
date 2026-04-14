@@ -32,14 +32,23 @@ class ChapterNodeType(BaseNodeType):
     def neo4j_properties(self) -> List[str]:
         return [
             "node_id", "video_id", "video_title", "chunk_index", "start_time", "end_time",
-            "video_duration", "summary", "timestamped_description", "group_index"
+            "video_duration", "summary", "timestamped_description",
+            "scene_composition", "ocr_data", "group_index",
         ]
     
     def get_embedding_text(self, attrs: Dict[str, Any]) -> str:
         ts_desc = attrs.get("timestamped_description", "")
-        if ts_desc:
-            return strip_timestamps(ts_desc)
-        return attrs.get("summary", "") or ""
+        text = strip_timestamps(ts_desc) if ts_desc else (attrs.get("summary", "") or "")
+        
+        scene = attrs.get("scene_composition")
+        if scene:
+            text += f" Scene: {scene}"
+        
+        ocr = attrs.get("ocr_data")
+        if ocr:
+            text += f" Visible text: {ocr}"
+        
+        return text
     
     def create_node_properties(self, instance) -> Dict[str, Any]:
         props = {
@@ -54,6 +63,12 @@ class ChapterNodeType(BaseNodeType):
         ts_desc = getattr(instance, "timestamped_description", None)
         if ts_desc:
             props["timestamped_description"] = ts_desc
+        scene = getattr(instance, "scene_composition", None)
+        if scene:
+            props["scene_composition"] = scene
+        ocr = getattr(instance, "ocr_data", None)
+        if ocr:
+            props["ocr_data"] = ocr
         return props
     
     def format_search_result(self, props: Dict[str, Any]) -> Dict[str, Any]:
@@ -70,6 +85,12 @@ class ChapterNodeType(BaseNodeType):
         if not ts_desc:
             result["start_time"] = props.get("start_time")
             result["end_time"] = props.get("end_time")
+        scene = props.get("scene_composition")
+        if scene:
+            result["scene_composition"] = scene
+        ocr = props.get("ocr_data")
+        if ocr:
+            result["ocr_data"] = ocr
         return result
     
     @property

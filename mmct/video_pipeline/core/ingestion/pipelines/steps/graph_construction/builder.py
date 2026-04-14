@@ -359,6 +359,12 @@ class GraphBuilder:
                 "group_index": chapter.group_index,
             }
             
+            if chapter.timestamped_description:
+                properties["timestamped_description"] = chapter.timestamped_description
+            if chapter.scene_composition:
+                properties["scene_composition"] = chapter.scene_composition
+            if chapter.ocr_data:
+                properties["ocr_data"] = chapter.ocr_data
             if chapter.embedding_vector:
                 properties["embedding_vector"] = chapter.embedding_vector
             if chapter.metadata:

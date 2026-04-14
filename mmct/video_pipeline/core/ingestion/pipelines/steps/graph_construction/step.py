@@ -571,7 +571,10 @@ class GraphConstructionStep(PipelineStep):
                     start_time=data.get("start"),
                     end_time=data.get("end"),
                     video_duration=duration,
+                    timestamped_description=data.get("timestamped_description"),
                     summary=data.get("summary") or data.get("raw_summary", {}).get("summary"),
+                    scene_composition=self._format_scene_composition(data.get("scene_composition")),
+                    ocr_data=self._format_ocr_data(data.get("ocr_data")),
                     transcript=data.get("transcript"),
                     group_index=data.get("group_index"),
                     metadata=data.get("metadata"),
@@ -583,6 +586,52 @@ class GraphConstructionStep(PipelineStep):
         
         logger.info(f"Created {len(chapters)} chapters with chunk_indexes: {[c.chunk_index for c in chapters]}")
         return chapters
+    
+    @staticmethod
+    def _format_scene_composition(scene) -> Optional[str]:
+        """Convert SceneComposition dict to a human-readable string."""
+        if not scene:
+            return None
+        if isinstance(scene, str):
+            return scene
+        if hasattr(scene, "model_dump"):
+            scene = scene.model_dump()
+        parts = []
+        if scene.get("environment_type"):
+            parts.append(scene["environment_type"])
+        if scene.get("lighting_conditions"):
+            parts.append(scene["lighting_conditions"])
+        if scene.get("camera_angle"):
+            parts.append(scene["camera_angle"])
+        regions = scene.get("spatial_regions")
+        if regions and isinstance(regions, dict):
+            region_parts = []
+            for region, items in regions.items():
+                if items:
+                    region_parts.append(f"{region}: {', '.join(items)}")
+            if region_parts:
+                parts.append("layout: " + "; ".join(region_parts))
+        return ", ".join(parts) if parts else None
+
+    @staticmethod
+    def _format_ocr_data(ocr) -> Optional[str]:
+        """Convert ChapterOCRData dict to a human-readable string."""
+        if not ocr:
+            return None
+        if isinstance(ocr, str):
+            return ocr
+        if hasattr(ocr, "model_dump"):
+            ocr = ocr.model_dump()
+        parts = []
+        for ext in ocr.get("extractions", []):
+            text = ext.get("text", "")
+            text_type = ext.get("text_type", "")
+            if text:
+                parts.append(f"{text_type}: {text}" if text_type else text)
+        persistent = ocr.get("persistent_text", [])
+        if persistent:
+            parts.append(f"persistent: {', '.join(persistent)}")
+        return "; ".join(parts) if parts else None
     
     def _ensure_chapter_group_models(
         self,

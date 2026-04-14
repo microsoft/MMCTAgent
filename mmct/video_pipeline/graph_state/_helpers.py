@@ -46,6 +46,12 @@ def format_evidence_compact(evidence: List[Dict[str, Any]]) -> str:
         lines.append(f"[{header}]")
         if content:
             lines.append(content)
+        scene = item.get("scene_composition")
+        if scene:
+            lines.append(f"Scene: {scene}")
+        ocr = item.get("ocr_data")
+        if ocr:
+            lines.append(f"Visible text: {ocr}")
         lines.append("")
 
     return "\n".join(lines).rstrip()
