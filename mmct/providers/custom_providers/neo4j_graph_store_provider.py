@@ -275,7 +275,8 @@ class Neo4jGraphStoreProvider(BaseGraphStoreProvider):
         """
         
         with self._driver.session(database=self._database) as session:
-            session.run(query, nodes=nodes)
+            result = session.run(query, nodes=nodes)
+            result.consume()
     
     async def _upload_edges_by_type(
         self,

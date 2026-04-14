@@ -192,7 +192,6 @@ pipeline:
         provider: "neo4j"
         # Neo4j connection from environment:
         # NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD, NEO4J_DATABASE
-        neo4j_database: "neo4j"
         # Batch sizes
         embedding_batch_size: 32
         node_batch_size: 100

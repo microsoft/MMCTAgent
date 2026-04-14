@@ -345,10 +345,10 @@ class GraphUploadStep(PipelineStep):
         neo4j_uri = self.get_param("neo4j_uri", context, default=None)
         neo4j_username = self.get_param("neo4j_username", context, default=None)
         neo4j_password = self.get_param("neo4j_password", context, default=None)
-        neo4j_database = self.get_param("neo4j_database", context, default="neo4j")
-        
+        neo4j_database = self.get_param("neo4j_database", context, default=None)
+
         # Fall back to environment
-        if not neo4j_uri or not neo4j_password:
+        if not neo4j_uri or not neo4j_password or not neo4j_database:
             try:
                 from config.provider_config import get_settings
                 settings = get_settings()
@@ -363,6 +363,7 @@ class GraphUploadStep(PipelineStep):
         neo4j_uri = neo4j_uri or "bolt://localhost:7687"
         neo4j_username = neo4j_username or "neo4j"
         neo4j_password = neo4j_password or ""
+        neo4j_database = neo4j_database or "neo4j"
         
         # Get batch sizes
         node_batch_size: int = self.get_param("node_batch_size", context, default=100)
