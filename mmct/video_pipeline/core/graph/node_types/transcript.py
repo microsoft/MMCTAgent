@@ -1,9 +1,11 @@
 """Transcript node type definition."""
 
+import re
 from typing import Dict, Any, List, Type, Optional
 
 from mmct.video_pipeline.core.graph.base import BaseNodeType, EdgeDefinition, TemporalEdgeDefinition
 from mmct.video_pipeline.core.graph.registry import node_registry
+from mmct.utils.timestamps import strip_timestamps
 
 
 class TranscriptNodeType(BaseNodeType):
@@ -39,7 +41,8 @@ class TranscriptNodeType(BaseNodeType):
         ]
     
     def get_embedding_text(self, attrs: Dict[str, Any]) -> str:
-        return attrs.get("transcript", "") or ""
+        text = attrs.get("transcript", "") or ""
+        return strip_timestamps(text) if text else ""
     
     def create_node_properties(self, instance) -> Dict[str, Any]:
         return {
@@ -52,14 +55,20 @@ class TranscriptNodeType(BaseNodeType):
         }
     
     def format_search_result(self, props: Dict[str, Any]) -> Dict[str, Any]:
-        return {
+        transcript = props.get("transcript", "") or ""
+        has_inline_timestamps = bool(re.search(r'\[\d+s\]', transcript))
+        result = {
             "video_title": props.get("video_title"),
-            "transcript": props.get("transcript", "") or "",
-            "start_time": props.get("start_time"),
-            "end_time": props.get("end_time"),
+            "transcript": transcript,
             "chunk_index": props.get("chunk_index"),
             "video_duration": props.get("video_duration"),
         }
+        # When transcript has inline [Xs] markers, omit start/end to force
+        # LLM to cite specific timestamps from the text.
+        if not has_inline_timestamps:
+            result["start_time"] = props.get("start_time")
+            result["end_time"] = props.get("end_time")
+        return result
     
     @property
     def time_property(self) -> str:
