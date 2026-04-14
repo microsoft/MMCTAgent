@@ -98,24 +98,9 @@ MMCTAgent is a state-of-the-art multi-modal AI framework that brings human-like 
 
 4. **Install Dependencies**
 
-   Choose the installation option based on your needs:
-
-   **Option A: Image Pipeline**
    ```bash
    pip install --upgrade pip
-   pip install ".[image-agent]"
-   ```
-
-   **Option B: Video Pipeline**
-   ```bash
-   pip install --upgrade pip
-   pip install ".[video-agent]"
-   ```
-
-   **Option C: All Features (Image + Video + MCP Server)**
-   ```bash
-   pip install --upgrade pip
-   pip install ".[video-agent,image-agent]"
+   pip install .
    ```
 
 5. **Quick Start Examples**
