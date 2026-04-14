@@ -34,8 +34,6 @@ class VideoQueryPipeline:
         *,
         model_client: Annotated[Any, "AutoGen-compatible chat completion client"] = None,
         neo4j_provider: Annotated[Any, "Unified Neo4j query provider"] = None,
-        embedding_provider: Annotated[Any, "Text embedding provider"] = None,
-        image_embedding_provider: Annotated[Any, "Optional image embedding provider"] = None,
         storage_provider: Annotated[Any, "Optional blob storage provider"] = None,
         image_llm_provider: Annotated[Any, "Optional vision-capable LLM provider"] = None,
         use_critic: Annotated[bool, "Enable answer critique/revision pass"] = True,
@@ -54,9 +52,6 @@ class VideoQueryPipeline:
                 `use_provider_defaults` is False.
             neo4j_provider: Provider for interacting with the Neo4j video graph.
                 Required if `use_provider_defaults` is False.
-            embedding_provider: Provider for generating text embeddings.
-                Required if `use_provider_defaults` is False.
-            image_embedding_provider: Provider for image-based semantic search.
             storage_provider: Provider for retrieving stored assets (keyframes, etc.).
             image_llm_provider: Provider for vision-language tasks (e.g., GPT-4V).
             use_critic: Whether to run a critic/revision cycle on the final answer.
@@ -75,10 +70,6 @@ class VideoQueryPipeline:
             defaults = get_query_pipeline_providers()
             model_client = model_client or defaults.model_client
             neo4j_provider = neo4j_provider or defaults.neo4j_provider
-            embedding_provider = embedding_provider or defaults.embedding_provider
-            image_embedding_provider = (
-                image_embedding_provider or defaults.image_embedding_provider
-            )
             storage_provider = storage_provider or defaults.storage_provider
             image_llm_provider = image_llm_provider or defaults.image_llm_provider
 
@@ -87,7 +78,6 @@ class VideoQueryPipeline:
             for name, value in (
                 ("model_client", model_client),
                 ("neo4j_provider", neo4j_provider),
-                ("embedding_provider", embedding_provider),
             )
             if value is None
         ]
@@ -106,8 +96,6 @@ class VideoQueryPipeline:
         self._orchestrator = orchestrator_cls(
             model_client=model_client,
             neo4j_provider=neo4j_provider,
-            embedding_provider=embedding_provider,
-            image_embedding_provider=image_embedding_provider,
             storage_provider=storage_provider,
             image_llm_provider=image_llm_provider,
             use_critic=use_critic,

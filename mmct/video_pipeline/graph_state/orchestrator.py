@@ -97,8 +97,6 @@ class StateOrchestrator:
     Attributes:
         model_client: AutoGen ChatCompletionClient for LLM tasks.
         neo4j_provider: Provider for graph database access.
-        embedding_provider: Provider for text embeddings.
-        image_embedding_provider: Optional CLIP-style image embedding provider.
         storage_provider: Optional blob storage provider for keyframe downloads.
         image_llm_provider: Optional LLM provider for image (ViT) analysis.
         use_critic (bool): Whether to run the critic evaluation step.
@@ -109,8 +107,6 @@ class StateOrchestrator:
         self,
         model_client: Any,
         neo4j_provider: Neo4jQueryProvider,
-        embedding_provider: Any,
-        image_embedding_provider: Optional[Any] = None,
         storage_provider: Optional[Any] = None,
         image_llm_provider: Optional[Any] = None,
         use_critic: bool = True,
@@ -122,8 +118,6 @@ class StateOrchestrator:
         Args:
             model_client: AutoGen model client.
             neo4j_provider: Neo4jQueryProvider instance.
-            embedding_provider: Text embedding client.
-            image_embedding_provider: Optional image embedding client.
             storage_provider: Optional storage provider.
             image_llm_provider: Optional vision-capable LLM provider.
             use_critic: If True, enables the critic revision cycle.
@@ -132,17 +126,13 @@ class StateOrchestrator:
         """
         self.model_client = model_client
         self.neo4j_provider = neo4j_provider
-        self.embedding_provider = embedding_provider
-        self.image_embedding_provider = image_embedding_provider
         self.storage_provider = storage_provider
         self.image_llm_provider = image_llm_provider
         self.use_critic = use_critic
         self.video_catalog = video_catalog
 
-        self._retrieval = RetrievalExecutor(
-            neo4j_provider, embedding_provider, image_embedding_provider
-        )
-        self._discovery = VideoDiscoveryExecutor(neo4j_provider, embedding_provider)
+        self._retrieval = RetrievalExecutor(neo4j_provider)
+        self._discovery = VideoDiscoveryExecutor(neo4j_provider)
         self._image_analyzer = ImageAnalysisExecutor(
             image_llm_provider=image_llm_provider,
             storage_provider=storage_provider,

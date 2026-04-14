@@ -39,8 +39,6 @@ class VideoAgent:
         self,
         model_client,
         neo4j_provider,
-        embedding_provider,
-        image_embedding_provider=None,
         model_context: Optional[ChatCompletionContext] = None,
     ):
         """Initialize the Video agent.
@@ -48,14 +46,10 @@ class VideoAgent:
         Args:
             model_client: AutoGen model client.
             neo4j_provider: Neo4jQueryProvider instance.
-            embedding_provider: Text embedding provider for search queries.
-            image_embedding_provider: Optional image embedding provider for keyframe search.
             model_context: Optional shared model context for KV cache.
         """
         self.model_client = model_client
         self.neo4j_provider = neo4j_provider
-        self.embedding_provider = embedding_provider
-        self.image_embedding_provider = image_embedding_provider
         self.model_context = model_context
 
         self._initialize_tools()
@@ -71,18 +65,15 @@ class VideoAgent:
 
         graph_search = GraphSearchTool(
             neo4j_provider=self.neo4j_provider,
-            embedding_provider=self.embedding_provider,
         )
         video_overview = VideoOverviewTool(
             neo4j_provider=self.neo4j_provider,
         )
         keyframe_tool = KeyframeRetrievalTool(
             neo4j_provider=self.neo4j_provider,
-            image_embedding_provider=self.image_embedding_provider,
         )
         video_discovery = VideoDiscoveryTool(
             neo4j_provider=self.neo4j_provider,
-            embedding_provider=self.embedding_provider,
         )
         graph_traversal = GraphTraversalTool(
             neo4j_provider=self.neo4j_provider,

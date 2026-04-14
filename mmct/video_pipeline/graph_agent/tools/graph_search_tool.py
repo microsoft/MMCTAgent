@@ -42,15 +42,21 @@ class GraphSearchTool(OutputFormatterMixin):
     Avoid searching both for same query to prevent redundant results.
     """
     
-    def __init__(self, neo4j_provider, embedding_provider):
+    def __init__(self, neo4j_provider):
         """Initialize the tool.
         
         Args:
             neo4j_provider: Neo4jQueryProvider instance.
-            embedding_provider: Text embedding provider.
         """
         self.neo4j_provider = neo4j_provider
-        self.embedding_provider = embedding_provider
+        self._embedding_provider = None
+
+    def _get_embedding_provider(self):
+        """Lazy-load the text embedding provider."""
+        if self._embedding_provider is None:
+            from mmct.providers.custom_providers import FastEmbedBGEsmallEmbeddingProvider
+            self._embedding_provider = FastEmbedBGEsmallEmbeddingProvider()
+        return self._embedding_provider
     
     async def search_graph(
         self,
@@ -101,7 +107,7 @@ class GraphSearchTool(OutputFormatterMixin):
                 })
             
             # Get query embedding
-            query_embedding = await self.embedding_provider.embedding(query)
+            query_embedding = await self._get_embedding_provider().embedding(query)
             
             # Execute parallel searches (hybrid: vector + keyword)
             results = await self.neo4j_provider.search_multiple_granularities(

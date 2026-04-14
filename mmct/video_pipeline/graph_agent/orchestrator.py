@@ -257,8 +257,6 @@ class GraphOrchestrator:
     Attributes:
         model_client: The primary LLM client for agent reasoning.
         neo4j_provider: Provider for interacting with the Neo4j graph store.
-        embedding_provider: Provider for text-based semantic search.
-        image_embedding_provider: Optional provider for CLIP-based image search.
         storage_provider: Optional provider for retrieving image assets.
         image_llm_provider: Optional vision-capable LLM for the ImageAgent.
         use_critic (bool): Whether to enable the critic validation pass.
@@ -270,8 +268,6 @@ class GraphOrchestrator:
         self,
         model_client: Any,
         neo4j_provider: Neo4jQueryProvider,
-        embedding_provider: Any,
-        image_embedding_provider: Optional[Any] = None,
         storage_provider: Optional[Any] = None,
         image_llm_provider: Optional[Any] = None,
         use_critic: bool = True,
@@ -283,8 +279,6 @@ class GraphOrchestrator:
         Args:
             model_client: AutoGen-compatible LLM client.
             neo4j_provider: Instance of Neo4jQueryProvider for graph access.
-            embedding_provider: Client for generating text embeddings.
-            image_embedding_provider: Optional client for image embeddings.
             storage_provider: Optional provider for keyframe retrieval.
             image_llm_provider: Optional LLM config for vision reasoning.
             use_critic: If True, includes a critic agent in the swarm.
@@ -293,8 +287,6 @@ class GraphOrchestrator:
         """
         self.model_client = model_client
         self.neo4j_provider = neo4j_provider
-        self.embedding_provider = embedding_provider
-        self.image_embedding_provider = image_embedding_provider
         self.storage_provider = storage_provider
         self.image_llm_provider = image_llm_provider
         self.use_critic = use_critic
@@ -322,8 +314,6 @@ class GraphOrchestrator:
         self._video_agent_wrapper = VideoAgent(
             model_client=self.model_client,
             neo4j_provider=self.neo4j_provider,
-            embedding_provider=self.embedding_provider,
-            image_embedding_provider=self.image_embedding_provider,
             model_context=BufferedChatCompletionContext(buffer_size=VIDEO_AGENT_BUFFER_SIZE),
         )
 
@@ -577,10 +567,8 @@ async def process_query(
     query: str,
     model_client: Any,
     neo4j_provider: Neo4jQueryProvider,
-    embedding_provider: Any,
     video_id: Optional[str] = None,
     video_ids: Optional[List[str]] = None,
-    image_embedding_provider: Optional[Any] = None,
     storage_provider: Optional[Any] = None,
     image_llm_provider: Optional[Any] = None,
     use_critic: bool = True,
@@ -592,10 +580,8 @@ async def process_query(
         query: User's natural language question.
         model_client: LLM client for agent reasoning.
         neo4j_provider: Neo4j graph connection.
-        embedding_provider: Text embedding provider.
         video_id: Optional ID to restrict search.
         video_ids: Optional list of IDs to restrict search.
-        image_embedding_provider: Optional CLIP embedding provider.
         storage_provider: Optional frame storage provider.
         image_llm_provider: Optional vision-capable LLM provider.
         use_critic: Whether to enable answer validation.
@@ -608,8 +594,6 @@ async def process_query(
     orchestrator = GraphOrchestrator(
         model_client=model_client,
         neo4j_provider=neo4j_provider,
-        embedding_provider=embedding_provider,
-        image_embedding_provider=image_embedding_provider,
         storage_provider=storage_provider,
         image_llm_provider=image_llm_provider,
         use_critic=use_critic,

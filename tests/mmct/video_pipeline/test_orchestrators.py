@@ -9,8 +9,6 @@ def mock_orch_deps():
     return {
         "model_client": MagicMock(),
         "neo4j_provider": MagicMock(),
-        "embedding_provider": MagicMock(),
-        "image_embedding_provider": MagicMock(),
         "storage_provider": MagicMock(),
         "image_llm_provider": MagicMock(spec=BaseLLMProvider)
     }

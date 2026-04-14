@@ -34,15 +34,21 @@ class KeyframeRetrievalTool(OutputFormatterMixin):
     GraphTraversalTool.traverse_graph(node_ids=[chapter_ids], target="Keyframe")
     """
     
-    def __init__(self, neo4j_provider, image_embedding_provider=None):
+    def __init__(self, neo4j_provider):
         """Initialize the tool.
         
         Args:
             neo4j_provider: Neo4jQueryProvider instance.
-            image_embedding_provider: Optional image embedding provider for vector search.
         """
         self.neo4j_provider = neo4j_provider
-        self.image_embedding_provider = image_embedding_provider
+        self._image_embedding_provider = None
+
+    def _get_image_embedding_provider(self):
+        """Lazy-load the image embedding provider."""
+        if self._image_embedding_provider is None:
+            from mmct.providers.custom_providers import FastEmbedQdrantCLIPEmbeddingProvider
+            self._image_embedding_provider = FastEmbedQdrantCLIPEmbeddingProvider()
+        return self._image_embedding_provider
     
     async def search_keyframes(
         self,
@@ -79,13 +85,8 @@ class KeyframeRetrievalTool(OutputFormatterMixin):
         time_str = f" time_range={time_range}" if time_range else ""
         _tool_log("search_keyframes", f"query='{query}' video_ids={video_ids}{time_str} limit={limit}")
         try:
-            if self.image_embedding_provider is None:
-                return json.dumps({
-                    "error": "Image embedding provider not configured for keyframe search"
-                })
-            
             # Get image embedding from text query
-            query_embedding = await self.image_embedding_provider.text_embedding(query)
+            query_embedding = await self._get_image_embedding_provider().text_embedding(query)
             
             results = await self.neo4j_provider.search_keyframes(
                 query_embedding=query_embedding,

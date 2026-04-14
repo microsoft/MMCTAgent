@@ -56,8 +56,6 @@ class QueryPipelineProviders:
 
     model_client: Any
     neo4j_provider: Optional[Neo4jQueryProvider]
-    embedding_provider: Any
-    image_embedding_provider: Optional[Any] = None
     storage_provider: Optional[Any] = None
     image_llm_provider: Optional[Any] = None
 
@@ -354,8 +352,6 @@ def get_query_pipeline_providers() -> QueryPipelineProviders:
     return QueryPipelineProviders(
         model_client=llm_provider.get_autogen_client(),
         neo4j_provider=get_neo4j_query_provider(),
-        embedding_provider=get_embedding_provider(),
-        image_embedding_provider=get_clip_provider(),
         storage_provider=get_storage_provider(),
         image_llm_provider=llm_provider,
     )

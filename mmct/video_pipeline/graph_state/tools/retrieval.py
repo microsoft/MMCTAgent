@@ -34,10 +34,24 @@ class RetrievalExecutor(OutputFormatterMixin):
     search_keyframes — all driven by the validated plan.
     """
 
-    def __init__(self, neo4j_provider, embedding_provider, image_embedding_provider=None):
+    def __init__(self, neo4j_provider):
         self.neo4j_provider = neo4j_provider
-        self.embedding_provider = embedding_provider
-        self.image_embedding_provider = image_embedding_provider
+        self._embedding_provider = None
+        self._image_embedding_provider = None
+
+    def _get_embedding_provider(self):
+        """Lazy-load the text embedding provider."""
+        if self._embedding_provider is None:
+            from mmct.providers.custom_providers import FastEmbedBGEsmallEmbeddingProvider
+            self._embedding_provider = FastEmbedBGEsmallEmbeddingProvider()
+        return self._embedding_provider
+
+    def _get_image_embedding_provider(self):
+        """Lazy-load the image embedding provider."""
+        if self._image_embedding_provider is None:
+            from mmct.providers.custom_providers import FastEmbedQdrantCLIPEmbeddingProvider
+            self._image_embedding_provider = FastEmbedQdrantCLIPEmbeddingProvider()
+        return self._image_embedding_provider
 
     async def search(
         self,
@@ -68,7 +82,7 @@ class RetrievalExecutor(OutputFormatterMixin):
 
         # Parallel: embed all sub-queries at once
         embeddings = await asyncio.gather(
-            *[self.embedding_provider.embedding(sq) for sq in sub_queries]
+            *[self._get_embedding_provider().embedding(sq) for sq in sub_queries]
         )
 
         # Parallel: run search for each sub-query (hybrid: vector + keyword)
@@ -144,11 +158,7 @@ class RetrievalExecutor(OutputFormatterMixin):
         """Search keyframes by image embedding vector search."""
         _log("search_keyframes", f"query='{query[:50]}' video_ids={video_ids}")
 
-        if self.image_embedding_provider is None:
-            logger.warning("Image embedding provider not configured")
-            return []
-
-        query_embedding = await self.image_embedding_provider.text_embedding(query)
+        query_embedding = await self._get_image_embedding_provider().text_embedding(query)
         results = await self.neo4j_provider.search_keyframes(
             query_embedding=query_embedding,
             video_ids=video_ids,

@@ -24,9 +24,16 @@ def _log(msg: str) -> None:
 class VideoDiscoveryExecutor:
     """Discovers relevant videos by searching ChapterGroup summaries."""
 
-    def __init__(self, neo4j_provider, embedding_provider):
+    def __init__(self, neo4j_provider):
         self.neo4j_provider = neo4j_provider
-        self.embedding_provider = embedding_provider
+        self._embedding_provider = None
+
+    def _get_embedding_provider(self):
+        """Lazy-load the text embedding provider."""
+        if self._embedding_provider is None:
+            from mmct.providers.custom_providers import FastEmbedBGEsmallEmbeddingProvider
+            self._embedding_provider = FastEmbedBGEsmallEmbeddingProvider()
+        return self._embedding_provider
 
     async def discover(
         self,
@@ -47,7 +54,7 @@ class VideoDiscoveryExecutor:
         """
         _log(f"query='{query[:50]}...' limit={limit}")
         try:
-            query_embedding = await self.embedding_provider.embedding(query)
+            query_embedding = await self._get_embedding_provider().embedding(query)
 
             # Multi-level discovery: search ChapterGroups AND Chapters in parallel
             cg_task = self.neo4j_provider.find_relevant_videos(
