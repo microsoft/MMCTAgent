@@ -7,7 +7,7 @@ in this repo.
 
 Credential strategy: ChainedTokenCredential tries AzureCliCredential first
 (local dev / CI with az login), then falls back to DefaultAzureCredential
-(managed identity, workload identity, etc.).
+(managed identity, workload identity, environment variables, etc.).
 """
 
 from functools import lru_cache
@@ -111,15 +111,16 @@ def get_settings() -> ProviderEnvSettings:
 
 
 def resolve_credentials():
-    """Resolve Azure credentials, using token broker when TOKEN_BROKER_URL is set.
+    """Resolve Azure credentials using a chained strategy.
 
-    Delegates to ``config.credentials.resolve_credentials`` which returns a
-    broker-with-fallback credential when TOKEN_BROKER_URL is present in .env,
-    or a plain ChainedTokenCredential (AzureCliCredential → DefaultAzureCredential)
-    otherwise.
+    Tries AzureCliCredential first (local dev / CI with ``az login``),
+    then falls back to DefaultAzureCredential (managed identity,
+    workload identity, environment variables, etc.).
     """
-    from config.credentials import resolve_credentials as _resolve
-    return _resolve()
+    return ChainedTokenCredential(
+        AzureCliCredential(),
+        DefaultAzureCredential(),
+    )
 
 
 @lru_cache(maxsize=1)
