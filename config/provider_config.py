@@ -44,7 +44,6 @@ class IngestionProviders:
     """Provider bundle consumed by the ingestion pipeline StepContext."""
 
     llm_provider: AzureLLMProvider
-    embedding_provider: AzureEmbeddingProvider
     transcription_provider: BaseTranscriptionProvider
     storage_provider: AzureStorageProvider
     graph_store_provider: Optional[Neo4jGraphStoreProvider] = None
@@ -113,14 +112,16 @@ def get_settings() -> ProviderEnvSettings:
     return ProviderEnvSettings()
 
 
-def resolve_credentials() -> ChainedTokenCredential:
-    """Return a ChainedTokenCredential: AzureCliCredential → DefaultAzureCredential.
+def resolve_credentials():
+    """Resolve Azure credentials, using token broker when TOKEN_BROKER_URL is set.
 
-    AzureCliCredential covers local dev and CI environments where `az login` has
-    been run. DefaultAzureCredential covers managed identity and workload identity
-    in cloud deployments.
+    Delegates to ``config.credentials.resolve_credentials`` which returns a
+    broker-with-fallback credential when TOKEN_BROKER_URL is present in .env,
+    or a plain ChainedTokenCredential (AzureCliCredential → DefaultAzureCredential)
+    otherwise.
     """
-    return ChainedTokenCredential(AzureCliCredential(), DefaultAzureCredential())
+    from config.credentials import resolve_credentials as _resolve
+    return _resolve()
 
 
 @lru_cache(maxsize=1)
@@ -318,7 +319,6 @@ def get_ingestion_providers() -> IngestionProviders:
 
     return IngestionProviders(
         llm_provider=get_llm_provider(),
-        embedding_provider=get_embedding_provider(),
         transcription_provider=transcription_provider,
         storage_provider=get_storage_provider(),
         graph_store_provider=get_neo4j_graph_store_provider(),

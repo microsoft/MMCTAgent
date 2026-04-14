@@ -138,7 +138,7 @@ class SemanticChunker:
         return segments
 
     async def _create_batch_embeddings(self, texts, batch_size=100):
-        """Generates embeddings for multiple texts in batches using Azure Embeddings API."""
+        """Generates embeddings for multiple texts in batches."""
         logger.info(f"🔄 Creating batch embeddings for {len(texts)} texts")
         embeddings = await self.embedding_provider.batch_embedding(texts)
         logger.info(f"✅ Batch embedding complete: {len(embeddings)} embeddings created")
