@@ -252,7 +252,8 @@ Focus on what viewers will learn or see in this section."""
             
             if isinstance(chapter_data, dict):
                 summary = (
-                    chapter_data.get("detailed_summary")
+                    chapter_data.get("timestamped_description")
+                    or chapter_data.get("detailed_summary")
                     or chapter_data.get("summary")
                     or ""
                 )
@@ -407,9 +408,8 @@ Focus on what viewers will learn or see in this section."""
             chapter = chapters[first_idx]
             chapter_data = chapter.get("chapter", chapter)
             if isinstance(chapter_data, dict):
-                summary = chapter_data.get("detailed_summary") or chapter_data.get("summary", "")
+                summary = chapter_data.get("timestamped_description") or chapter_data.get("detailed_summary") or chapter_data.get("summary", "")
                 if summary:
-                    # Take first sentence
                     first_sentence = summary.split(".")[0]
                     if len(first_sentence) > 150:
                         first_sentence = first_sentence[:147] + "..."

@@ -419,7 +419,7 @@ class ChapterGrouper:
         chapter_data = first_chapter.get("chapter", first_chapter)
         
         if isinstance(chapter_data, dict):
-            summary = chapter_data.get("detailed_summary") or chapter_data.get("summary", "")
+            summary = chapter_data.get("timestamped_description") or chapter_data.get("detailed_summary") or chapter_data.get("summary", "")
             if summary:
                 # Take first sentence or truncate
                 first_sentence = summary.split(".")[0]
