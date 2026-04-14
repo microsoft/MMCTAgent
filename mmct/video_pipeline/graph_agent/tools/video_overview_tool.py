@@ -6,25 +6,13 @@ for overview-type queries.
 """
 
 from typing import Annotated, Optional, List
-from datetime import datetime
 import json
 from loguru import logger
 
 from mmct.video_pipeline.core.graph import node_registry
 from mmct.video_pipeline.utils import OutputFormatterMixin
 
-
-# ANSI colors for tool output
-_CYAN = "\033[96m"
-_YELLOW = "\033[93m"
-_GRAY = "\033[90m"
-_RESET = "\033[0m"
-
-
-def _tool_log(tool_name: str, message: str) -> None:
-    """Print tool log with timestamp and colors."""
-    now = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-    print(f"{_GRAY}[{now}]{_RESET} {_CYAN}[Tool:{tool_name}]{_RESET} {message}", flush=True)
+_log = logger.bind(component="Tool:get_video_overview")
 
 
 class VideoOverviewTool(OutputFormatterMixin):
@@ -73,7 +61,7 @@ class VideoOverviewTool(OutputFormatterMixin):
         Returns:
             JSON string with all nodes of the specified type.
         """
-        _tool_log("get_video_overview", f"video_id={video_id} level={level} limit={limit}")
+        _log.info(f"video_id={video_id} level={level} limit={limit}")
         
         try:
             # Validate level
@@ -92,7 +80,7 @@ class VideoOverviewTool(OutputFormatterMixin):
             
             # Format results
             formatted = self._format_results(results, level)
-            _tool_log("get_video_overview", f"{_YELLOW}Found {len(results)} {level} nodes{_RESET}")
+            _log.info(f"Found {len(results)} {level} nodes")
             return self.format_output(formatted)
             
         except Exception as e:

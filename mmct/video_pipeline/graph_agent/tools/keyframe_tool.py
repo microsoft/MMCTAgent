@@ -7,24 +7,12 @@ Note: For graph traversal (Chapter → Keyframe), use GraphTraversalTool.travers
 """
 
 from typing import Annotated, Optional, List, Tuple
-from datetime import datetime
 import json
 from loguru import logger
 
 from mmct.video_pipeline.utils import OutputFormatterMixin
 
-
-# ANSI colors for tool output
-_CYAN = "\033[96m"
-_YELLOW = "\033[93m"
-_GRAY = "\033[90m"
-_RESET = "\033[0m"
-
-
-def _tool_log(tool_name: str, message: str) -> None:
-    """Print tool log with timestamp and colors."""
-    now = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-    print(f"{_GRAY}[{now}]{_RESET} {_CYAN}[Tool:{tool_name}]{_RESET} {message}", flush=True)
+_log = logger.bind(component="Tool:search_keyframes")
 
 
 class KeyframeRetrievalTool(OutputFormatterMixin):
@@ -83,7 +71,7 @@ class KeyframeRetrievalTool(OutputFormatterMixin):
             time_range = (time_start or 0.0, time_end or float('inf'))
         
         time_str = f" time_range={time_range}" if time_range else ""
-        _tool_log("search_keyframes", f"query='{query}' video_ids={video_ids}{time_str} limit={limit}")
+        _log.info(f"query='{query}' video_ids={video_ids}{time_str} limit={limit}")
         try:
             # Get image embedding from text query
             query_embedding = await self._get_image_embedding_provider().text_embedding(query)
@@ -96,7 +84,7 @@ class KeyframeRetrievalTool(OutputFormatterMixin):
             )
             
             formatted = self._format_results(results)
-            _tool_log("search_keyframes", f"{_YELLOW}Found {len(results)} keyframes{_RESET}")
+            _log.info(f"Found {len(results)} keyframes")
             return self.format_output(formatted)
             
         except Exception as e:

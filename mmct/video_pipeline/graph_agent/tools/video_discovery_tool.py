@@ -5,24 +5,12 @@ the entire knowledge graph.
 """
 
 from typing import Annotated, Optional, List
-from datetime import datetime
 import json
 from loguru import logger
 
 from mmct.video_pipeline.utils import OutputFormatterMixin
 
-
-# ANSI colors for tool output
-_CYAN = "\033[96m"
-_YELLOW = "\033[93m"
-_GRAY = "\033[90m"
-_RESET = "\033[0m"
-
-
-def _tool_log(tool_name: str, message: str) -> None:
-    """Print tool log with timestamp and colors."""
-    now = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-    print(f"{_GRAY}[{now}]{_RESET} {_CYAN}[Tool:{tool_name}]{_RESET} {message}", flush=True)
+_log = logger.bind(component="Tool:find_relevant_videos")
 
 
 class VideoDiscoveryTool(OutputFormatterMixin):
@@ -68,7 +56,7 @@ class VideoDiscoveryTool(OutputFormatterMixin):
             JSON string with relevant video_ids and their relevance scores.
         """
         query_preview = query[:50] + "..." if len(query) > 50 else query
-        _tool_log("find_relevant_videos", f"query='{query}' video_ids={video_ids} limit={limit}")
+        _log.info(f"query='{query}' video_ids={video_ids} limit={limit}")
         try:
             query_embedding = await self._get_embedding_provider().embedding(query)
             
@@ -79,7 +67,7 @@ class VideoDiscoveryTool(OutputFormatterMixin):
             )
             
             formatted = self._format_results(results)
-            _tool_log("find_relevant_videos", f"{_YELLOW}Found {len(results)} relevant videos{_RESET}")
+            _log.info(f"Found {len(results)} relevant videos")
             return self.format_output(formatted)
             
         except Exception as e:

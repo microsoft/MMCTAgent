@@ -7,7 +7,6 @@ executing retrieval/analysis tools programmatically.
 
 import json
 import time
-from datetime import datetime
 from typing import Any, AsyncGenerator, Dict, List, Optional, Union
 
 from loguru import logger
@@ -48,46 +47,7 @@ from mmct.video_pipeline.graph_state.query.neo4j_provider import Neo4jQueryProvi
 from mmct.video_pipeline.graph_state.agents.planner_agent import PlannerAgent
 from mmct.video_pipeline.graph_state.agents.critic_agent import CriticAgent
 
-
-class _Colors:
-    """ANSI color codes for console formatting."""
-    GRAY = "\033[90m"
-    RED = "\033[91m"
-    GREEN = "\033[92m"
-    YELLOW = "\033[93m"
-    BLUE = "\033[94m"
-    MAGENTA = "\033[95m"
-    CYAN = "\033[96m"
-    RESET = "\033[0m"
-    BOLD = "\033[1m"
-
-
-def _ts() -> str:
-    """Generates a log timestamp.
-
-    Returns:
-        str: Formatted time string.
-    """
-    return datetime.now().strftime("%H:%M:%S.%f")[:-3]
-
-
-def _print_state(state: QueryState, rid: str, detail: str = "") -> None:
-    """Prints a state transition to the console.
-
-    Args:
-        state: The current machine state.
-        rid: Request identifier.
-        detail: Optional additional detail to display.
-    """
-    detail_str = f" — {detail}" if detail else ""
-    print(
-        f"{_Colors.GRAY}[{_ts()}]{_Colors.RESET} [{rid}] "
-        f"{_Colors.MAGENTA}[state]{_Colors.RESET} "
-        f"{_Colors.BOLD}{state.name}{_Colors.RESET}{detail_str}",
-        flush=True,
-    )
-
-
+_log = logger.bind(component="state")
 class StateOrchestrator:
     """State machine-driven query orchestrator.
 
@@ -161,10 +121,10 @@ class StateOrchestrator:
         start = time.time()
         rid = request_id or "no-rid"
 
-        print(f"\n{'=' * 60}", flush=True)
-        print(f"[{rid}] {_Colors.CYAN}State Machine Pipeline{_Colors.RESET}", flush=True)
-        print(f"{'=' * 60}", flush=True)
-        print(f"{_Colors.GRAY}[{_ts()}]{_Colors.RESET} [{rid}] Query: {user_query}", flush=True)
+        _log.info(f"{'=' * 60}")
+        _log.info(f"[{rid}] State Machine Pipeline")
+        _log.info(f"{'=' * 60}")
+        _log.info(f"[{rid}] Query: {user_query}")
 
         ctx = QueryContext(
             query=user_query,
@@ -181,9 +141,9 @@ class StateOrchestrator:
             response["elapsed_seconds"] = elapsed
             response["token_usage"] = ctx.token_usage
 
-            print(f"\n{'=' * 60}", flush=True)
-            print(f"[{rid}] {_Colors.GREEN}Query completed in {elapsed:.2f}s{_Colors.RESET}", flush=True)
-            print(f"{'=' * 60}\n", flush=True)
+            _log.info(f"{'=' * 60}")
+            _log.info(f"[{rid}] Query completed in {elapsed:.2f}s")
+            _log.info(f"{'=' * 60}")
             return response
         finally:
             self._image_analyzer.cleanup()
@@ -272,7 +232,7 @@ class StateOrchestrator:
         self, state: QueryState, ctx: QueryContext, llm: StructuredLLMClient
     ) -> QueryState:
         """Executes the logic for a single pipeline state and determine next state."""
-        _print_state(state, ctx.request_id)
+        _log.info(f"[{ctx.request_id}] {state.name}")
         ctx.log_state(state)
 
         match state:
@@ -317,7 +277,7 @@ class StateOrchestrator:
             ctx.video_scope = "cross"
             ctx.effective_video_ids = None
 
-        _print_state(QueryState.PARSE_INPUT, ctx.request_id, f"scope={ctx.video_scope}")
+        _log.info(f"[{ctx.request_id}] PARSE_INPUT — scope={ctx.video_scope}")
         return QueryState.PLAN
 
     def _state_validate_plan(self, ctx: QueryContext) -> QueryState:
@@ -355,10 +315,9 @@ class StateOrchestrator:
             query_lower = ctx.query.lower()
             if any(kw in query_lower for kw in _VISUAL_KEYWORDS):
                 plan["visual"] = True
-                _print_state(
-                    QueryState.VALIDATE_PLAN,
-                    ctx.request_id,
-                    "visual flag forced ON by keyword safety net",
+                _log.info(
+                    f"[{ctx.request_id}] VALIDATE_PLAN — "
+                    "visual flag forced ON by keyword safety net"
                 )
 
         ctx.plan = plan
@@ -398,16 +357,14 @@ class StateOrchestrator:
                 selected.append(vid)
 
         ctx.effective_video_ids = selected
-        _print_state(
-            QueryState.DISCOVER_VIDEOS,
-            ctx.request_id,
-            f"discovered {len(ranked)} → selected {len(selected)} videos: {selected}",
+        _log.info(
+            f"[{ctx.request_id}] DISCOVER_VIDEOS — "
+            f"discovered {len(ranked)} → selected {len(selected)} videos: {selected}"
         )
         if demoted:
-            _print_state(
-                QueryState.DISCOVER_VIDEOS,
-                ctx.request_id,
-                f"demoted summary videos: {[(v, t) for v, _, t in demoted]}",
+            _log.info(
+                f"[{ctx.request_id}] DISCOVER_VIDEOS — "
+                f"demoted summary videos: {[(v, t) for v, _, t in demoted]}"
             )
         return QueryState.RETRIEVE
 
@@ -419,12 +376,18 @@ class StateOrchestrator:
         if plan["strategy"] == "OVERVIEW":
             vid = (ctx.effective_video_ids or [""])[0]
             if vid:
+                _log.info(f"[{ctx.request_id}] RETRIEVE — OVERVIEW for video={vid}")
                 ctx.evidence = await self._retrieval.overview(
                     video_id=vid,
                     level=plan["targets"][0] if plan["targets"] else "ChapterGroup",
                     limit=plan.get("limit", 50),
                 )
         else:
+            _log.info(
+                f"[{ctx.request_id}] RETRIEVE — SEARCH targets={plan['targets']} "
+                f"sub_queries={len(plan.get('sub_queries', []))} "
+                f"video_ids={ctx.effective_video_ids}"
+            )
             ctx.evidence = await self._retrieval.search(
                 sub_queries=plan["sub_queries"],
                 targets=plan["targets"],
@@ -432,12 +395,27 @@ class StateOrchestrator:
                 limit=plan.get("limit", 5),
             )
 
+        _log.info(
+            f"[{ctx.request_id}] RETRIEVE — retrieved {len(ctx.evidence)} evidence items"
+        )
+        for i, e in enumerate(ctx.evidence):
+            ntype = e.get("node_type", "?")
+            vid = e.get("video_id", "?")
+            score = e.get("score", "")
+            score_str = f" score={score:.4f}" if isinstance(score, float) else ""
+            desc = e.get("summary") or e.get("transcript") or e.get("description") or ""
+            if len(desc) > 120:
+                desc = desc[:120] + "..."
+            _log.debug(f"[{ctx.request_id}] RETRIEVE — [{i+1}] {ntype} {vid}{score_str}: {desc}")
+
         if plan.get("visual") and ctx.evidence:
+            _log.info(f"[{ctx.request_id}] RETRIEVE — searching keyframes (visual=True)")
             ctx.keyframes = await self._retrieval.search_keyframes(
                 query=ctx.query,
                 video_ids=ctx.effective_video_ids,
                 limit=5,
             )
+            _log.info(f"[{ctx.request_id}] RETRIEVE — found {len(ctx.keyframes)} keyframes")
 
         return QueryState.CHECK_EVIDENCE
 
@@ -446,25 +424,22 @@ class StateOrchestrator:
         has_evidence = len(ctx.evidence) > 0
 
         if has_evidence:
-            _print_state(
-                QueryState.CHECK_EVIDENCE,
-                ctx.request_id,
-                f"{len(ctx.evidence)} results — routing to context expansion",
+            _log.info(
+                f"[{ctx.request_id}] CHECK_EVIDENCE — "
+                f"{len(ctx.evidence)} results — routing to context expansion"
             )
             return QueryState.EXPAND_CONTEXT
 
         if ctx.retrieve_attempts < MAX_RETRIEVE_ATTEMPTS:
-            _print_state(
-                QueryState.CHECK_EVIDENCE,
-                ctx.request_id,
-                "empty results — will rephrase and retry",
+            _log.info(
+                f"[{ctx.request_id}] CHECK_EVIDENCE — "
+                "empty results — will rephrase and retry"
             )
             return QueryState.REPHRASE
 
-        _print_state(
-            QueryState.CHECK_EVIDENCE,
-            ctx.request_id,
-            f"empty after {ctx.retrieve_attempts} attempts — synthesizing with no evidence",
+        _log.info(
+            f"[{ctx.request_id}] CHECK_EVIDENCE — "
+            f"empty after {ctx.retrieve_attempts} attempts — synthesizing with no evidence"
         )
         return QueryState.SYNTHESIZE
 
@@ -485,11 +460,7 @@ class StateOrchestrator:
             return self._route_after_expansion(ctx)
 
         if not result.needs_expansion or not result.operations:
-            _print_state(
-                QueryState.EXPAND_CONTEXT,
-                ctx.request_id,
-                "no expansion needed",
-            )
+            _log.info(f"[{ctx.request_id}] EXPAND_CONTEXT — no expansion needed")
             return self._route_after_expansion(ctx)
 
         valid_targets = {
@@ -503,10 +474,9 @@ class StateOrchestrator:
             if not op.node_ids:
                 continue
 
-            _print_state(
-                QueryState.EXPAND_CONTEXT,
-                ctx.request_id,
-                f"traversing {len(op.node_ids)} node(s) → {op.target} ({op.reason})",
+            _log.info(
+                f"[{ctx.request_id}] EXPAND_CONTEXT — "
+                f"traversing {len(op.node_ids)} node(s) → {op.target} ({op.reason})"
             )
             try:
                 if op.target == "SiblingChapters":
@@ -524,10 +494,9 @@ class StateOrchestrator:
                     existing_ids = {e.get("node_id") for e in ctx.evidence}
                     new_items = [e for e in expanded if e.get("node_id") not in existing_ids]
                     ctx.evidence.extend(new_items)
-                    _print_state(
-                        QueryState.EXPAND_CONTEXT,
-                        ctx.request_id,
-                        f"+{len(new_items)} new results from {op.target}",
+                    _log.info(
+                        f"[{ctx.request_id}] EXPAND_CONTEXT — "
+                        f"+{len(new_items)} new results from {op.target}"
                     )
             except Exception as e:
                 logger.warning(f"[{ctx.request_id}] Traversal error: {e}")
@@ -552,10 +521,9 @@ class StateOrchestrator:
                 response_type=RephraseResult,
             )
             ctx.plan["sub_queries"] = result.sub_queries[:MAX_SUB_QUERIES]
-            _print_state(
-                QueryState.REPHRASE,
-                ctx.request_id,
-                f"rephrased into {len(result.sub_queries)} queries",
+            _log.info(
+                f"[{ctx.request_id}] REPHRASE — "
+                f"rephrased into {len(result.sub_queries)} queries"
             )
         except Exception as e:
             logger.warning(f"[{ctx.request_id}] Rephrase failed: {e}")
@@ -567,9 +535,14 @@ class StateOrchestrator:
         if not ctx.keyframes:
             return QueryState.SYNTHESIZE
 
+        _log.info(f"[{ctx.request_id}] ANALYZE_IMAGES — analyzing {len(ctx.keyframes)} keyframes")
         ctx.image_analyses = await self._image_analyzer.analyze_keyframes(
             keyframes=ctx.keyframes,
             query=ctx.query,
+        )
+        _log.info(
+            f"[{ctx.request_id}] ANALYZE_IMAGES — "
+            f"completed {len(ctx.image_analyses)} image analyses"
         )
         return QueryState.SYNTHESIZE
 
@@ -599,10 +572,9 @@ class StateOrchestrator:
             ctx.answer = result.answer
             ctx.sources = [s.model_dump() for s in result.sources]
             ctx.answer, ctx.sources = dedup_sources(ctx.answer, ctx.sources)
-            _print_state(
-                QueryState.SYNTHESIZE,
-                ctx.request_id,
-                f"answer generated: {len(result.answer)} chars, {len(ctx.sources)} citations",
+            _log.info(
+                f"[{ctx.request_id}] SYNTHESIZE — "
+                f"answer generated: {len(result.answer)} chars, {len(ctx.sources)} citations"
             )
         except Exception as e:
             logger.error(f"[{ctx.request_id}] Synthesis failed: {e}")
@@ -637,10 +609,9 @@ class StateOrchestrator:
             ctx.answer = result.answer
             ctx.sources = [s.model_dump() for s in result.sources]
             ctx.answer, ctx.sources = dedup_sources(ctx.answer, ctx.sources)
-            _print_state(
-                QueryState.REVISE,
-                ctx.request_id,
-                f"revised answer: {len(result.answer)} chars, {len(ctx.sources)} citations",
+            _log.info(
+                f"[{ctx.request_id}] REVISE — "
+                f"revised answer: {len(result.answer)} chars, {len(ctx.sources)} citations"
             )
         except Exception as e:
             logger.warning(f"[{ctx.request_id}] Revision failed: {e}")

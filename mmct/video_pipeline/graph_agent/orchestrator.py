@@ -13,7 +13,6 @@ The system uses AutoGen Swarm for agent handoffs and context management.
 
 import json
 import time
-from datetime import datetime
 from typing import Any, Dict, Optional, AsyncGenerator, Union, List
 from dataclasses import dataclass, field
 
@@ -37,23 +36,7 @@ from mmct.video_pipeline.graph_agent.query.neo4j_provider import Neo4jQueryProvi
 from mmct.video_pipeline.graph_agent.schemas import QueryResponse
 from mmct.image_pipeline.config import ImageAgentProviderConfig
 
-
-class Colors:
-    """ANSI color codes for professional console output.
-
-    Used to demarcate different agents, tool calls, and system messages
-    in the terminal display.
-    """
-    GRAY = "\033[90m"
-    RED = "\033[91m"
-    GREEN = "\033[92m"
-    YELLOW = "\033[93m"
-    BLUE = "\033[94m"
-    MAGENTA = "\033[95m"
-    CYAN = "\033[96m"
-    WHITE = "\033[97m"
-    RESET = "\033[0m"
-    BOLD = "\033[1m"
+_log = logger.bind(component="agent")
 
 
 # Buffer sizes for agent context windows
@@ -77,29 +60,19 @@ class TokenUsage:
     completion_tokens: int = 0
 
 
-def _format_timestamp() -> str:
-    """Generates a formatted timestamp for console logging.
+def _log_message(message: Any, token_usage: TokenUsage, request_id: str = "") -> None:
+    """Logs a formatted agentic message or event via loguru.
 
-    Returns:
-        str: Current time in HH:MM:SS.mmm format.
-    """
-    return datetime.now().strftime("%H:%M:%S.%f")[:-3]
-
-
-def _print_message_to_console(message: Any, token_usage: TokenUsage, request_id: str = "") -> None:
-    """Prints a formatted agentic message or event to the console.
-
-    Uses specific colors for different message types (Tool calls, Handoffs,
-    Text results) and tracks accumulated token usage.
+    Tracks accumulated token usage and logs different message types
+    (tool calls, handoffs, text results) at DEBUG level.
 
     Args:
         message: The message object or event (from AutoGen).
-        token_usage: A TokenUsage object to accumulate LLM costs. This object 
+        token_usage: A TokenUsage object to accumulate LLM costs. This object
             is modified in-place to track prompt and completion tokens.
         request_id: Optional correlation ID for the request.
     """
     source = getattr(message, "source", "Unknown")
-    now = _format_timestamp()
     rid = f"[{request_id}] " if request_id else ""
 
     if hasattr(message, "models_usage") and message.models_usage:
@@ -107,40 +80,41 @@ def _print_message_to_console(message: Any, token_usage: TokenUsage, request_id:
         token_usage.completion_tokens += message.models_usage.completion_tokens
 
     if isinstance(message, TaskResult):
-        print(f"\n{Colors.GRAY}[{now}]{Colors.RESET} {rid}{Colors.MAGENTA}[System]{Colors.RESET}: Task Completed.", flush=True)
-        print(f"\n{rid}{'-' * 10} {Colors.CYAN}Summary{Colors.RESET} {'-' * 10}", flush=True)
-        print(f"{rid}Messages: {len(message.messages)}", flush=True)
-        print(f"{rid}Finish reason: {message.stop_reason}", flush=True)
-        print(f"{rid}Prompt tokens: {token_usage.prompt_tokens}", flush=True)
-        print(f"{rid}Completion tokens: {token_usage.completion_tokens}", flush=True)
+        _log.info(f"{rid}[System] Task Completed")
+        _log.info(f"{rid}Messages: {len(message.messages)}")
+        _log.info(f"{rid}Finish reason: {message.stop_reason}")
+        _log.info(f"{rid}Prompt tokens: {token_usage.prompt_tokens}")
+        _log.info(f"{rid}Completion tokens: {token_usage.completion_tokens}")
     elif isinstance(message, TextMessage):
-        print(f"\n{Colors.GRAY}[{now}]{Colors.RESET} {rid}{Colors.GREEN}[{source}]{Colors.RESET}: {message.content}", flush=True)
+        _log.debug(f"{rid}[{source}] {message.content}")
     elif isinstance(message, HandoffMessage):
-        print(f"\n{Colors.GRAY}[{now}]{Colors.RESET} {rid}{Colors.CYAN}[{source}]{Colors.RESET}: Handoff → {Colors.BOLD}{message.target}{Colors.RESET}", flush=True)
+        _log.debug(f"{rid}[{source}] Handoff → {message.target}")
         if message.content:
-            print(f"{Colors.GRAY}{rid}  Message: {message.content}{Colors.RESET}", flush=True)
+            _log.debug(f"{rid}  Message: {message.content}")
     elif isinstance(message, ToolCallRequestEvent):
         content = message.content
         if isinstance(content, list):
             for tc in content:
-                print(f"\n{Colors.GRAY}[{now}]{Colors.RESET} {rid}{Colors.BLUE}[{source}]{Colors.RESET}: Tool Call: {Colors.BOLD}{tc.name}{Colors.RESET}", flush=True)
-                print(f"{Colors.GRAY}{rid}  Args: {tc.arguments}{Colors.RESET}", flush=True)
+                _log.debug(f"{rid}[{source}] Tool Call: {tc.name}")
+                _log.debug(f"{rid}  Args: {tc.arguments}")
         else:
-            print(f"\n{Colors.GRAY}[{now}]{Colors.RESET} {rid}{Colors.BLUE}[{source}]{Colors.RESET}: Tool Call: {content}", flush=True)
+            _log.debug(f"{rid}[{source}] Tool Call: {content}")
     elif isinstance(message, ToolCallExecutionEvent):
         content = message.content
         if isinstance(content, list):
             for tr in content:
-                print(f"\n{Colors.GRAY}[{now}]{Colors.RESET} {rid}{Colors.YELLOW}[{source}]{Colors.RESET}: Tool Result ({tr.call_id}):", flush=True)
-                print(f"{Colors.GRAY}{rid}{tr.content}{Colors.RESET}", flush=True)
+                _log.debug(f"{rid}[{source}] Tool Result ({tr.call_id}): {tr.content}")
         else:
-            print(f"\n{Colors.GRAY}[{now}]{Colors.RESET} {rid}{Colors.YELLOW}[{source}]{Colors.RESET}: Tool Result: {content}", flush=True)
+            _log.debug(f"{rid}[{source}] Tool Result: {content}")
     else:
         content = str(getattr(message, "content", str(message)))
-        print(f"\n{Colors.GRAY}[{now}]{Colors.RESET} {rid}{Colors.RED}[{source}]{Colors.RESET}: [{type(message).__name__}] {content}", flush=True)
+        _log.debug(f"{rid}[{source}] [{type(message).__name__}] {content}")
 
     if hasattr(message, "models_usage") and message.models_usage and not isinstance(message, TaskResult):
-        print(f"{Colors.GRAY}{rid}[Tokens: +{message.models_usage.prompt_tokens} prompt, +{message.models_usage.completion_tokens} completion]{Colors.RESET}", flush=True)
+        _log.debug(
+            f"{rid}[Tokens: +{message.models_usage.prompt_tokens} prompt, "
+            f"+{message.models_usage.completion_tokens} completion]"
+        )
 
 
 def _try_extract_json(content: str) -> Optional[str]:
@@ -410,18 +384,17 @@ class GraphOrchestrator:
         token_usage = TokenUsage()
         rid = f"[{request_id}] " if request_id else ""
 
-        now = _format_timestamp()
-        print(f"\n{'=' * 60}", flush=True)
-        print(f"{rid}{Colors.CYAN}Graph Query Pipeline{Colors.RESET}", flush=True)
-        print(f"{'=' * 60}", flush=True)
-        print(f"{Colors.GRAY}[{now}]{Colors.RESET} {rid}Query: {user_query}", flush=True)
+        _log.info(f"{'=' * 60}")
+        _log.info(f"{rid}Graph Query Pipeline")
+        _log.info(f"{'=' * 60}")
+        _log.info(f"{rid}Query: {user_query}")
         if video_id:
-            print(f"{Colors.GRAY}[{now}]{Colors.RESET} {rid}Video: {video_id}", flush=True)
+            _log.info(f"{rid}Video: {video_id}")
         elif video_ids:
-            print(f"{Colors.GRAY}[{now}]{Colors.RESET} {rid}Videos: {video_ids}", flush=True)
+            _log.info(f"{rid}Videos: {video_ids}")
         else:
-            print(f"{Colors.GRAY}[{now}]{Colors.RESET} {rid}Scope: Cross-video search", flush=True)
-        print(f"{'-' * 60}", flush=True)
+            _log.info(f"{rid}Scope: Cross-video search")
+        _log.info(f"{'-' * 60}")
 
         team = self._build_swarm()
         task = self._build_task(user_query, video_id, video_ids)
@@ -429,7 +402,7 @@ class GraphOrchestrator:
         try:
             final_result = None
             async for message in team.run_stream(task=task):
-                _print_message_to_console(message, token_usage, request_id=request_id)
+                _log_message(message, token_usage, request_id=request_id)
                 if isinstance(message, TaskResult):
                     final_result = message
 
@@ -444,9 +417,9 @@ class GraphOrchestrator:
                 "completion_tokens": token_usage.completion_tokens,
             }
 
-            print(f"\n{'=' * 60}", flush=True)
-            print(f"{rid}{Colors.GREEN}Query completed in {elapsed:.2f}s{Colors.RESET}", flush=True)
-            print(f"{'=' * 60}\n", flush=True)
+            _log.info(f"{'=' * 60}")
+            _log.info(f"{rid}Query completed in {elapsed:.2f}s")
+            _log.info(f"{'=' * 60}")
 
             return response
 
@@ -476,19 +449,18 @@ class GraphOrchestrator:
         token_usage = TokenUsage()
         rid = f"[{request_id}] " if request_id else ""
 
-        now = _format_timestamp()
-        print(f"\n{'=' * 60}", flush=True)
-        print(f"{rid}{Colors.CYAN}Graph Query Pipeline (Streaming){Colors.RESET}", flush=True)
-        print(f"{'=' * 60}", flush=True)
-        print(f"{Colors.GRAY}[{now}]{Colors.RESET} {rid}Query: {user_query}", flush=True)
-        print(f"{'-' * 60}", flush=True)
+        _log.info(f"{'=' * 60}")
+        _log.info(f"{rid}Graph Query Pipeline (Streaming)")
+        _log.info(f"{'=' * 60}")
+        _log.info(f"{rid}Query: {user_query}")
+        _log.info(f"{'-' * 60}")
 
         team = self._build_swarm()
         task = self._build_task(user_query, video_id, video_ids)
 
         try:
             async for message in team.run_stream(task=task):
-                _print_message_to_console(message, token_usage, request_id=request_id)
+                _log_message(message, token_usage, request_id=request_id)
 
                 if isinstance(message, TaskResult):
                     response = self._process_result(message)
@@ -498,9 +470,9 @@ class GraphOrchestrator:
                         "prompt_tokens": token_usage.prompt_tokens,
                         "completion_tokens": token_usage.completion_tokens,
                     }
-                    print(f"\n{'=' * 60}", flush=True)
-                    print(f"{rid}{Colors.GREEN}Query completed in {elapsed:.2f}s{Colors.RESET}", flush=True)
-                    print(f"{'=' * 60}\n", flush=True)
+                    _log.info(f"{'=' * 60}")
+                    _log.info(f"{rid}Query completed in {elapsed:.2f}s")
+                    _log.info(f"{'=' * 60}")
                     yield {"type": "final", "data": response}
                 else:
                     content = getattr(message, "content", "")

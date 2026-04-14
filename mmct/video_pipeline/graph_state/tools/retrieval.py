@@ -7,23 +7,13 @@ parallel search_graph per sub-query, overview, traverse.
 import asyncio
 import json
 from typing import Annotated, Any, Dict, List, Optional, Tuple
-from datetime import datetime
 
 from loguru import logger
 
 from mmct.video_pipeline.core.graph import node_registry
 from mmct.video_pipeline.utils import OutputFormatterMixin
 
-
-_CYAN = "\033[96m"
-_YELLOW = "\033[93m"
-_GRAY = "\033[90m"
-_RESET = "\033[0m"
-
-
-def _log(tool: str, msg: str) -> None:
-    now = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-    print(f"{_GRAY}[{now}]{_RESET} {_CYAN}[state:{tool}]{_RESET} {msg}", flush=True)
+_log = logger.bind(component="state:retrieval")
 
 
 class RetrievalExecutor(OutputFormatterMixin):
@@ -71,7 +61,7 @@ class RetrievalExecutor(OutputFormatterMixin):
         Returns:
             Merged list of result dicts (deduplicated by node_id).
         """
-        _log("search", f"targets={targets} sub_queries={len(sub_queries)} video_ids={video_ids}")
+        _log.info(f"targets={targets} sub_queries={len(sub_queries)} video_ids={video_ids}")
 
         # Validate targets
         valid = set(node_registry.names())
@@ -108,7 +98,7 @@ class RetrievalExecutor(OutputFormatterMixin):
         limit: Annotated[int, "Maximum nodes to return"] = 50,
     ) -> List[Dict[str, Any]]:
         """Fetch all nodes for a video (no vector search)."""
-        _log("overview", f"video_id={video_id} level={level}")
+        _log.info(f"video_id={video_id} level={level}")
 
         results = await self.neo4j_provider.get_all_nodes_for_video(
             video_id=video_id,
@@ -125,7 +115,7 @@ class RetrievalExecutor(OutputFormatterMixin):
         limit: Annotated[int, "Maximum traversed nodes to return"] = 20,
     ) -> List[Dict[str, Any]]:
         """Traverse graph relationships."""
-        _log("traverse", f"nodes={node_ids[:3]} → {target}")
+        _log.info(f"nodes={node_ids[:3]} → {target}")
 
         results = await self.neo4j_provider.traverse_relationships(
             source_ids=node_ids,
@@ -141,7 +131,7 @@ class RetrievalExecutor(OutputFormatterMixin):
         limit: Annotated[int, "Maximum sibling chapters to return"] = 20,
     ) -> List[Dict[str, Any]]:
         """Get all sibling chapters sharing the same parent ChapterGroup."""
-        _log("siblings", f"chapters={chapter_ids[:3]} → sibling Chapters")
+        _log.info(f"chapters={chapter_ids[:3]} → sibling Chapters")
 
         results = await self.neo4j_provider.get_sibling_chapters(
             chapter_ids=chapter_ids,
@@ -156,7 +146,7 @@ class RetrievalExecutor(OutputFormatterMixin):
         limit: Annotated[int, "Maximum keyframes to return"] = 5,
     ) -> List[Dict[str, Any]]:
         """Search keyframes by image embedding vector search."""
-        _log("search_keyframes", f"query='{query[:50]}' video_ids={video_ids}")
+        _log.info(f"query='{query[:50]}' video_ids={video_ids}")
 
         query_embedding = await self._get_image_embedding_provider().text_embedding(query)
         results = await self.neo4j_provider.search_keyframes(
@@ -181,7 +171,7 @@ class RetrievalExecutor(OutputFormatterMixin):
                 "score": round(kf_dict.get("score", 0), 4),
             })
 
-        _log("search_keyframes", f"{_YELLOW}Found {len(keyframes)} keyframes{_RESET}")
+        _log.info(f"Found {len(keyframes)} keyframes")
         return keyframes
 
     def _merge_results(
@@ -231,7 +221,7 @@ class RetrievalExecutor(OutputFormatterMixin):
         merged = self._diversify_by_video(merged)
 
         total = len(merged)
-        _log("search", f"{_YELLOW}Found {total} results (deduplicated, diversified){_RESET}")
+        _log.info(f"Found {total} results (deduplicated, diversified)")
         for i, r in enumerate(merged):
             vid = r.get("video_id", "?")
             ntype = r.get("node_type", "?")
@@ -242,9 +232,9 @@ class RetrievalExecutor(OutputFormatterMixin):
             desc = r.get("summary") or r.get("description") or r.get("transcript") or ""
             time_range = f" [{st}-{et}s]" if st != "" else ""
             title_str = f" ({title})" if title else ""
-            _log("search", f"  [{i+1}] {ntype} {vid}{time_range} score={score:.4f}{title_str}")
+            _log.debug(f"  [{i+1}] {ntype} {vid}{time_range} score={score:.4f}{title_str}")
             if desc:
-                _log("search", f"       {desc}")
+                _log.debug(f"       {desc}")
         return merged
 
     @staticmethod

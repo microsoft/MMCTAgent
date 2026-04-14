@@ -9,20 +9,10 @@ import re
 import asyncio
 from typing import Annotated, Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
-from datetime import datetime
 
 from loguru import logger
 
-
-_CYAN = "\033[96m"
-_YELLOW = "\033[93m"
-_GRAY = "\033[90m"
-_RESET = "\033[0m"
-
-
-def _log(msg: str) -> None:
-    now = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-    print(f"{_GRAY}[{now}]{_RESET} {_CYAN}[state:image]{_RESET} {msg}", flush=True)
+_log = logger.bind(component="state:image")
 
 
 def _normalize_blob_url(url: str) -> str:
@@ -79,7 +69,7 @@ class ImageAnalysisExecutor:
             logger.warning("Image LLM provider not configured")
             return []
 
-        _log(f"Analyzing {len(keyframes)} keyframes for: '{query[:50]}...'")
+        _log.info(f"Analyzing {len(keyframes)} keyframes for: '{query[:50]}...'")
 
         tasks = [
             self._analyze_single(kf, query)
@@ -100,7 +90,7 @@ class ImageAnalysisExecutor:
                 "analysis": result,
             })
 
-        _log(f"{_YELLOW}Completed {len(analyses)} image analyses{_RESET}")
+        _log.info(f"Completed {len(analyses)} image analyses")
         return analyses
 
     async def _analyze_single(

@@ -9,24 +9,12 @@ Uses the node type registry for dynamic target validation and result formatting.
 from typing import Annotated, Optional, List, Tuple
 import asyncio
 import json
-from datetime import datetime
 from loguru import logger
 
 from mmct.video_pipeline.core.graph import node_registry
 from mmct.video_pipeline.utils import OutputFormatterMixin
 
-
-# ANSI colors for tool output
-_CYAN = "\033[96m"
-_YELLOW = "\033[93m"
-_GRAY = "\033[90m"
-_RESET = "\033[0m"
-
-
-def _tool_log(tool_name: str, message: str) -> None:
-    """Print tool log with timestamp and colors."""
-    now = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-    print(f"{_GRAY}[{now}]{_RESET} {_CYAN}[Tool:{tool_name}]{_RESET} {message}", flush=True)
+_log = logger.bind(component="Tool:search_graph")
 
 
 class GraphSearchTool(OutputFormatterMixin):
@@ -95,7 +83,7 @@ class GraphSearchTool(OutputFormatterMixin):
         
         time_str = f" time_range={time_range}" if time_range else ""
         sort_str = " sort=time" if sort_by_time else ""
-        _tool_log("search_graph", f"query='{query}' targets={targets} video_ids={video_ids}{time_str}{sort_str}")
+        _log.info(f"query='{query}' targets={targets} video_ids={video_ids}{time_str}{sort_str}")
         try:
             # Validate targets using registry
             valid_targets = set(node_registry.names())
@@ -123,7 +111,7 @@ class GraphSearchTool(OutputFormatterMixin):
             # Format results
             formatted = self._format_results(results)
             total_results = sum(len(v) for v in formatted.values())
-            _tool_log("search_graph", f"{_YELLOW}Found {total_results} results across {len(formatted)} levels{_RESET}")
+            _log.info(f"Found {total_results} results across {len(formatted)} levels")
             return self.format_output(formatted)
             
         except Exception as e:

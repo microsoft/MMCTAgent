@@ -4,21 +4,11 @@ Only called when video_scope == "cross" (code-enforced).
 """
 
 from typing import Annotated, Dict, List
-from datetime import datetime
 import asyncio
 
 from loguru import logger
 
-
-_CYAN = "\033[96m"
-_YELLOW = "\033[93m"
-_GRAY = "\033[90m"
-_RESET = "\033[0m"
-
-
-def _log(msg: str) -> None:
-    now = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-    print(f"{_GRAY}[{now}]{_RESET} {_CYAN}[state:discovery]{_RESET} {msg}", flush=True)
+_log = logger.bind(component="state:discovery")
 
 
 class VideoDiscoveryExecutor:
@@ -52,7 +42,7 @@ class VideoDiscoveryExecutor:
         Returns:
             List of (video_id, score, video_title) tuples, ranked by score desc.
         """
-        _log(f"query='{query[:50]}...' limit={limit}")
+        _log.info(f"query='{query[:50]}...' limit={limit}")
         try:
             query_embedding = await self._get_embedding_provider().embedding(query)
 
@@ -90,13 +80,13 @@ class VideoDiscoveryExecutor:
                 for vid, score in ranked_scores
             ]
 
-            _log(
-                f"{_YELLOW}Found {len(ranked)} videos "
+            _log.info(
+                f"Found {len(ranked)} videos "
                 f"(ChapterGroup: {len(cg_results)}, Chapter: {len(ch_results)}, "
-                f"merged: {len(video_scores)}){_RESET}"
+                f"merged: {len(video_scores)})"
             )
             for vid, sc, title in ranked:
-                _log(f"  {vid} score={sc:.4f} \"{title}\"")
+                _log.info(f"  {vid} score={sc:.4f} \"{title}\"")
             return ranked
 
         except Exception as e:

@@ -7,25 +7,13 @@ Uses the node type registry for dynamic target validation and result formatting.
 """
 
 from typing import Annotated, List, Optional, Tuple
-from datetime import datetime
 import json
 from loguru import logger
 
 from mmct.video_pipeline.core.graph import node_registry
 from mmct.video_pipeline.utils import OutputFormatterMixin
 
-
-# ANSI colors for tool output
-_CYAN = "\033[96m"
-_YELLOW = "\033[93m"
-_GRAY = "\033[90m"
-_RESET = "\033[0m"
-
-
-def _tool_log(tool_name: str, message: str) -> None:
-    """Print tool log with timestamp and colors."""
-    now = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-    print(f"{_GRAY}[{now}]{_RESET} {_CYAN}[Tool:{tool_name}]{_RESET} {message}", flush=True)
+_log = logger.bind(component="Tool:traverse_graph")
 
 
 class GraphTraversalTool(OutputFormatterMixin):
@@ -81,7 +69,7 @@ class GraphTraversalTool(OutputFormatterMixin):
             JSON string with traversal results.
         """
         nodes_preview = node_ids[:3]
-        _tool_log("traverse_graph", f"nodes={node_ids} → {target} video_id={video_id}")
+        _log.info(f"nodes={node_ids} → {target} video_id={video_id}")
         try:
             # Validate target using registry
             valid_targets = set(node_registry.names())
@@ -110,7 +98,7 @@ class GraphTraversalTool(OutputFormatterMixin):
             
             # Format results based on target type
             formatted = self._format_results(results, target)
-            _tool_log("traverse_graph", f"{_YELLOW}Found {len(results)} {target} nodes{_RESET}")
+            _log.info(f"Found {len(results)} {target} nodes")
             return self.format_output(formatted)
             
         except Exception as e:
