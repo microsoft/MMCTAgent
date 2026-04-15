@@ -14,6 +14,7 @@ def _format(record: dict) -> str:
     return (
         "<green>{time:HH:mm:ss.SSS}</green> | "
         "<level>{level: <8}</level> | "
+        "<cyan>{name}</cyan> | "
         f"{tag}"
         "<level>{message}</level>\n"
     )

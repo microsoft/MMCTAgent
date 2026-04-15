@@ -74,7 +74,7 @@ class CountingHandoff(HandoffBase):
 SUBMIT_TOOL_NAME = "submit_final_answer"
 
 
-def submit_final_answer(answer: str, sources: List[Dict[str, Any]]) -> str:
+def submit_final_answer(answer: str, sources: List[Dict[str, Any]] = []) -> str:
     """Submit the final answer to the user. This ends the conversation.
 
     Args:
