@@ -1,0 +1,38 @@
+# MMCTAgent MCP Server — Container Image
+#
+# Builds on top of Dockerfile.base (system deps + Python 3.10 + ffmpeg/OpenCV).
+# This image adds the application source and installs the mmct package,
+# then starts the FastMCP server in streamable-HTTP mode on port 8000.
+#
+# Build order:
+#   1. docker build -f Dockerfile.base -t mmctagent-base:latest .
+#   2. docker build -f infra/container_app/Dockerfile.mcp -t mmctagent-mcp:latest .
+#
+# Or use:  python infra/container_app/deploy.py  (handles both steps automatically)
+#
+# NOTE: .env is NOT baked into this image.
+#       All environment variables are injected at Container App deploy time by
+#       deploy.py, which reads your repo-root .env and passes every key=value
+#       pair to `az containerapp create/update --env-vars`.
+
+FROM mmctagent-base:latest
+
+# ── Copy application source ──────────────────────────────────────────────────
+# Slow-changing dirs first for better layer caching.
+
+COPY mmct/        ./mmct/
+COPY config/      ./config/
+COPY mcp_server/  ./mcp_server/
+COPY pyproject.toml README.md ./
+
+# ── Install the package ───────────────────────────────────────────────────────
+RUN pip install --no-cache-dir -e .
+
+# ── Runtime configuration ────────────────────────────────────────────────────
+EXPOSE 8000
+
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
+
+# FastMCP streamable-HTTP transport — access via http://<host>:8000/mcp
+CMD ["python", "mcp_server/main.py"]

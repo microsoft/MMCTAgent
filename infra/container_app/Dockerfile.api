@@ -1,0 +1,33 @@
+# MMCTAgent API — Container Image
+#
+# Builds on top of Dockerfile.base (system deps + Python 3.10 + ffmpeg/OpenCV).
+# This image adds the application source code and installs the mmct package
+# with all pipeline extras, then starts the FastAPI server with Uvicorn.
+#
+# Build order:
+#   1. docker build -f Dockerfile.base -t mmctagent-base:latest .
+#   2. docker build -f infra/app/Dockerfile.api -t mmctagent-api:latest .
+#
+# Or use:  python infra/app/deploy.py  (handles both steps automatically)
+
+FROM mmctagent-base:latest
+
+# ── Copy application source ──────────────────────────────────────────────────
+# Each directory is copied separately so Docker layer caching is efficient:
+# slow-changing dirs (mmct/) are copied before fast-changing ones (api/).
+
+COPY mmct/        ./mmct/
+COPY config/      ./config/
+COPY mcp_server/  ./mcp_server/
+COPY api/         ./api/
+COPY pyproject.toml README.md ./
+
+# ── Install the package ───────────────────────────────────────────────────────
+RUN pip install --no-cache-dir -e .
+
+# ── Runtime configuration ────────────────────────────────────────────────────
+EXPOSE 8000
+
+# Bind to 0.0.0.0 so Azure Container Apps health probes can reach the server.
+# --workers 1 is intentional: AutoGen agents are stateful per request.
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

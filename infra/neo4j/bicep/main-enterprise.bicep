@@ -714,8 +714,7 @@ if [ "$ENABLE_METRICS" = "true" ]; then
 # Enterprise Metrics (Prometheus) — using Neo4j 5.x key names
 server.metrics.enabled=true
 server.metrics.prometheus.enabled=true
-server.metrics.prometheus.endpoint=localhost:2004
-server.metrics.csv.path=/var/lib/neo4j/metrics"
+server.metrics.prometheus.endpoint=localhost:2004"
 fi
 
 sudo tee /opt/neo4j/conf/neo4j.conf > /dev/null <<EOF
