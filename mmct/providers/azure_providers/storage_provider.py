@@ -31,6 +31,7 @@ class AzureStorageProvider(BaseStorageProvider):
         keyframe_container_name (str): The default container for keyframes.
         storage_account_url (str): The base URL for the blob service.
         service_client (BlobServiceClient): The initialized async storage client.
+        _verified_containers (set): Containers already confirmed to exist.
     """
 
     def __init__(
@@ -76,6 +77,7 @@ class AzureStorageProvider(BaseStorageProvider):
         self.storage_account_name = storage_account_name
         self.keyframe_container_name = keyframe_container_name
         self.storage_account_url = f"https://{self.storage_account_name}.blob.core.windows.net"
+        self._verified_containers: set = set()
         self.service_client = self._initialize()
 
     def _initialize(self) -> BlobServiceClient:
@@ -180,20 +182,22 @@ class AzureStorageProvider(BaseStorageProvider):
             ProviderException: If the upload fails.
         """
         client = None
-        container_client = None
         try:
             logger.debug(f"Uploading file: {src_file_path}")
             folder_name = kwargs.pop("folder_name", self.keyframe_container_name)
 
-            # Check if container exists, create if it doesn't
-            container_client = self.service_client.get_container_client(folder_name)
-            if not await container_client.exists():
-                logger.info(f"Container {folder_name} does not exist. Creating it...")
-                try:
-                    await container_client.create_container()
-                    logger.info(f"Successfully created container: {folder_name}")
-                except ResourceExistsError:
-                    logger.info(f"Container {folder_name} already exists.")
+            # Only check container existence once per container
+            if folder_name not in self._verified_containers:
+                container_client = self.service_client.get_container_client(folder_name)
+                if not await container_client.exists():
+                    logger.info(f"Container {folder_name} does not exist. Creating it...")
+                    try:
+                        await container_client.create_container()
+                        logger.info(f"Successfully created container: {folder_name}")
+                    except ResourceExistsError:
+                        logger.info(f"Container {folder_name} already exists.")
+                await container_client.close()
+                self._verified_containers.add(folder_name)
 
             client = self.service_client.get_blob_client(container=folder_name, blob=file_name)
             async with aiofiles.open(src_file_path, "rb") as f:
@@ -209,8 +213,6 @@ class AzureStorageProvider(BaseStorageProvider):
         finally:
             if client:
                 await client.close()
-            if container_client:
-                await container_client.close()
 
     async def close(self) -> None:
         """Closes the Azure Blob Storage service client."""

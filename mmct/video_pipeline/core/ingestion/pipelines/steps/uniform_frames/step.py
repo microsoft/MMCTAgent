@@ -97,7 +97,7 @@ class UniformFrameExtractionStep(PipelineStep):
     Params:
         container_name: Blob container (default: "video-frames-lively")
         extension: Image extension (default: "jpg")
-        upload_batch_size: Frames uploaded per batch (default: 5)
+        upload_batch_size: Frames uploaded per batch (default: 20)
         compress_step: Step ID for compressed video (default: "compress")
     """
 
@@ -157,7 +157,7 @@ class UniformFrameExtractionStep(PipelineStep):
             )
 
         # --- 3. Upload frames in batches ---
-        batch_size: int = self.get_param("upload_batch_size", context, default=5)
+        batch_size: int = self.get_param("upload_batch_size", context, default=20)
         uploaded_count = 0
         failed_count = 0
 
@@ -174,6 +174,8 @@ class UniformFrameExtractionStep(PipelineStep):
                 frame["blob_url"] = blob_url
                 frame["blob_name"] = blob_name
                 uploaded_count += 1
+                if uploaded_count % 500 == 0:
+                    logger.info(f"Upload progress: {uploaded_count}/{len(frames)} frames")
             except Exception as exc:
                 logger.error(f"Upload failed for ts={ts}: {exc}")
                 failed_count += 1
