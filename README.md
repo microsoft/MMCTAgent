@@ -36,11 +36,26 @@ MMCTAgent is a state-of-the-art multi-modal AI framework that brings human-like 
 - **🔬 Enables Querying over Multimodal Collections**: It enables modular design to plug-in right audio, visual extraction and processing tools, combined with Multimodal LLMs to ingest and query over large number of videos and image data.
 - **🚀 Easy Integration**: Its modular design allows for easy integration into existing workflows and adding domain-specific tools, facilitating adoption across various domains requiring advanced visual reasoning capabilities.
 
+
+### 🤖 Graph Agent (Swarm)
+
 <p align="center">
-  <a href="https://arxiv.org/abs/2405.18358">
-    <img src="docs/multimedia/mmct-video-pipeline.png" alt="Video Pipeline - Main Architecture" width="95%" />
-  </a>
+  <img src="docs/multimedia/media_src/Graph%20Agent.jpg" alt="Graph Agent architecture" width="95%" />
 </p>
+
+### 🔁 Graph State (Deterministic Pipeline)
+
+<p align="center">
+  <img src="docs/multimedia/media_src/Graph%20State.jpg" alt="Graph State pipeline" width="95%" />
+</p>
+
+<details>
+<summary><strong>📥 Ingestion Pipeline</strong></summary>
+<br>
+<p align="center">
+  <img src="docs/multimedia/media_src/Ingestion%20Pipeline.jpg" alt="Ingestion Pipeline" width="95%" />
+</p>
+</details>
 
 ## **Key Features**
 
@@ -203,8 +218,8 @@ MMCTAgent features a modular provider system that allows you to switch between d
 
 | Service Type | Supported Providers | Use Cases |
 |--------------|--------------------|-----------|
-| **LLM** | Azure OpenAI, OpenAI, **+ Custom** | Reasoning, chat completion, planning |
-| **Search/DB** | Neo4j, Azure AI Search, FAISS | Graph traversal, vector search |
+| **LLM** | Azure OpenAI **+ Custom** | Reasoning, chat completion, planning |
+| **Search/DB** | Neo4j | Graph traversal, vector search |
 | **Transcription** | Azure Speech, OpenAI Whisper | Audio-to-text conversion |
 | **Storage** | Azure Blob Storage, Local | Media and artifact management |
 
