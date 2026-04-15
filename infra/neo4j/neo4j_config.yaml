@@ -32,7 +32,7 @@ neo4j:
   #                deploy.py injects NEO4J_ACCEPT_LICENSE_AGREEMENT=yes
   #                automatically for eval/dev use — but you must hold a
   #                valid license for production.
-  #                Local Docker image : neo4j:5.26.0-enterprise
+  #                Local Docker       : Not supported — Azure VM only
   #                Azure VM download  : neo4j-enterprise-5.26.0-unix.tar.gz
   #                Bicep template     : bicep/main-enterprise.bicep
   #                License info       : https://neo4j.com/licensing/
@@ -69,7 +69,7 @@ neo4j:
   #         Data persists at 'data_path' below between container restarts.
   #         Best for: local development, CI, and quick demos.
   #         Pre-requisite: Docker Engine / Docker Desktop must be running.
-  #         Works for both community and enterprise editions.
+  #         Community edition only. Enterprise requires vm_deployment: true.
   #
   # true  → Provision a production-grade Azure VM via Bicep.
   #         community  → bicep/main.bicep

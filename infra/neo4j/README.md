@@ -14,7 +14,6 @@ everything — `deploy.py` reads it and provisions the right infrastructure auto
 | Goal | `version` | `vm_deployment` | Command |
 | --- | --- | --- | --- |
 | Local dev, no cloud | `community` | `false` | `python infra/neo4j/deploy.py` |
-| Local dev, Enterprise features | `enterprise` | `false` | `python infra/neo4j/deploy.py` |
 | Azure VM, production | `community` | `true` | `python infra/neo4j/deploy.py` |
 | Azure VM, Enterprise features | `enterprise` | `true` | `python infra/neo4j/deploy.py` |
 
@@ -55,7 +54,7 @@ in `neo4j_config.yaml` — **no manual template switching is needed**.
 | APOC Extended procedures | No | **Yes** (optional) |
 | Advanced role-based security | No | **Yes** |
 | Clustering / HA | No | **Yes** (separate template needed) |
-| Local Docker | `neo4j:5.26.0-community` | `neo4j:5.26.0-enterprise` |
+| Local Docker | `neo4j:5.26.0-community` | Not supported (Azure VM only) |
 | Azure VM Bicep | `main.bicep` | `main-enterprise.bicep` |
 
 For most MMCTAgent workloads **community is sufficient**. Choose enterprise when you
@@ -87,7 +86,7 @@ python infra/neo4j/deploy.py
 ### Pre-requisites — local (`vm_deployment: false`)
 
 ```bash
-docker info   # Docker must be running; that's the only requirement
+docker info   # Docker must be running; Community edition only locally
 ```
 
 ### Pre-requisites — Azure VM (`vm_deployment: true`)

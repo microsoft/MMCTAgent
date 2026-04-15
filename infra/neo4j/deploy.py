@@ -44,8 +44,7 @@ PARAMS_FILE = {
 NEO4J_VERSION = "5.26.0"
 
 DOCKER_IMAGES = {
-    "community":  f"neo4j:{NEO4J_VERSION}-community",
-    "enterprise": f"neo4j:{NEO4J_VERSION}-enterprise",
+    "community": f"neo4j:{NEO4J_VERSION}-community",
 }
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -84,9 +83,18 @@ def load_config() -> dict:
     if not isinstance(cfg, dict):
         _error("neo4j_config.yaml must have a top-level 'neo4j:' key.")
 
-    edition = cfg.get("version", "community")
+    edition       = cfg.get("version", "community")
+    vm_deployment = cfg.get("vm_deployment", False)
+
     if edition not in ("community", "enterprise"):
         _error(f"neo4j.version must be 'community' or 'enterprise', got: {edition!r}")
+
+    if edition == "enterprise" and not vm_deployment:
+        _error(
+            "Enterprise edition is not supported for local Docker deployment.\n"
+            "  Local Docker only supports Community edition.\n"
+            "  To use Enterprise, set vm_deployment: true and deploy to Azure VM."
+        )
 
     password = cfg.get("password", "")
     if not password or password in ("your_password_here", "neo4j"):
@@ -145,8 +153,6 @@ def deploy_local(cfg: dict) -> None:
     data_path.mkdir(parents=True, exist_ok=True)
 
     env_flags = ["-e", f"NEO4J_AUTH=neo4j/{password}"]
-    if edition == "enterprise":
-        env_flags += ["-e", "NEO4J_ACCEPT_LICENSE_AGREEMENT=yes"]
 
     _run([
         "docker", "run", "-d",
