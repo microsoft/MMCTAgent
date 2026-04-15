@@ -1,0 +1,54 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": {
+      "value": "${AZURE_LOCATION}"
+    },
+    "vmNamePrefix": {
+      "value": "neo4j-core"
+    },
+    "adminUsername": {
+      "value": "azureuser"
+    },
+    "adminPasswordOrKey": {
+      "value": "$(secretOrRandomPassword ${AZURE_KEY_VAULT_NAME} adminPassword)"
+    },
+    "neo4jPassword": {
+      "value": "$(secretOrRandomPassword ${AZURE_KEY_VAULT_NAME} neo4jPassword)"
+    },
+    "neo4jEdition": {
+      "value": "community"
+    },
+    "vmSize": {
+      "value": "Standard_D16s_v5"
+    },
+    "dataDiskSizeGB": {
+      "value": 1024
+    },
+    "heapSize": {
+      "value": "31G"
+    },
+    "pagecacheSize": {
+      "value": "24G"
+    },
+    "vnetAddressPrefix": {
+      "value": "10.0.0.0/16"
+    },
+    "subnetAddressPrefix": {
+      "value": "10.0.1.0/24"
+    },
+    "loadBalancerPrivateIP": {
+      "value": "10.0.1.10"
+    },
+    "enablePublicIP": {
+      "value": true
+    },
+    "enableApocPlugin": {
+      "value": true
+    },
+    "enableGdsPlugin": {
+      "value": true
+    }
+  }
+}

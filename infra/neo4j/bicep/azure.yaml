@@ -1,0 +1,15 @@
+# Azure Developer CLI (azd) configuration
+# Deploy with: azd up  (from the infra/neo4j/ directory)
+#
+# azd will prompt for adminPassword and neo4jPassword, storing them in
+# Azure Key Vault. For scripted/CI deployments use deploy.py instead.
+
+name: neo4j-prod
+metadata:
+  template: neo4j-community-vm
+
+infra:
+  provider: bicep
+  path: bicep
+
+# No application services — infrastructure-only deployment
