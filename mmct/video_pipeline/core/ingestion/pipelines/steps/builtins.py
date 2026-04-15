@@ -10,10 +10,8 @@ from .transcription_step import TranscriptionStep
 
 from .graph_validation.step import GraphValidationStep
 from .compress.step import CompressionStep
-from .transcript_upload.step import TranscriptUploadStep
 from .video_chunking.step import VideoChunkingStep
 from .extraction_planning.step import ExtractionPlanningStep
-from .uniform_frames.step import UniformFrameExtractionStep
 
 # Backwards compatible step types are still registered, but codebase naming prefers non-prefixed names.
 from .keyframes.step import KeyframeExtractionStep
@@ -32,10 +30,8 @@ __all__ = [
     "TranscriptionStep",
     "GraphValidationStep",
     "CompressionStep",
-    "TranscriptUploadStep",
     "VideoChunkingStep",
     "ExtractionPlanningStep",
-    "UniformFrameExtractionStep",
     "KeyframeExtractionStep",
     "ChapterGenerationStep",
     "TemporalGraphStep",

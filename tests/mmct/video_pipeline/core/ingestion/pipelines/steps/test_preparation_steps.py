@@ -91,7 +91,11 @@ async def test_video_chunking_step(base_context):
         assert len(result.outputs["video_chunks"]) == 1
 
 from mmct.video_pipeline.core.ingestion.pipelines.steps.extraction_planning.step import ExtractionPlanningStep
-from mmct.video_pipeline.core.ingestion.pipelines.steps.uniform_frames.step import UniformFrameExtractionStep
+
+import subprocess, sys, os
+_repo_root = subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip()
+sys.path.insert(0, os.path.join(_repo_root, "scripts"))
+from custom_steps.uniform_frames import UniformFrameExtractionStep
 
 @pytest.mark.asyncio
 @pytest.mark.unit
@@ -111,7 +115,7 @@ async def test_uniform_frame_extraction_step(base_context):
     base_context.data_store.set("compress", "video_path", "test.mp4")
     base_context.output_dir = "/tmp"
     
-    with patch("mmct.video_pipeline.core.ingestion.pipelines.steps.uniform_frames.step._extract_frames_at_1fps", return_value=[{"timestamp_second": 1, "filepath": "f1.jpg"}]):
+    with patch("custom_steps.uniform_frames._extract_frames_at_1fps", return_value=[{"timestamp_second": 1, "filepath": "f1.jpg"}]):
         
         base_context.provider.storage_provider.upload_file = AsyncMock(return_value="http://blob/f1.jpg")
         

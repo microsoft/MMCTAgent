@@ -126,8 +126,7 @@ Transform a video file into a structured knowledge graph (Neo4j).
 
 ```python
 import asyncio
-from mmct.video_pipeline.core.ingestion.ingestion_pipeline import IngestionPipeline
-from mmct.video_pipeline.core.ingestion.languages import Languages
+from mmct.video_pipeline import IngestionPipeline, Languages
 # Import your provider configuration or use defaults
 from config.provider_config import get_ingestion_providers
 
@@ -146,6 +145,30 @@ async def run_ingestion():
 
 asyncio.run(run_ingestion())
 ```
+
+#### **Custom Ingestion Steps**
+
+Extend the ingestion pipeline with your own processing steps.  Import
+`PipelineStep`, `register_step`, and the supporting types from the public
+API, implement your step class, and reference it in a custom pipeline YAML:
+
+```python
+from mmct.video_pipeline import PipelineStep, StepContext, StepResult, register_step
+
+@register_step("myapp.watermark")
+class WatermarkStep(PipelineStep):
+    step_type = "myapp.watermark"
+    description = "Burn a watermark onto extracted frames."
+
+    async def run(self, context: StepContext) -> StepResult:
+        # ... your logic here ...
+        return StepResult(step_id=self.step_id, outputs={"watermarked": True})
+```
+
+Import your step module before running the pipeline so the decorator
+registers the class, then point `IngestionPipeline` at a YAML config that
+includes the step.  See [`scripts/custom_steps/`](scripts/custom_steps/)
+for a complete working example.
 
 ### **2. Video Q&A (Unified Pipeline)**
 
@@ -242,6 +265,8 @@ MMCTAgent
 │   │   └── query_pipeline.py # Unified video query entry point
 │   ├── providers/          # Modular backend service interfaces
 │   └── utils/              # Error handling and shared utilities
+├── scripts/                # 🛠️ Dev scripts and custom step examples
+│   └── custom_steps/       # Example custom ingestion steps
 ├── api/                    # 🌐 FastAPI web application
 ├── config/                 # ⚙️ Centralized configuration and hydration
 ├── infra/                  # 🏗️ Azure Infrastructure deployment guides

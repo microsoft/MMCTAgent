@@ -1,4 +1,11 @@
-# Temporal Graph Ingestion Pipeline
+# Custom Temporal Graph Ingestion Pipeline
+#
+# Extends the default MMCT pipeline with application-specific steps:
+#   - transcript_upload: uploads SRT transcript to Azure Blob Storage
+#   - uniform_frames: extracts 1 fps frames and uploads to Azure Blob Storage
+#
+# These steps are registered by importing `custom_steps` in the ingestion
+# script before running the pipeline.
 # 
 # Builds hierarchical temporal knowledge graph with:
 # - ChapterGroups: High-level topic groupings with LLM summaries
@@ -46,6 +53,13 @@ pipeline:
         include_timestamps: true
         include_word_count: true
 
+    # [CUSTOM STEP] Upload transcript to blob storage
+    - id: "transcript_upload"
+      type: "ingestion.transcript_upload"
+      params:
+        source_transcribe_step: "transcribe"
+        container_name: "video-transcript-lively"
+
     # Step 5: Video Chunking
     - id: "video_chunking"
       type: "ingestion.video_chunking"
@@ -65,6 +79,15 @@ pipeline:
       type: "ingestion.extraction_planning"
       params:
         video_chunking_step: "video_chunking"
+
+    # [CUSTOM STEP] Uniform frame extraction (1 fps, upload to blob)
+    - id: "uniform_frames"
+      type: "ingestion.uniform_frames"
+      params:
+        compress_step: "compress"
+        container_name: "video-frames-lively"
+        extension: "jpg"
+        upload_batch_size: 20
 
     # Step 7: Keyframe extraction
     - id: "keyframes"

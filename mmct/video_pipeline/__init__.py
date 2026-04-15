@@ -13,5 +13,18 @@ Subpackages:
 
 from .core.ingestion.ingestion_pipeline import IngestionPipeline
 from .core.ingestion.languages import Languages
+from .core.ingestion.pipelines import (
+    PipelineStep,
+    StepContext,
+    StepResult,
+    register_step,
+)
 
-__all__ = ["IngestionPipeline", "Languages"]
+__all__ = [
+    "IngestionPipeline",
+    "Languages",
+    "PipelineStep",
+    "StepContext",
+    "StepResult",
+    "register_step",
+]

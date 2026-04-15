@@ -1,12 +1,14 @@
-"""Uniform frame extraction step.
+"""Custom step: Uniform frame extraction + blob upload.
 
-Extracts frames from video at a uniform 1 fps rate (no filtering),
+Extracts frames from video at a uniform 1 fps rate using ffmpeg,
 then uploads each frame to the configured storage provider.
+
+This is an example of a custom ingestion step that lives outside the
+core MMCT library.  Register it by importing this module (or the
+``custom_steps`` package) before running the pipeline.
 
 Blob path convention:
     <normalized-video-id>/<timestamp_second>/frame.jpg
-
-Uses the injected `context.provider.storage_provider`.
 """
 
 import os
@@ -19,23 +21,17 @@ from typing import Dict, List, Any, Optional
 
 from loguru import logger
 
-from ..base import PipelineStep, StepContext, StepResult
-from ..registry import register_step
+from mmct.video_pipeline import PipelineStep, StepContext, StepResult, register_step
 from mmct.providers.base.storage_provider import BaseStorageProvider
 
 
-# Characters invalid in Azure blob path segments (control chars, backslash, etc.)
-# Hyphens, underscores, dots, and alphanumerics are kept as-is.
 _BLOB_INVALID_RE = re.compile(r'[^a-zA-Z0-9\-_.]')
 
 
 def normalize_video_id(video_id: str) -> str:
-    """Normalize a video ID for use as a blob path segment.
-
-    Keeps hyphens, underscores, dots, and alphanumerics.
-    Replaces any other character with an underscore.
-    """
+    """Normalize a video ID for use as a blob path segment."""
     return _BLOB_INVALID_RE.sub('_', video_id)
+
 
 def _extract_frames_at_1fps(
     video_path: str,
@@ -48,7 +44,9 @@ def _extract_frames_at_1fps(
         timestamp_second (int), filepath (str), filename (str)
     """
     if not shutil.which("ffmpeg"):
-        raise RuntimeError("ffmpeg is required for uniform frame extraction but was not found on PATH")
+        raise RuntimeError(
+            "ffmpeg is required for uniform frame extraction but was not found on PATH"
+        )
 
     os.makedirs(output_dir, exist_ok=True)
 
@@ -69,7 +67,9 @@ def _extract_frames_at_1fps(
         raise RuntimeError(f"ffmpeg frame extraction failed: {result.stderr[-500:]}")
 
     # ffmpeg names frames starting at 1: frame_000001.jpg, frame_000002.jpg, ...
-    extracted_files = sorted(globmod.glob(os.path.join(output_dir, f"frame_*.{extension}")))
+    extracted_files = sorted(
+        globmod.glob(os.path.join(output_dir, f"frame_*.{extension}"))
+    )
 
     frames: List[Dict[str, Any]] = []
     for filepath in extracted_files:
@@ -106,7 +106,6 @@ class UniformFrameExtractionStep(PipelineStep):
         )
         extension: str = self.get_param("extension", context, default="jpg")
 
-        # Use compressed video when available
         compress_step: str = self.get_param("compress_step", context, default="compress")
         effective_video_path: str = (
             context.data_store.get(compress_step, "video_path") or context.video_path

@@ -226,7 +226,19 @@ class IngestionPipeline:
                 self.logger.error("Pipeline failed.")
                 raise Exception("Ingestion pipeline failed.")
 
-            self.logger.info("Pipeline completed successfully!")
+            if (isinstance(video_duration, (int, float)) and video_duration > 0
+                    and isinstance(report.total_duration_seconds, (int, float))):
+                video_duration_min = video_duration / 60
+                ingestion_min = report.total_duration_seconds / 60
+                ratio = report.total_duration_seconds / video_duration
+                self.logger.info(
+                    f"Pipeline completed successfully! "
+                    f"Video duration: {video_duration_min:.1f}min, "
+                    f"Ingestion time: {ingestion_min:.1f}min "
+                    f"({ratio:.2f}x realtime)"
+                )
+            else:
+                self.logger.info("Pipeline completed successfully!")
             return report
 
         except Exception as e:

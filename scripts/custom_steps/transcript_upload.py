@@ -1,13 +1,14 @@
-"""Transcript upload step.
+"""Custom step: Transcript upload to blob storage.
 
 Reads the SRT transcript produced by the transcribe step and uploads it
-to Azure Blob Storage container 'video-transcript-lively'.
+to a configurable blob container.
+
+This is an example of a custom ingestion step that lives outside the
+core MMCT library.  Register it by importing this module (or the
+``custom_steps`` package) before running the pipeline.
 
 Blob path convention:
     <normalized-video-id>/transcript.srt
-
-Uses the injected `context.provider.storage_provider` to upload to the
-configured object store (Azure or otherwise).
 """
 
 import os
@@ -17,8 +18,7 @@ from typing import Optional
 
 from loguru import logger
 
-from ..base import PipelineStep, StepContext, StepResult
-from ..registry import register_step
+from mmct.video_pipeline import PipelineStep, StepContext, StepResult, register_step
 from mmct.providers.base.storage_provider import BaseStorageProvider
 
 
@@ -28,6 +28,7 @@ _BLOB_INVALID_RE = re.compile(r'[^a-zA-Z0-9\-_.]')
 def normalize_video_id(video_id: str) -> str:
     """Normalize a video ID for use as a blob path segment."""
     return _BLOB_INVALID_RE.sub('_', video_id)
+
 
 @register_step("ingestion.transcript_upload")
 class TranscriptUploadStep(PipelineStep):
@@ -49,7 +50,6 @@ class TranscriptUploadStep(PipelineStep):
             "container_name", context, default="video-transcript-lively"
         )
 
-        # Read transcript outputs from data store
         transcript_text: Optional[str] = context.data_store.get(source_step, "transcript")
         transcript_path: Optional[str] = context.data_store.get(source_step, "transcript_path")
 
@@ -69,7 +69,6 @@ class TranscriptUploadStep(PipelineStep):
         if transcript_path and os.path.exists(transcript_path):
             upload_path = transcript_path
         elif transcript_text:
-            # Write transcript text to a temporary SRT file
             fd, upload_path = tempfile.mkstemp(suffix=".srt")
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 f.write(transcript_text)
@@ -82,7 +81,6 @@ class TranscriptUploadStep(PipelineStep):
                 metrics={"uploaded": 0},
             )
 
-        # Build storage provider for the dedicated container
         storage_provider: Optional[BaseStorageProvider] = getattr(
             context.provider, "storage_provider", None
         )
