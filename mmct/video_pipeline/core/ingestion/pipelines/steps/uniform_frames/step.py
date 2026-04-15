@@ -11,7 +11,10 @@ Uses the injected `context.provider.storage_provider`.
 
 import os
 import re
+import glob as globmod
 import asyncio
+import subprocess
+import shutil
 from typing import Dict, List, Any, Optional
 
 from loguru import logger
@@ -19,11 +22,6 @@ from loguru import logger
 from ..base import PipelineStep, StepContext, StepResult
 from ..registry import register_step
 from mmct.providers.base.storage_provider import BaseStorageProvider
-
-try:
-    import cv2  # type: ignore
-except ImportError:  # pragma: no cover
-    cv2 = None
 
 
 # Characters invalid in Azure blob path segments (control chars, backslash, etc.)
@@ -44,49 +42,47 @@ def _extract_frames_at_1fps(
     output_dir: str,
     extension: str = "jpg",
 ) -> List[Dict[str, Any]]:
-    """Extract one frame per second from *video_path*.
+    """Extract one frame per second from *video_path* using ffmpeg.
 
     Returns a list of dicts with keys:
         timestamp_second (int), filepath (str), filename (str)
     """
-    if cv2 is None:
-        raise ImportError(
-            "opencv-python (or opencv-python-headless) is required for uniform frame extraction. "
-            "Install with the `video-agent` extra."
-        )
-
-    cap = cv2.VideoCapture(video_path)
-    if not cap.isOpened():
-        raise ValueError(f"Cannot open video: {video_path}")
-
-    fps = float(cap.get(cv2.CAP_PROP_FPS)) or 30.0
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    duration = total_frames / fps if fps > 0 else 0
+    if not shutil.which("ffmpeg"):
+        raise RuntimeError("ffmpeg is required for uniform frame extraction but was not found on PATH")
 
     os.makedirs(output_dir, exist_ok=True)
 
+    output_pattern = os.path.join(output_dir, f"frame_%06d.{extension}")
+
+    cmd = [
+        "ffmpeg", "-i", video_path,
+        "-vf", "fps=1",
+        "-q:v", "2",
+        "-y",
+        output_pattern,
+    ]
+
+    result = subprocess.run(
+        cmd, capture_output=True, text=True, timeout=600,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"ffmpeg frame extraction failed: {result.stderr[-500:]}")
+
+    # ffmpeg names frames starting at 1: frame_000001.jpg, frame_000002.jpg, ...
+    extracted_files = sorted(globmod.glob(os.path.join(output_dir, f"frame_*.{extension}")))
+
     frames: List[Dict[str, Any]] = []
-    second = 0
-
-    while second <= int(duration):
-        frame_idx = int(second * fps)
-        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
-        ok, frame_bgr = cap.read()
-        if not ok:
-            break
-
-        filename = f"frame_{second:06d}.{extension}"
-        filepath = os.path.join(output_dir, filename)
-        cv2.imwrite(filepath, frame_bgr)
-
+    for filepath in extracted_files:
+        filename = os.path.basename(filepath)
+        # frame_000001 → second 0, frame_000002 → second 1, etc.
+        seq_num = int(filename.split("_")[1].split(".")[0])
+        second = seq_num - 1
         frames.append({
             "timestamp_second": second,
             "filepath": filepath,
             "filename": filename,
         })
-        second += 1
 
-    cap.release()
     return frames
 
 
