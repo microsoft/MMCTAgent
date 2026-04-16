@@ -24,6 +24,8 @@
 
 **▶️ [Watch Demo Video](https://youtu.be/Lxt1b_U-a68)**
 
+> **Note:** This demo video is from the use case with [DigitalGreen.org](https://www.digitalgreen.org/) where MMCT is being used. The app code shown in the video is not available in this repository.
+
 </div>
 
 ## Overview
@@ -36,6 +38,15 @@ MMCTAgent is a state-of-the-art multi-modal AI framework that brings human-like 
 - **🔬 Enables Querying over Multimodal Collections**: It enables modular design to plug-in right audio, visual extraction and processing tools, combined with Multimodal LLMs to ingest and query over large number of videos and image data.
 - **🚀 Easy Integration**: Its modular design allows for easy integration into existing workflows and adding domain-specific tools, facilitating adoption across various domains requiring advanced visual reasoning capabilities.
 
+## **Key Features**
+
+- **📊 Dual Orchestration for Video**:
+  - **Graph Agent (Swarm)**: An autonomous multi-agent team (Planner, Video, Image) that agentically traverses knowledge graphs for broad discovery and reasoning.
+  - **Graph State (Pipeline)**: A deterministic state-machine workflow designed for high-precision, reproducible, and efficient retrieval.
+- **🖼️ Agentic Image Reasoning**: A dedicated Multi-Agent Image Pipeline featuring specialized tools for OCR, Object Detection, Scene Recognition, and ViT-based reasoning.
+- **📂 Structured Video Ingestion**: End-to-end pipeline to transform raw video into a queryable temporal knowledge graph (Neo4j) with automated scene segmentation and metadata extraction.
+- **🧠 Provider Agnostic**: Native support for Azure OpenAI, Neo4j, and Azure Blob Storage, with a modular interface for custom LLM and VectorDB backends.
+- **🔌 MCP Native**: Built-in Model Context Protocol (MCP) server support for seamless integration with external AI clients.
 
 ### 🤖 Graph Agent (Swarm)
 
@@ -57,15 +68,6 @@ MMCTAgent is a state-of-the-art multi-modal AI framework that brings human-like 
 </p>
 </details>
 
-## **Key Features**
-
-- **📊 Dual Orchestration for Video**:
-  - **Graph Agent (Swarm)**: An autonomous multi-agent team (Planner, Video, Image) that agentically traverses knowledge graphs for broad discovery and reasoning.
-  - **Graph State (Pipeline)**: A deterministic state-machine workflow designed for high-precision, reproducible, and efficient retrieval.
-- **🖼️ Agentic Image Reasoning**: A dedicated Multi-Agent Image Pipeline featuring specialized tools for OCR, Object Detection, Scene Recognition, and ViT-based reasoning.
-- **📂 Structured Video Ingestion**: End-to-end pipeline to transform raw video into a queryable temporal knowledge graph (Neo4j) with automated scene segmentation and metadata extraction.
-- **🧠 Provider Agnostic**: Native support for Azure OpenAI, Neo4j, and Azure Blob Storage, with a modular interface for custom LLM and VectorDB backends.
-- **🔌 MCP Native**: Built-in Model Context Protocol (MCP) server support for seamless integration with external AI clients.
 
 ---
 
