@@ -28,15 +28,13 @@ WORKDIR /app
 
 # Copy project files for dependency resolution
 COPY pyproject.toml .
-COPY requirements.txt .
-COPY setup.py .
 COPY README.md .
 
 # Copy core package and available directories
 
 # Install Python dependencies
 RUN pip install --upgrade pip>=24.3
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install -e .
 
 # Create directories for runtime
 RUN mkdir -p /app/media /app/logs

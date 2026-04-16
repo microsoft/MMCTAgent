@@ -1,35 +1,54 @@
+"""Image recognition and scene description tool.
+
+This module provides a tool for analyzing scenes and generating descriptive
+text for images using various recognition models (mPLUG, InstructBLIP).
 """
-functionality of this tool is optical character recognition
-"""
+
+from typing import Annotated
+from PIL import Image
 from mmct.image_pipeline.core.models.recog.mplug_base import MPLUGBase
 from mmct.image_pipeline.core.models.recog.mplug_large import MPLUGLarge
 from mmct.image_pipeline.core.models.recog.instructBlipCap import BlipCap
-from PIL import Image
-from typing_extensions import Annotated
 
 class RecogTool:
+    """Tool for recognizing objects and describing scenes in images.
+
+    This tool uses advanced vision models to generate a comprehensive 
+    description of an image's content, including objects, actions, and 
+    environmental context.
+
+    Attributes:
+        img_path (str): Path to the image file to be analyzed.
+    """
+
     def __init__(self, img_path: Annotated[str, "path of image"]):
+        """Initializes the RecogTool.
+
+        Args:
+            img_path: Local path to the image to analyze.
+        """
         self.img_path = img_path
 
     async def recog_tool(
         self,
         priority: Annotated[
             str,
-            'There are 3 models of recognization tool which one to pick - 1 for small, 2 for Base,3 for Large'
+            'Model selection priority: "1" for Base, "2" for Large, "3" for InstructBLIP'
         ] = "3"
     ) -> str:
-        """
-        You can use this tool to analyze the given image, The tool should be used when
-        you require to understand the scene in the image, and get a descriptive text
-        about the image. The algorithm returns the description about the image in simple string.
+        """Analyzes the image and returns a descriptive text summary.
 
-        This returns response in string which is simply contains the description.
-        input:
-            {}
-        Input is always empty as it doesnt require anything as input and analyzes on the image that you are given. Always ignore the arguement priority and do not generate that in the input.
+        This method should be used when a general understanding of the scene
+        or a detailed description of the visual content is required.
 
-        response:
-            The output is a string containing the description.
+        Args:
+            priority: Model selection priority string. 
+                "1" -> mPLUG-Base
+                "2" -> mPLUG-Large
+                "3" -> InstructBLIP (Default)
+
+        Returns:
+            str: A natural language description of the image content.
         """
         img = Image.open(self.img_path).convert("RGB")
         model = MPLUGBase() if priority == "1" else MPLUGLarge() if priority == "2" else BlipCap()

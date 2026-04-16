@@ -12,9 +12,13 @@ import numpy as np
 from typing import List
 from loguru import logger
 from pydantic import BaseModel
-from sklearn.metrics.pairwise import cosine_similarity
 from dotenv import load_dotenv, find_dotenv
 from mmct.providers.base import BaseEmbeddingProvider
+
+try:
+    from sklearn.metrics.pairwise import cosine_similarity  # type: ignore
+except ImportError:  # pragma: no cover
+    cosine_similarity = None
 
 
 class TranscriptSegment(BaseModel):
@@ -134,7 +138,7 @@ class SemanticChunker:
         return segments
 
     async def _create_batch_embeddings(self, texts, batch_size=100):
-        """Generates embeddings for multiple texts in batches using Azure Embeddings API."""
+        """Generates embeddings for multiple texts in batches."""
         logger.info(f"🔄 Creating batch embeddings for {len(texts)} texts")
         embeddings = await self.embedding_provider.batch_embedding(texts)
         logger.info(f"✅ Batch embedding complete: {len(embeddings)} embeddings created")
@@ -142,6 +146,11 @@ class SemanticChunker:
 
     async def _calculate_cosine_similarity(self, vec1, vec2):
         """Computes cosine similarity between two vectors asynchronously."""
+        if cosine_similarity is None:
+            raise ImportError(
+                "scikit-learn is required for transcript-based semantic chunking. "
+                "Install with the `video-agent` extra."
+            )
         return cosine_similarity(np.array(vec1).reshape(1, -1), np.array(vec2).reshape(1, -1))[0][0]
 
     async def _calculate_chunk_centroid(self, embeddings):
@@ -156,6 +165,22 @@ class SemanticChunker:
         ms = int((seconds % 1) * 1000)
         seconds = int(seconds)
         return f"{seconds // 3600:02d}:{(seconds % 3600) // 60:02d}:{seconds % 60:02d},{ms:03d}"
+
+    @staticmethod
+    def _build_timestamped_text(entries: list) -> str:
+        """Build chunk text with inline [Xs] timestamp markers per cue.
+
+        Args:
+            entries: List of (sentence, start_time) tuples.
+
+        Returns:
+            String like "[5s] Hello world [12s] Next sentence ..."
+        """
+        parts = []
+        for sentence, start_time in entries:
+            ts = int(start_time)
+            parts.append(f"[{ts}s] {sentence}")
+        return " ".join(parts)
 
     async def _perform_semantic_chunking(
         self, sentences, time_stamps, end_times, SIMILARITY_THRESHOLD, TIME_LIMIT
@@ -198,7 +223,7 @@ class SemanticChunker:
         time_splits = 0
 
         # Initialize first chunk
-        current_chunk_sentences = [valid_data[0][0]]
+        current_chunk_entries = [(valid_data[0][0], valid_data[0][1])]  # (sentence, start_time)
         current_chunk_embeddings = [valid_data[0][3]]
         chunk_start_time = valid_data[0][1]
         chunk_end_time = valid_data[0][2]
@@ -223,7 +248,7 @@ class SemanticChunker:
                 logger.warning(
                     f"Failed to calculate centroid at sentence {i}, adding to chunk anyway"
                 )
-                current_chunk_sentences.append(sentence)
+                current_chunk_entries.append((sentence, start_time))
                 current_chunk_embeddings.append(sentence_embedding)
                 chunk_end_time = end_time
                 continue
@@ -236,8 +261,8 @@ class SemanticChunker:
             similarity_too_low = similarity < SIMILARITY_THRESHOLD
 
             if similarity_too_low or time_exceeded:
-                # Finalize current chunk
-                chunk_text = " ".join(current_chunk_sentences)
+                # Finalize current chunk with inline timestamps
+                chunk_text = self._build_timestamped_text(current_chunk_entries)
                 chunk_duration = chunk_end_time - chunk_start_time
                 chunks[
                     f"{await self._format_timestamp(chunk_start_time)} --> {await self._format_timestamp(chunk_end_time)}"
@@ -258,19 +283,19 @@ class SemanticChunker:
                     time_splits += 1
 
                 # Start new chunk with current sentence
-                current_chunk_sentences = [sentence]
+                current_chunk_entries = [(sentence, start_time)]
                 current_chunk_embeddings = [sentence_embedding]
                 chunk_start_time = start_time
                 chunk_end_time = end_time
             else:
                 # Add sentence to current chunk
-                current_chunk_sentences.append(sentence)
+                current_chunk_entries.append((sentence, start_time))
                 current_chunk_embeddings.append(sentence_embedding)
                 chunk_end_time = end_time
 
         # Add the last chunk if it exists
-        if current_chunk_sentences:
-            chunk_text = " ".join(current_chunk_sentences)
+        if current_chunk_entries:
+            chunk_text = self._build_timestamped_text(current_chunk_entries)
             chunk_duration = chunk_end_time - chunk_start_time
             chunks[
                 f"{await self._format_timestamp(chunk_start_time)} --> {await self._format_timestamp(chunk_end_time)}"
@@ -379,8 +404,8 @@ class SemanticChunker:
             return segments
 
         result = []
-        # Initialize prev_end_time to first segment's start_time to avoid incorrect gaps for Part B
-        prev_end_time = segments[0].start_time
+        # Start from 0.0 so first chapter covers video start even if transcript starts later
+        prev_end_time = 0.0
 
         for segment in segments:
             # Check if there's a gap between previous segment and current

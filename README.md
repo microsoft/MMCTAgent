@@ -24,6 +24,8 @@
 
 **▶️ [Watch Demo Video](https://youtu.be/Lxt1b_U-a68)**
 
+> **Note:** This demo video is from the use case with [DigitalGreen.org](https://www.digitalgreen.org/) where MMCT is being used. The app code shown in the video is not available in this repository.
+
 </div>
 
 ## Overview
@@ -36,93 +38,45 @@ MMCTAgent is a state-of-the-art multi-modal AI framework that brings human-like 
 - **🔬 Enables Querying over Multimodal Collections**: It enables modular design to plug-in right audio, visual extraction and processing tools, combined with Multimodal LLMs to ingest and query over large number of videos and image data.
 - **🚀 Easy Integration**: Its modular design allows for easy integration into existing workflows and adding domain-specific tools, facilitating adoption across various domains requiring advanced visual reasoning capabilities.
 
-<p align="center">
-  <a href="https://arxiv.org/abs/2405.18358">
-    <img src="docs/multimedia/mmct-video-pipeline.png" alt="Video Pipeline - Main Architecture" width="95%" />
-  </a>
-</p>
-
 ## **Key Features**
 
-### **Critical Thinking Architecture**
+- **📊 Dual Orchestration for Video**:
+  - **Graph Agent (Swarm)**: An autonomous multi-agent team (Planner, Video, Image) that agentically traverses knowledge graphs for broad discovery and reasoning.
+  - **Graph State (Pipeline)**: A deterministic state-machine workflow designed for high-precision, reproducible, and efficient retrieval.
+- **🖼️ Agentic Image Reasoning**: A dedicated Multi-Agent Image Pipeline featuring specialized tools for OCR, Object Detection, Scene Recognition, and ViT-based reasoning.
+- **📂 Structured Video Ingestion**: End-to-end pipeline to transform raw video into a queryable temporal knowledge graph (Neo4j) with automated scene segmentation and metadata extraction.
+- **🧠 Provider Agnostic**: Native support for Azure OpenAI, Neo4j, and Azure Blob Storage, with a modular interface for custom LLM and VectorDB backends.
+- **🔌 MCP Native**: Built-in Model Context Protocol (MCP) server support for seamless integration with external AI clients.
 
-MMCTAgent is inspired by human cognitive processes and integrates a structured reasoning loop:
+### 🤖 Graph Agent (Swarm)
 
-- **Planner**:  
-  Generates an initial response using relevant tools for visual or multi-modal input.
+<p align="center">
+  <img src="docs/multimedia/media_src/Graph%20Agent.jpg" alt="Graph Agent architecture" width="95%" />
+</p>
 
-- **Critic**:  
-  Evaluates the Planner’s response and provides feedback to improve accuracy and decision-making. 
----
+### 🔁 Graph State (Deterministic Pipeline)
 
-### **Modular Agents**
-
-MMCTAgent includes two specialized agents:
-
-<details>
-
-<summary>ImageAgent</summary>
-
-[![](docs/multimedia/image-agent.png)](https://arxiv.org/abs/2405.18358)
-
-A reasoning engine tailored for static image understanding.  
-It supports a configurable set of tools via the `ImageQnaTools` enum:
-
-- `object_detection` – Detects objects in an image.
-- `ocr` – Extracts embedded text content.
-- `recog` – Recognizes scenes, faces, or objects.
-- `vit` – Applies vision llm for high-level visual reasoning.
-
-> The Critic can be toggled via the `use_critic_agent` flag.
-
-</details>
+<p align="center">
+  <img src="docs/multimedia/media_src/Graph%20State.jpg" alt="Graph State pipeline" width="95%" />
+</p>
 
 <details>
-
-<summary>VideoAgent</summary>
-
-Optimized for deep video understanding:
-
-**Video Question Answering**  
-
-[![](docs/multimedia/video-agent.png)](https://arxiv.org/abs/2405.18358)
-
-   Applies a fixed toolchain orchestrated by the Planner:
-
-- `GET_VIDEO_SUMMARY` – Retrieves the most relevant video for the query, along with its summary.
-- `GET_OBJECT_COLLECTION` – Retrieves the most relevant video for the query, along with its detected objects.
-- `GET_CONTEXT` – Extracts transcript, visual summary chunks and object collection info relevant to the query.
-- `GET_RELEVANT_FRAMES` – Provides semantically similar keyframes related to the query. This tool is based on the CLIP embedding.
-- `QUERY_FRAME` – Queries specific video keyframes to extract detailed information and provide additional visual context to the Planner.
-
-> The Critic agent helps validate and refine answers, improving reasoning depth.
-
-For more details, refer to the full research article:
-
-**[MMCTAgent: Multi-modal Critical Thinking Agent
- Framework for Complex Visual Reasoning](https://arxiv.org/abs/2405.18358)**  
-Published on **arXiv** – [arxiv.org/abs/2405.18358](https://arxiv.org/abs/2405.18358)
+<summary><strong>📥 Ingestion Pipeline</strong></summary>
+<br>
+<p align="center">
+  <img src="docs/multimedia/media_src/Ingestion%20Pipeline.jpg" alt="Ingestion Pipeline" width="95%" />
+</p>
 </details>
 
----
 
-## **Table of Contents**
-
-- [Getting Started](#getting-started)
-- [Provider System](#provider-system)
-- [Configuration](#configuration)
-- [Project Structure](#project-structure)
-- [Contributing](#contributing)
-- [Citations](#citation)
-- [License](#license)
-- [Support](#support)
 ---
 
 ## **Getting Started**
 
 ### **Installation**
 
-1. **Clone the Repository**
+1. To get started with MMCTAgent, clone the repository and install the dependencies:
+
    ```bash
    git clone https://github.com/microsoft/MMCTAgent.git
    cd MMCTAgent
@@ -161,301 +115,167 @@ Published on **arXiv** – [arxiv.org/abs/2405.18358](https://arxiv.org/abs/2405
 
 4. **Install Dependencies**
 
-   Choose the installation option based on your needs:
-
-   **Option A: Image Pipeline**
    ```bash
    pip install --upgrade pip
-   pip install ".[image-agent]"
-   ```
-
-   **Option B: Video Pipeline**
-   ```bash
-   pip install --upgrade pip
-   pip install ".[video-agent]"
-   ```
-
-   **Option C: All Features (Image + Video + MCP Server)**
-   ```bash
-   pip install --upgrade pip
-   pip install ".[all]"
+   pip install .
    ```
 
 5. **Quick Start Examples**
 
-#### Image Analysis with MMCTAgent
+#### **1. Video Ingestion**
+
+Transform a video file into a structured knowledge graph (Neo4j).
 
 ```python
-from mmct.image_pipeline import ImageAgent, ImageQnaTools
-from mmct.providers.azure import AzureLLMProvider
-from mmct.config.providers import ImageAgentProviderConfig
-from azure.identity import DefaultAzureCredential, AzureCliCredential, ChainedTokenCredential
 import asyncio
-
-
-credentials = ChainedTokenCredential(AzureCliCredential(),DefaultAzureCredential()) # Or directly use api_key
-# Initializing the provider
-provider = ImageAgentProviderConfig(
-    llm_provider=AzureLLMProvider(
-        endpoint = "<your_endpoint>",
-        deployment_name="<deployment_name>",
-        model_name="<model_name>",
-        api_version="api_version",
-        credentials=credentials,
-    )
-)
-
-# Initialize the Image Agent with desired tools
-image_agent = ImageAgent(
-    query="What objects are visible in this image and what text can you read?",
-    image_path="path/to/your/image.jpg",
-    tools=[ImageQnaTools.object_detection, ImageQnaTools.ocr, ImageQnaTools.vit],
-    use_critic_agent=True,  # Enable critical thinking
-    stream=False,
-    provider = provider
-)
-
-# Run the analysis
-response = asyncio.run(image_agent())
-print(f"Analysis Result: {response.response}")
-```
-
-#### Video Analysis with VideoAgent.
-
-Ingest a video through MMCT Video Ingestion Pipeline.
-
-```python
 from mmct.video_pipeline import IngestionPipeline, Languages
-from mmct.config.providers import IngestionProviderConfig
-from mmct.providers.azure import (
-    AzureLLMProvider,
-    AzureEmbeddingProvider,
-    AISearchChapterProvider,
-    AISearchKeyframesProvider,
-    AISearchObjectCollectionProvider,
-    AzureStorageProvider,
-    WhisperTranscriptionProvider
-)
-from mmct.providers.local import ClipImageEmbeddingProvider
-from mmct.video_pipeline.utils.helper import get_file_hash
-from azure.identity import DefaultAzureCredential, AzureCliCredential, ChainedTokenCredential
+# Import your provider configuration or use defaults
+from config.provider_config import get_ingestion_providers
 
-credentials = ChainedTokenCredential(AzureCliCredential(), DefaultAzureCredential())
+async def run_ingestion():
+    providers = get_ingestion_providers()
+    
+    ingestion = IngestionPipeline(
+        video_path="path/to/video.mp4",
+        video_id="my-unique-video-id",
+        language=Languages.ENGLISH_INDIA,
+        provider=providers
+    )
 
-# Initializing the provider
-provider = IngestionProviderConfig(
-    llm_provider=AzureLLMProvider(
-        endpoint="https://<your-openai-endpoint>.openai.azure.com/",
-        deployment_name="<your-llm-deployment-name>",
-        model_name="<your-llm-model-name>",
-        api_version="<your-api-version>",
-        credentials=credentials,
-    ),
-    embedding_provider=AzureEmbeddingProvider(
-        endpoint="https://<your-openai-endpoint>.openai.azure.com/",
-        deployment_name="<your-embedding-deployment-name>",
-        api_version="<your-api-version>",
-        credentials=credentials,
-    ),
-    image_embedding_provider=ClipImageEmbeddingProvider(),
-    vectordb_chapter=AISearchChapterProvider(
-        endpoint="https://<your-search-service>.search.windows.net",
-        index_name="<your-chapter-index-name>",
-        credentials=credentials,
-    ),
-    vectordb_keyframes=AISearchKeyframesProvider(
-        endpoint="https://<your-search-service>.search.windows.net",
-        index_name="<your-keyframe-index-name>",
-        credentials=credentials,
-    ),
-    vectordb_object_registry=AISearchObjectCollectionProvider(
-        endpoint="https://<your-search-service>.search.windows.net",
-        index_name="<your-object-registry-index-name>",
-        credentials=credentials,
-    ),
-    storage_provider=AzureStorageProvider(
-        storage_account_name="<your-storage-account-name>",
-        keyframe_container_name="<your-keyframe-container-name>",
-        credentials=credentials,
-    ),
-    transcription_provider=WhisperTranscriptionProvider(
-        endpoint="https://<your-openai-endpoint>.openai.azure.com/",
-        api_version="<your-api-version>",
-        deployment_name="<your-whisper-deployment-name>",
-        credentials=credentials,
-    ),
-)
+    report = await ingestion.run()
+    print(f"Ingestion {report.status}: {report.summary()}")
 
-
-video_path = "path-of-your-video"
-video_id = await get_file_hash(video_path)
-
-ingestion = IngestionPipeline(
-    video_path=video_path,
-    video_id=video_id,
-    language=Languages.ENGLISH_INDIA,
-    provider=provider
-)
-
-# Run the ingestion pipeline
-await ingestion.run()
+asyncio.run(run_ingestion())
 ```
 
-Perform Q&A through MMCT's Video Agent.
+#### **Custom Ingestion Steps**
+
+Extend the ingestion pipeline with your own processing steps.  Import
+`PipelineStep`, `register_step`, and the supporting types from the public
+API, implement your step class, and reference it in a custom pipeline YAML:
+
 ```python
-from mmct.video_pipeline import VideoAgent
-from mmct.config.providers import VideoAgentProviderConfig
-from mmct.providers.azure import (
-    AzureLLMProvider,
-    AzureEmbeddingProvider,
-    AISearchChapterProvider,
-    AISearchKeyframesProvider,
-    AISearchObjectCollectionProvider,
-    AzureStorageProvider
-)
-from mmct.providers.local import ClipImageEmbeddingProvider
-from azure.identity import DefaultAzureCredential, AzureCliCredential, ChainedTokenCredential
+from mmct.video_pipeline import PipelineStep, StepContext, StepResult, register_step
+
+@register_step("myapp.watermark")
+class WatermarkStep(PipelineStep):
+    step_type = "myapp.watermark"
+    description = "Burn a watermark onto extracted frames."
+
+    async def run(self, context: StepContext) -> StepResult:
+        # ... your logic here ...
+        return StepResult(step_id=self.step_id, outputs={"watermarked": True})
+```
+
+Import your step module before running the pipeline so the decorator
+registers the class, then point `IngestionPipeline` at a YAML config that
+includes the step.  See [`scripts/custom_steps/`](scripts/custom_steps/)
+for a complete working example.
+
+### **2. Video Q&A (Unified Pipeline)**
+
+Query your video knowledge graph using either agentic swarm or deterministic state modes.
+
+```python
+from mmct.video_pipeline.query_pipeline import VideoQueryPipeline, QueryPipelineMode
 import asyncio
 
-credentials = ChainedTokenCredential(AzureCliCredential(), DefaultAzureCredential())
-
-# Initializing the provider
-provider = VideoAgentProviderConfig(
-    llm_provider=AzureLLMProvider(
-        endpoint="https://<your-openai-endpoint>.openai.azure.com/",
-        deployment_name="<your-llm-deployment-name>",
-        model_name="<your-llm-model-name>",
-        api_version="<your-api-version>",
-        credentials=credentials,
-    ),
-
-    embedding_provider=AzureEmbeddingProvider(
-        endpoint="https://<your-openai-endpoint>.openai.azure.com/",
-        deployment_name="<your-embedding-deployment>",
-        api_version="<your-api-version>",
-        credentials=credentials,
-    ),
-
-    image_embedding_provider=ClipImageEmbeddingProvider(),
-
-    vectordb_chapter=AISearchChapterProvider(
-        endpoint="https://<your-search-service>.search.windows.net",
-        index_name="<your-chapter-index-name>",
-        credentials=credentials,
-    ),
-
-    vectordb_keyframes=AISearchKeyframesProvider(
-        endpoint="https://<your-search-service>.search.windows.net",
-        index_name="<your-keyframe-index-name>",
-        credentials=credentials,
-    ),
-
-    vectordb_object_registry=AISearchObjectCollectionProvider(
-        endpoint="https://<your-search-service>.search.windows.net",
-        index_name="<your-object-registry-index-name>",
-        credentials=credentials,
-    ),
-
-    storage_provider=AzureStorageProvider(
-        storage_account_name="<your-storage-account-name>",
-        keyframe_container_name="<your-keyframe-container-name>",
-        credentials=credentials,
+async def query_video():
+    # Initialize the unified pipeline
+    # use_provider_defaults=True automatically hydrates providers from config
+    pipeline = VideoQueryPipeline(
+        mode=QueryPipelineMode.GRAPH_STATE,  # or GRAPH_AGENT for swarm
+        use_provider_defaults=True,
+        use_critic=True
     )
-)
 
+    # Perform a natural language query
+    result = await pipeline.query(
+        user_query="What happens after the car enters the frame?",
+        video_id="my-unique-video-id"
+    )
 
-# Configure the Video Agent
-video_agent = VideoAgent(
-    query="input-query",
-    video_id=None,  # Optional: specify video ID
-    url=None,  # Optional: URL to filter out the search results for given url
-    use_critic_agent=True,  # Enable critic agent
-    stream=False,  # Stream response
-    cache=False,  # Optional: enable caching
-    provider = provider
-)
+    print(f"Answer: {result['answer']}")
+    await pipeline.close()
 
-# Execute video analysis
-response = await video_agent()
-print(f"Video Analysis: {response}")
+asyncio.run(query_video())
 ```
 
-For more comprehensive examples, see the [`examples/`](examples/) directory.
+### **3. Image Q&A**
+
+Analyze individual images using specialized vision tools.
+
+```python
+from mmct.image_pipeline.agents.image_agent import ImageAgent, ImageQnaTools
+import asyncio
+
+async def query_image():
+    agent = ImageAgent(
+        image_path="path/to/image.jpg",
+        query="What labels are on the medicine bottles?",
+        use_critic_agent=True,
+        tools=[ImageQnaTools.ocr, ImageQnaTools.vit]
+    )
+
+    response = await agent()
+    print(f"Analysis: {response}")
+
+asyncio.run(query_image())
+```
+
+### **4. MCP Server**
+
+Expose MMCT pipelines as tools for model-based agents.
+
+```bash
+# Start the server
+PYTHONPATH=. python3 mcp_server/main.py
+```
+*Access the server at `http://0.0.0.0:8000/mcp`. See the [`mcp_server/`](mcp_server/) directory for more details.*
+
+---
 
 ## **Provider System**
 
 ### **Multi-Cloud & Vendor-Agnostic Architecture**
 
-MMCTAgent now features a **modular provider system** that allows you to seamlessly switch between different cloud providers and AI services without changing your application code. This makes the framework truly **vendor-agnostic** and suitable for various deployment scenarios.
-
-#### **Supported Providers**
+MMCTAgent features a modular provider system that allows you to switch between different cloud providers and AI services seamlessly.
 
 | Service Type | Supported Providers | Use Cases |
 |--------------|--------------------|-----------|
-| **LLM** | Azure OpenAI, OpenAI, **+ Custom** | Text generation, chat completion |
-| **Search** | Azure AI Search, FAISS | Document search and retrieval |
-| **Transcription** | Azure Speech Services, OpenAI Whisper | Audio-to-text conversion |
-| **Storage** | Azure Blob Storage, Local Storage | File storage and management |
+| **LLM** | Azure OpenAI **+ Custom** | Reasoning, chat completion, planning |
+| **Search/DB** | Neo4j | Graph traversal, vector search |
+| **Transcription** | Azure Speech, OpenAI Whisper | Audio-to-text conversion |
+| **Storage** | Azure Blob Storage, Local | Media and artifact management |
 
-> **Note**: All provider types support custom implementations. See the [Custom LLM Provider Example](examples/image_agent.ipynb) (Anthropic Claude) or read the [Providers Guide](mmct/providers/README.md) for implementation details.
-
-For detailed configuration instructions, see our [Provider Configuration Guide](mmct/providers/README.md).
-
----
-
-## **Configuration**
-
-### System Requirements for CLIP embeddings ([openai/clip-vit-base-patch32](https://huggingface.co/openai/clip-vit-base-patch32))
-
-Minimum (development / small-scale):
-- CPU: 4-core modern i5/i7, ~8 GB RAM
-- Disk: ~500 MB caching model + image/text data
-- GPU: none (works but slow)
-
-Recommended (for decent speed / batching):
-- CPU: 8+ cores, 16 GB RAM
-- GPU: NVIDIA with ≥ 4-6 GB VRAM (e.g. RTX 2060/3060)
-- PyTorch + CUDA installed, with mixed precision support
-
-High-throughput (fast, large batches):
-
-- 16+ cores CPU, 32+ GB RAM
-- GPU: 8-16 GB+ VRAM, fast memory bandwidth (e.g. RTX 3090, A100)
-- Use float16 / bfloat16, efficient batching, parallel preprocessing
+> **Note**: For detailed implementation, see the [Providers Guide](mmct/providers/README.md).
 
 ---
 
 ## **Project Structure**
 
-Below is the project structure highlighting the key entry-point scripts for running the three main pipelines— `Image QNA`, `Video Ingestion` and `Video Agent`.
-
 ```sh
 MMCTAgent
-| 
-├── infra
-|   └── INFRA_DEPLOYMENT_GUIDE.md    # Guide for deployment of Azure Infrastructure 
-├── app                              # contains the FASTAPI application over the mmct pipelines.
-├── mcp_server
-│   ├── main.py                      # you need to run main.py to start MCP server
-│   ├── client.py                    # MCP server client to connect to MCP server
-│   ├── notebooks/                   # contains the examples to utilize MCP server through different agentic-frameworks
-│   └── README.md                    # Guide for MCP server.
-├── mmct
-│   ├── .
-│   ├── image_pipeline
-│   │   ├── agents
-│   │   │    └── image_agent.py      #  Entry point for the MMCT Image Agentic Workflow
-│   │   └── README.md                #  Guide for Image Pipeline
-│   └── video_pipeline
-│       ├── agents
-│       │   └── video_agent.py      # Entry point for the MMCT Video Agentic Workflow
-│       ├── core
-│       │     └── ingestion
-│       │           └── ingestion_pipeline.py   # Entry point for the Video Ingestion Workflow
-│       └── README.md                # Guide for Video Pipeline
-├── pyproject.toml                   # Project configuration and dependencies
+├── examples/               # 💡 Comprehensive Jupyter notebook examples
+├── mcp_server/             # 🔌 Model Context Protocol server entry points
+├── mmct/                   # 🧠 Core Framework
+│   ├── image_pipeline/     # Multi-Agent image reasoning and vision tools
+│   ├── video_pipeline/     # End-to-end video intelligence
+│   │   ├── core/           # Ingestion, Graph structure, and Registry
+│   │   ├── graph_agent/    # Swarm-based (Agentic) orchestration
+│   │   ├── graph_state/    # State-Machine (Deterministic) orchestration
+│   │   └── query_pipeline.py # Unified video query entry point
+│   ├── providers/          # Modular backend service interfaces
+│   └── utils/              # Error handling and shared utilities
+├── scripts/                # 🛠️ Dev scripts and custom step examples
+│   └── custom_steps/       # Example custom ingestion steps
+├── api/                    # 🌐 FastAPI web application
+├── config/                 # ⚙️ Centralized configuration and hydration
+├── infra/                  # 🏗️ Azure Infrastructure deployment guides
 └── README.md
 ```
+
+---
 
 ## **Contributing**
 
@@ -468,7 +288,7 @@ This project has adopted the [Microsoft Open Source Code of Conduct](https://ope
 
 ## **Citation**
 
-If you find MMCTAgent useful in your research, please cite our paper:
+If you find MMCTAgent useful in your research, please cite:
 
 ```bibtex
 @article{kumar2024mmctagent,
@@ -482,15 +302,12 @@ If you find MMCTAgent useful in your research, please cite our paper:
 
 ## **License**
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+Licensed under the [MIT License](LICENSE).
 
-
+---
 
 ## **Support**
 
 - [Documentation](docs/)
 - [Report Issues](https://github.com/microsoft/MMCTAgent/issues)
 - [Discussions](https://github.com/microsoft/MMCTAgent/discussions)
----
-
-

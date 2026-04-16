@@ -6,7 +6,7 @@ from .base import PipelineStep, StepContext, StepResult
 from .registry import register_step
 from mmct.video_pipeline.utils.helper import get_media_folder
 from mmct.video_pipeline.core.ingestion.utils.helper import (
-    load_srt,
+    load_transcript,
 )
 
 
@@ -40,7 +40,7 @@ class TranscriptionStep(PipelineStep):
             if context.transcript_path:
                 # Use existing transcript as-is
                 context.logger.debug(f"Using provided transcript: {context.transcript_path}")
-                transcript = await load_srt(context.transcript_path)
+                transcript = await load_transcript(context.transcript_path)
                 transcript_path = context.transcript_path
 
             else:
@@ -78,14 +78,19 @@ class TranscriptionStep(PipelineStep):
                             transcript_path = path
                             break
 
+            # Calculate word count from transcript text
+            word_count = len(transcript.split()) if transcript else 0
+
             return StepResult(
                 step_id=self.step_id,
                 outputs={
                     "transcript": transcript,
                     "transcript_path": transcript_path,
+                    "word_count": word_count,
                 },
                 metrics={
                     "transcript_length": len(transcript) if transcript else 0,
+                    "word_count": word_count,
                 },
                 artifacts=[transcript_path] if transcript_path else [],
             )

@@ -1,39 +1,55 @@
+"""Centralized exception handling and error management.
+
+This module provides a unified exception hierarchy for the MMCT framework, 
+along with decorators for automated retry logic, exception conversion, 
+and logging.
+"""
+
 import asyncio
 import functools
-from typing import TypeVar, Callable, Any, Optional, Type, Union, Dict
+from typing import TypeVar, Callable, Any, Optional, Type, Union, Dict, List
 from loguru import logger
 
 class MMCTException(Exception):
-    """Base exception for MMCT framework."""
+    """Base exception for the MMCT framework.
+
+    All custom exceptions within the framework should inherit from this class 
+    to provide consistent error code and metadata tracking.
+
+    Attributes:
+        message (str): A descriptive error message.
+        error_code (str, optional): A unique alphanumeric code for the error type.
+        details (Dict, optional): Additional metadata or context about the error.
+    """
     
-    def __init__(self, message: str, error_code: str = None, details: Dict = None):
+    def __init__(self, message: str, error_code: Optional[str] = None, details: Optional[Dict[str, Any]] = None):
         super().__init__(message)
         self.error_code = error_code
         self.details = details or {}
 
 
 class ProviderException(MMCTException):
-    """Raised when external provider fails."""
+    """Raised when an external provider (LLM, DB, Storage) fails."""
     pass
 
 
 class ConfigurationException(MMCTException):
-    """Raised when configuration is invalid."""
+    """Raised when configuration values are missing or invalid."""
     pass
 
 
 class ValidationException(MMCTException):
-    """Raised when input validation fails."""
+    """Raised when input parameter validation fails."""
     pass
 
 
 class AuthenticationException(MMCTException):
-    """Raised when authentication fails."""
+    """Raised when authentication with an external service fails."""
     pass
 
 
 class ResourceNotFoundException(MMCTException):
-    """Raised when requested resource is not found."""
+    """Raised when a requested resource (file, node, video) is not found."""
     pass
 
 
@@ -47,19 +63,24 @@ def handle_exceptions(
     backoff_factor: float = 2.0,
     max_delay: float = 60.0
 ):
-    """
-    Decorator to handle exceptions with retry logic and fallback.
-    
+    """Decorator to handle exceptions with retry logic and optional fallback.
+
+    Supports both synchronous and asynchronous functions. Implements 
+    exponential backoff between retry attempts.
+
     Args:
-        retries: Number of retry attempts
-        fallback: Fallback value to return if all retries fail
-        exceptions: Exception types to catch and retry
-        backoff_factor: Exponential backoff factor
-        max_delay: Maximum delay between retries
+        retries: Total number of attempts (including the first call).
+        fallback: Value to return if all retry attempts fail.
+        exceptions: Exception type or tuple of types to catch and retry.
+        backoff_factor: Multiplier for exponential backoff (delay = factor ** attempt).
+        max_delay: Maximum delay in seconds between retries.
+
+    Returns:
+        Callable: The decorated function with retry logic.
     """
     def decorator(func: Callable[..., T]) -> Callable[..., T]:
         @functools.wraps(func)
-        async def async_wrapper(*args, **kwargs) -> T:
+        async def async_wrapper(*args: Any, **kwargs: Any) -> T:
             last_exception = None
             
             for attempt in range(retries):
@@ -82,7 +103,7 @@ def handle_exceptions(
             raise last_exception
         
         @functools.wraps(func)
-        def sync_wrapper(*args, **kwargs) -> T:
+        def sync_wrapper(*args: Any, **kwargs: Any) -> T:
             last_exception = None
             
             for attempt in range(retries):
@@ -119,17 +140,19 @@ def log_exceptions(
     include_traceback: bool = True,
     custom_message: Optional[str] = None
 ):
-    """
-    Decorator to log exceptions.
-    
+    """Decorator to log any exceptions raised by the decorated function.
+
     Args:
-        log_level: Log level for exception logging
-        include_traceback: Whether to include traceback in log
-        custom_message: Custom message to include in log
+        log_level: The loguru level to use for logging.
+        include_traceback: If True, includes a full stack trace in the log.
+        custom_message: Optional prefix or override for the log message.
+
+    Returns:
+        Callable: The decorated function with logging logic.
     """
     def decorator(func: Callable[..., T]) -> Callable[..., T]:
         @functools.wraps(func)
-        async def async_wrapper(*args, **kwargs) -> T:
+        async def async_wrapper(*args: Any, **kwargs: Any) -> T:
             try:
                 return await func(*args, **kwargs)
             except Exception as e:
@@ -141,7 +164,7 @@ def log_exceptions(
                 raise
         
         @functools.wraps(func)
-        def sync_wrapper(*args, **kwargs) -> T:
+        def sync_wrapper(*args: Any, **kwargs: Any) -> T:
             try:
                 return func(*args, **kwargs)
             except Exception as e:
@@ -161,16 +184,19 @@ def log_exceptions(
     return decorator
 
 
-def convert_exceptions(exception_map: dict):
-    """
-    Decorator to convert exceptions to MMCT exceptions.
-    
+def convert_exceptions(exception_map: Dict[Type[Exception], Type[MMCTException]]):
+    """Decorator to convert low-level exceptions to MMCT framework exceptions.
+
     Args:
-        exception_map: Dictionary mapping exception types to MMCT exception types
+        exception_map: A dictionary mapping source exception types to target 
+            MMCTException types.
+
+    Returns:
+        Callable: The decorated function with exception conversion.
     """
     def decorator(func: Callable[..., T]) -> Callable[..., T]:
         @functools.wraps(func)
-        async def async_wrapper(*args, **kwargs) -> T:
+        async def async_wrapper(*args: Any, **kwargs: Any) -> T:
             try:
                 return await func(*args, **kwargs)
             except Exception as e:
@@ -180,7 +206,7 @@ def convert_exceptions(exception_map: dict):
                 raise
         
         @functools.wraps(func)
-        def sync_wrapper(*args, **kwargs) -> T:
+        def sync_wrapper(*args: Any, **kwargs: Any) -> T:
             try:
                 return func(*args, **kwargs)
             except Exception as e:
@@ -199,11 +225,19 @@ def convert_exceptions(exception_map: dict):
 
 
 class ErrorHandler:
-    """Centralized error handling utilities."""
+    """Centralized error handling and conversion utilities."""
     
     @staticmethod
     def handle_provider_error(e: Exception, provider_name: str) -> ProviderException:
-        """Convert provider-specific exceptions to ProviderException."""
+        """Converts a provider-specific exception into a ProviderException.
+
+        Args:
+            e: The original exception from the provider client.
+            provider_name: The name of the provider (e.g., 'Azure', 'Neo4j').
+
+        Returns:
+            ProviderException: A wrapped framework exception.
+        """
         error_details = {
             "provider": provider_name,
             "original_exception": type(e).__name__,
@@ -218,8 +252,16 @@ class ErrorHandler:
         )
     
     @staticmethod
-    def log_and_raise(exception: Exception, context: str = ""):
-        """Log exception and re-raise it."""
+    def log_and_raise(exception: Exception, context: str = "") -> None:
+        """Logs an exception with optional context and re-raises it.
+
+        Args:
+            exception: The exception object to log.
+            context: Optional prefix for the log message.
+
+        Raises:
+            Exception: The same exception passed as an argument.
+        """
         message = f"{context}: {exception}" if context else str(exception)
         logger.error(message)
         raise exception

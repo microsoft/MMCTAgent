@@ -6,28 +6,39 @@ Importing this module registers all built-in steps with the framework.
 
 # Import all step modules to trigger @register_step decorators
 
-# Simple steps
-from .pre_validation_step import PreValidationStep
 from .transcription_step import TranscriptionStep
 
+from .graph_validation.step import GraphValidationStep
 from .compress.step import CompressionStep
 from .video_chunking.step import VideoChunkingStep
+from .extraction_planning.step import ExtractionPlanningStep
+
+# Backwards compatible step types are still registered, but codebase naming prefers non-prefixed names.
 from .keyframes.step import KeyframeExtractionStep
-from .chapters import ChapterGenerationStep
-from .chapter_enrichment.step import ChapterEnrichmentStep
-from .embeddings.step import EmbeddingGenerationStep
-from .upload.step import UploadStep
+from .chapters.step import ChapterGenerationStep
+
+from .temporal_graph.step import TemporalGraphStep
+from .chapter_grouping.step import ChapterGroupingStep
+from .keyframe_upload.step import KeyframeUploadStep
+from .graph_construction.step import GraphConstructionStep
+from .graph_upload.step import GraphUploadStep
+
+from .export.step import ExportStep
 from .cleanup.step import CleanupStep
 
 __all__ = [
-    "PreValidationStep",
     "TranscriptionStep",
+    "GraphValidationStep",
     "CompressionStep",
     "VideoChunkingStep",
+    "ExtractionPlanningStep",
     "KeyframeExtractionStep",
     "ChapterGenerationStep",
-    "ChapterEnrichmentStep",
-    "EmbeddingGenerationStep",
-    "UploadStep",
+    "TemporalGraphStep",
+    "ChapterGroupingStep",
+    "GraphConstructionStep",
+    "GraphUploadStep",
+    "KeyframeUploadStep",
+    "ExportStep",
     "CleanupStep",
 ]

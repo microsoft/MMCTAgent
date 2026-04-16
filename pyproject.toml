@@ -25,8 +25,10 @@ dependencies = [
     # Web Framework & API
     "fastapi>=0.115.0,<1.0.0",
     "uvicorn[standard]>=0.32.0,<1.0.0",
+    "oss2==2.19.1",
     "python-multipart>=0.0.20,<1.0.0",
-
+    "fastmcp==2.11.3",
+    "autogen-ext[mcp]",
     # Data Validation & Configuration
     "pydantic>=2.8.0,<3.0.0",
     "pydantic-settings>=2.5.0,<3.0.0",
@@ -40,6 +42,7 @@ dependencies = [
     "urllib3>=2.2.0,<3.0.0",
     "requests>=2.31.0,<3.0.0",
     "numpy>=1.24.0,<2.0.0",
+    "cachetools>=5.3.0,<6.0.0",
 
     # AI/LLM Core
     "openai>=1.72.0,<2.0.0",
@@ -50,45 +53,40 @@ dependencies = [
     "autogen-agentchat>=0.4.9.0,<1.0.0",
     "autogen-core>=0.4.9.0,<1.0.0",
     "autogen-ext>=0.4.9.0,<1.0.0",
-]
 
-[project.optional-dependencies]
-# Image Pipeline features (includes local + Azure providers)
-image-agent = [
-    # ML dependencies for image models
+    # ML dependencies
     "torch",
     "torchvision",
     "transformers>=4.30.0,<5.0.0",
+    "fastembed>=0.3.0,<1.0.0",
+    "scikit-learn>=1.3.0,<2.0.0",
+    "scipy>=1.11.0,<2.0.0",
+    "datasets>=2.20.0,<3.0.0",
+    "accelerate==1.10.1",
+
+    # Video-specific libraries
+    "opencv-python-headless>=4.8.0.0,<5.0.0",
+    "ffmpeg-python",
+    "pydub>=0.25.1,<1.0.0",
+    "audioop-lts>=0.2.1; python_version >= '3.13'",
+    "networkx",
+    "faiss-cpu",
+    "scenedetect>=0.6.0,<1.0.0",
+
     # Image-specific libraries
     "ultralytics>=8.3.0,<9.0.0",
     "ultralytics-thop>=2.0.0,<3.0.0",
     "modelscope>=1.24.0,<2.0.0",
     "addict>=2.4.0,<3.0.0",
     "Pillow",
-    # Azure providers (for cloud-based workflows)
-    "azure-identity>=1.19.0,<2.0.0",
-    "azure-core>=1.32.0,<2.0.0",
-    "azure-storage-blob>=12.24.0,<13.0.0",
-]
 
-# Video Pipeline features (includes local models + Azure providers)
-video-agent = [
-    # ML dependencies for video models
-    "torch",
-    "torchvision",
-    "transformers>=4.30.0,<5.0.0",
-    # Video-specific libraries
-    "opencv-python-headless>=4.8.0.0,<5.0.0",
-    "ffmpeg-python",
-    "pydub>=0.25.1,<1.0.0",
-    "audioop-lts>=0.2.1; python_version >= '3.13'",
-    "scikit-learn>=1.3.0,<2.0.0",
-    "scipy>=1.11.0,<2.0.0",
-    "networkx",
-    "faiss-cpu",
-    "datasets>=2.20.0,<3.0.0",
-    "accelerate==1.10.1",
-    # Azure providers (for cloud-based transcription, search, storage)
+    # Graph visualization
+    "pyvis>=0.3.0,<1.0.0",
+
+    # Graph database
+    "neo4j>=5.0.0,<6.0.0",
+
+    # Azure providers
     "azure-identity>=1.19.0,<2.0.0",
     "azure-core>=1.32.0,<2.0.0",
     "azure-storage-blob>=12.24.0,<13.0.0",
@@ -97,16 +95,14 @@ video-agent = [
     "azure-monitor-opentelemetry-exporter>=1.0.0b33",
     "azure-eventhub>=5.14.0,<6.0.0",
     "azure-eventhub-checkpointstoreblob-aio",
-    "scenedetect>=0.6.0,<1.0.0",
+
+    # test
+    "pytest",
+    "pytest-asyncio",
+    "pytest-mock",
 ]
 
-# Complete installation (all features including MCP server)
-all = [
-    "mmct[image-agent,video-agent]",
-    "fastmcp==2.11.3",
-    "autogen-ext[mcp]",
-]
-
+[project.optional-dependencies]
 # Development tools
 dev = [
     "pytest>=7.4.0",
@@ -127,7 +123,7 @@ docs = [
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["mmct*", "mcp_server*"]
+include = ["mmct*", "mcp_server*", "api*", "config*"]
 exclude = ["tests", "tests.*", "*.tests", "*.tests.*"]
 
 [tool.setuptools.package-data]

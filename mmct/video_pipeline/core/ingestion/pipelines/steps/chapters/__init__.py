@@ -1,15 +1,5 @@
-"""
-Chapter Generator Module
+"""Chapter generation with unified extraction."""
 
-This module provides chapter generation and ingestion functionality.
-"""
+from .step import ChapterGenerationStep
 
-from .steps import ChapterGenerationStep
-from .llm_scene import SceneLLMChapterGenerator
-from .timeline_summary import ChapterTimelineSummarizer
-
-__all__ = [
-    "ChapterGenerationStep",
-    "SceneLLMChapterGenerator",
-    "ChapterTimelineSummarizer",
-]
+__all__ = ["ChapterGenerationStep"]

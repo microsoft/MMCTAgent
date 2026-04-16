@@ -8,6 +8,8 @@ import json
 
 from loguru import logger
 
+from mmct.providers.custom_providers import FastEmbedBGEsmallEmbeddingProvider
+
 from ..base import PipelineStep, StepContext, StepResult
 from ..registry import register_step
 from .transcript_chunker import TranscriptChunker
@@ -53,9 +55,10 @@ class VideoChunkingStep(PipelineStep):
 
             # 2. Run Semantic Clustering (Inline)
             context.logger.debug("Running inline semantic clustering...")
+            embedding_provider = FastEmbedBGEsmallEmbeddingProvider()
             clusterer = SemanticChunker(
                 transcript=transcript,
-                embedding_provider=context.provider.embedding_provider,
+                embedding_provider=embedding_provider,
             )
             clusters = await clusterer.run()
 

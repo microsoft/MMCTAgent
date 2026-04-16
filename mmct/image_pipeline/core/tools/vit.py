@@ -1,20 +1,44 @@
-"""
-This is a vit tool. it uses the vision_llm
+"""Vision Transformer (ViT) reasoning tool.
+
+This module provides a tool that leverages a Vision Language Model (VLM)
+for high-level visual reasoning and description tasks.
 """
 
-from mmct.image_pipeline.core.models.vit.visual_llm import VisualLLM
+from typing import Annotated
 from PIL import Image
-from typing_extensions import Annotated
+from mmct.image_pipeline.core.models.vit.visual_llm import VisualLLM
 from mmct.providers.base import BaseLLMProvider
 
 class VitTool:
+    """Tool for performing advanced visual reasoning using a VLM.
+
+    The VitTool encapsulates a Vision Language Model capable of answering
+    complex queries about images by combining visual perception with
+    textual reasoning.
+
+    Attributes:
+        llm_provider (BaseLLMProvider): The LLM provider to use for reasoning.
+        img_path (str): Path to the image file to be analyzed.
+    """
+
     def __init__(self, llm_provider: BaseLLMProvider, img_path: Annotated[str, "path of image"]):
+        """Initializes the VitTool.
+
+        Args:
+            llm_provider: The LLM provider for vision-language tasks.
+            img_path: Local path to the image to analyze.
+        """
         self.llm_provider = llm_provider
         self.img_path = img_path
 
     async def vit_tool(self, query: Annotated[str, "detailed/complete query about the image"]) -> str:
-        """
-        a advance visual tool which can describe image. it takes image path and query as input and the output is simple text answering the query given.
+        """Analyzes an image and answers a detailed natural language query.
+
+        Args:
+            query: The specific question or instruction regarding the image content.
+
+        Returns:
+            str: A natural language response containing the answer and reasoning.
         """
         prompt = f"""You are an advanced Vision Language Model Tool specialized in image understanding, visual description and then solving the user queries based on the information provided in the text and image along with the world knowledge.
 

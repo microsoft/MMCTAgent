@@ -1,21 +1,56 @@
-"""
-This is a vit tool. it uses the GPT4V.
+"""Critic tool for reflective feedback.
+
+This module provides a tool that allows a critic agent to evaluate the 
+reasoning and tool usage of a planner agent in an image understanding context.
 """
 
-from mmct.image_pipeline.core.models.vit.visual_llm import VisualLLM
+from typing import Annotated
 from PIL import Image
-from typing_extensions import Annotated
+from mmct.image_pipeline.core.models.vit.visual_llm import VisualLLM
 from mmct.providers.base import BaseLLMProvider
 
 class CriticTool:
-    def __init__(self, llm_provider: BaseLLMProvider, query: Annotated[str, "query about the image"], img_path: Annotated[str, "path of image"]):
+    """Tool for reflective feedback on agentic reasoning.
+
+    The CriticTool evaluates the planner's conversation history against 
+    the user's query and the visual evidence in the image to ensure 
+    accuracy, completeness, and logical consistency.
+
+    Attributes:
+        llm_provider (BaseLLMProvider): The LLM provider to use for evaluation.
+        query (str): The original user query being analyzed.
+        img_path (str): Local path to the image file.
+    """
+
+    def __init__(
+        self, 
+        llm_provider: BaseLLMProvider, 
+        query: Annotated[str, "The original user query"], 
+        img_path: Annotated[str, "Local image path"]
+    ):
+        """Initializes the CriticTool.
+
+        Args:
+            llm_provider: The LLM provider for vision-language evaluation.
+            query: The initial question or instruction about the image.
+            img_path: Local path to the image to analyze.
+        """
         self.llm_provider = llm_provider
         self.query = query
         self.img_path = img_path
 
-    async def critic_tool(self, conversation:Annotated[str,"all past conversation between agents."]) -> str:
-        """
-        critic tool for critic agent which criticise the planner response.
+    async def critic_tool(
+        self, 
+        conversation: Annotated[str, "The full agentic conversation history"]
+    ) -> str:
+        """Critiques the planner's reasoning and tool usage.
+
+        Args:
+            conversation: The accumulated dialogue between agents and tool outputs.
+
+        Returns:
+            str: A structured feedback report with evaluation checkboxes and
+                revisions suggestions.
         """
         prompt = f"""
                     You are a critic for a vision language pipeline, The pipeline consists

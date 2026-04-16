@@ -81,7 +81,30 @@ def get_default_ingestion_config() -> PipelineConfig:
     """
 
     current_dir = Path(__file__).parent.resolve()
-    # Go up to 'ingestion' directory (../../) then into 'experiments'
-    config_path = current_dir.parent.parent / "experiments" / "default_ingestion.yaml"
+    # Go up up to 'ingestion' directory (../../) then into 'experiments'
+    config_path = current_dir.parent.parent / "experiments" / "temporal_graph_ingestion.yaml"
 
     return load_pipeline_config(str(config_path))
+
+
+@dataclass
+class TemporalGraphConfig:
+    """Configuration for temporal graph pipeline settings.
+    
+    Controls event/object extraction, chapter grouping, and graph building
+    parameters for the temporal graph ingestion pipeline.
+    """
+    
+    max_events_per_chapter: Optional[int] = 10
+    max_objects_per_event: Optional[int] = 5
+    use_vision: Optional[bool] = True
+    event_embedding_model: Optional[str] = None
+    object_embedding_model: Optional[str] = None
+    embedding_device: Optional[str] = "cpu"
+    chapter_similarity_threshold: Optional[float] = 0.7
+    chapter_temporal_window: Optional[int] = 3
+    event_similarity_threshold: Optional[float] = 0.75
+    object_similarity_threshold: Optional[float] = 0.8
+    indices_base_path: Optional[str] = None
+    graph_persist_path: Optional[str] = None
+    use_neo4j: Optional[bool] = False

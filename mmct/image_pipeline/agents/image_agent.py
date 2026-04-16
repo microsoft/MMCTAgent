@@ -1,7 +1,8 @@
 # importing the required files
 import asyncio
 from enum import Enum
-from typing_extensions import Annotated, List
+from typing import Any, List, Union, AsyncGenerator
+from typing_extensions import Annotated
 from autogen_agentchat.agents import AssistantAgent
 from autogen_agentchat.teams import SelectorGroupChat, RoundRobinGroupChat
 from autogen_agentchat.conditions import MaxMessageTermination, TextMentionTermination
@@ -19,60 +20,60 @@ from mmct.image_pipeline.prompts import (
 from mmct.utils.error_handler import ProviderException, ConfigurationException
 from mmct.utils.error_handler import handle_exceptions
 from mmct.image_pipeline.prompts import IMAGE_AGENT_SYSTEM_PROMPT, ImageAgentResponse
-from mmct.config.providers import ImageAgentProviderConfig
+from mmct.image_pipeline.config import ImageAgentProviderConfig
 from loguru import logger
 from dotenv import load_dotenv, find_dotenv
 load_dotenv(find_dotenv(),override=True)
 
-class ImageQnaTools(Enum):
-    vit = VitTool
-    recog = RecogTool
-    object_detection = ObjectDetectTool
-    ocr = OcrTool
+class ImageQnaTools(str, Enum):
+    vit = "vit"
+    recog = "recog"
+    object_detection = "object_detection"
+    ocr = "ocr"
 
 
 class ImageAgent:
-    """
-    ImageAgent handles image-based queries using MMCT's modular architecture with a planner agent,
-    optional critic agent, and configurable image-processing tools.
+    """Handles image-based queries using MMCT's modular architecture.
 
-    Parameters:
-    -----------
-    image_path (str):
-        Local path to the image file.
-    query (str):
-        Question or instruction related to the image.
-    provider (ImageAgentProviderConfig):
-        Provider configuration.
-    use_critic_agent (bool):
-        Enable critic agent for reflective feedback.
-    stream (bool, optional):
-        Enable streaming response mode. Defaults to False.
-    tools (List[ImageQnaTools], optional):
-        List of tools to use. Defaults to all available tools.
-    disable_console_log (bool, optional):
-        Disable console logs. Defaults to False.
+    The ImageAgent orchestrates a multi-agent workflow consisting of a planner agent,
+    an optional critic agent, and a set of configurable image-processing tools. It
+    supports both standard and streaming execution modes.
 
-    Example Usage:
-    --------------
-    >>> from mmct.image_pipeline import ImageAgent, ImageQnaTools
-    >>> from mmct.config.providers import ImageAgentProviderConfig
-    >>> from mmct.providers.azure import AzureLLMProvider
-    >>> provider_config = ImageAgentProviderConfig(
-    >>> llm_provider = AzureLLMProvider(endpoint = "<endpoint>", api_version = "<api-version>", 
-    >>> deployment_name = "<deployment-name>", model_name = "<model-name>", api_key = "api-key"
-    >>> ))
-    >>> async def run_example():
-    >>>     image_qna = ImageAgent(
-    >>>         image_path="path/to/image.jpg",
-    >>>         query="What dishes are listed under House Special?",
-    >>>         provider=provider_config,
-    >>>         tools=[ImageQnaTools.ocr, ImageQnaTools.vit],
-    >>>         use_critic_agent=True
-    >>>     )
-    >>>     result = await image_qna()
-    >>>     print(result)
-    >>> asyncio.run(run_example())
+    Attributes:
+        image_path (str): Local path to the image file to be analyzed.
+        query (str): The natural language question or instruction related to the image.
+        provider (ImageAgentProviderConfig): Configuration for the underlying LLM provider.
+        use_critic_agent (bool): Whether to include a critic agent for reflective feedback.
+        stream (bool): Whether to enable streaming response mode.
+        tools_enum (List[ImageQnaTools]): List of specific tools to enable for analysis.
+        disable_console_log (bool): Flag to disable console-based logging for this agent.
+        use_console (bool): Whether to use the Console UI for output display.
+
+    Example:
+        >>> from mmct.image_pipeline import ImageAgent, ImageQnaTools
+        >>> from mmct.image_pipeline.config import ImageAgentProviderConfig
+        >>> from mmct.providers.azure import AzureLLMProvider
+        >>> 
+        >>> provider_config = ImageAgentProviderConfig(
+        ...     llm_provider=AzureLLMProvider(
+        ...         endpoint="<endpoint>", 
+        ...         api_version="<api-version>", 
+        ...         deployment_name="<deployment-name>", 
+        ...         model_name="<model-name>", 
+        ...         api_key="api-key"
+        ...     )
+        ... )
+        >>> 
+        >>> async def run_example():
+        ...     agent = ImageAgent(
+        ...         image_path="path/to/image.jpg",
+        ...         query="What dishes are listed under House Special?",
+        ...         provider=provider_config,
+        ...         tools=[ImageQnaTools.ocr, ImageQnaTools.vit],
+        ...         use_critic_agent=True
+        ...     )
+        ...     result = await agent()
+        ...     print(result)
     """
 
     def __init__(
@@ -88,7 +89,8 @@ class ImageAgent:
             ImageQnaTools.recog,
             ImageQnaTools.vit,
         ],
-        disable_console_log: Annotated[bool, "boolean flag to disable console logs"] = False
+        disable_console_log: Annotated[bool, "boolean flag to disable console logs"] = False,
+        use_console: Annotated[bool, "Use Console for output display"] = True
     ):
         try:
             # Initialize logger for this instance
@@ -104,6 +106,7 @@ class ImageAgent:
             self.stream = stream
             self.tools_enum = tools
             self.disable_console_log = disable_console_log
+            self.use_console = use_console
             
             # Configure console logging
             if not disable_console_log:
@@ -127,20 +130,35 @@ class ImageAgent:
 
     @handle_exceptions(retries=2)
     async def _initialize_tools(self):
-        """
-        Initialize the tools for Image Agent.
+        """Initializes the configured vision tools for the Image Agent.
+
+        This method maps requested tool enums to their respective classes,
+        instantiates them with the required context, and registers their functional
+        entry points for the planner agent.
 
         Raises:
-            ProviderException: If tool initialization fails
+            ProviderException: If any tool fails to initialize or if an unknown
+                tool is requested.
         """
         try:
             logger.info("Initializing the tools for Image Agent")
             self.tools = []
-            self.tools_str = [tool.name for tool in self.tools_enum]
+            self.tools_str = [tool.value for tool in self.tools_enum]
+
+            # Map enum members to their respective tool classes
+            tool_mapping = {
+                ImageQnaTools.vit: VitTool,
+                ImageQnaTools.recog: RecogTool,
+                ImageQnaTools.object_detection: ObjectDetectTool,
+                ImageQnaTools.ocr: OcrTool,
+            }
 
             # Instantiate each tool class and get the method reference
             for tool in self.tools_enum:
-                tool_class = tool.value
+                tool_class = tool_mapping.get(tool)
+                if not tool_class:
+                    logger.warning(f"Unknown tool requested: {tool}")
+                    continue
 
                 # Instantiate based on tool type
                 if tool_class == VitTool:
@@ -163,11 +181,14 @@ class ImageAgent:
 
     @handle_exceptions(retries=2)
     async def _initialize_agents(self):
-        """
-        Initialize the agents for Image Agent.
-        
+        """Initializes the Planner and optional Critic agents.
+
+        Configures the AutoGen agents with appropriate system prompts, toolsets,
+        and termination conditions. If a critic agent is enabled, it sets up a
+        SelectorGroupChat; otherwise, it uses a RoundRobinGroupChat.
+
         Raises:
-            ProviderException: If agent initialization fails
+            ProviderException: If agent or team configuration fails.
         """
         try:
             logger.info("Retrieving the Planner Agent's system prompt")
@@ -239,11 +260,12 @@ class ImageAgent:
 
     @handle_exceptions(retries=2)
     async def setup(self):
-        """
-        Setup the ImageAgent by initializing tools and agents.
-        
+        """Prepares the ImageAgent for execution.
+
+        Initializes tools and agents required for the multi-agent workflow.
+
         Raises:
-            ProviderException: If setup fails
+            ProviderException: If tool or agent initialization fails.
         """
         try:
             await self._initialize_tools()
@@ -253,16 +275,15 @@ class ImageAgent:
             logger.exception(f"Exception occurred while performing setup")
             raise ProviderException(f"Setup failed: {e}", "SETUP_FAILED")
 
-    async def calculate_total_tokens(self, messages) -> dict:
-        """
-        Calculates total input (prompt_tokens) and output (completion_tokens) tokens
-        from a list of message objects from TaskResult containing `models_usage`.
+    async def calculate_total_tokens(self, messages: List[Any]) -> dict:
+        """Calculates accumulated token usage from an execution result.
 
         Args:
-            messages (list): List of message objects, each possibly containing `models_usage`.
+            messages: A list of message objects from a TaskResult, each
+                optionally containing `models_usage` metadata.
 
         Returns:
-            dict: {'total_input': int, 'total_output': int}
+            dict: A dictionary containing 'total_input' and 'total_output' counts.
         """
         try:
             total_input = 0
@@ -280,15 +301,17 @@ class ImageAgent:
             raise
 
     @handle_exceptions(retries=2)
-    async def run(self):
-        """
-        Execute the ImageAgent workflow.
-        
+    async def run(self) -> dict:
+        """Executes the standard ImageAgent reasoning workflow.
+
+        Sets up the environment, runs the group chat team on the query,
+        summarizes results, and calculates total token usage.
+
         Returns:
-            Dictionary containing result and token usage
-            
+            dict: result content and token usage counts.
+
         Raises:
-            ProviderException: If execution fails
+            ProviderException: If the execution or token calculation fails.
         """
         try:
             await self.setup()
@@ -309,14 +332,14 @@ class ImageAgent:
 
     @handle_exceptions(retries=2)
     async def run_stream(self):
-        """
-        Execute the ImageAgent workflow in streaming mode.
-        
+        """Executes the agentic workflow in streaming mode.
+
         Returns:
-            Async generator for streaming responses
-            
+            AsyncGenerator: An asynchronous generator yielding chunks of the
+                reasoning process and final result.
+
         Raises:
-            ProviderException: If execution fails
+            ProviderException: If the streaming execution fails.
         """
         try:
             await self.setup()
@@ -333,14 +356,16 @@ class ImageAgent:
     
     @handle_exceptions(retries=2)
     async def _format_output(self):
-        """
-        Format the output using the LLM provider.
-        
+        """Synthesizes the raw agent output into a structured response model.
+
+        Uses the LLM provider to process the conversation context and extract
+        the final answer into an `ImageAgentResponse` Pydantic model.
+
         Returns:
-            Formatted ImageAgentResponse
-            
+            ImageAgentResponse: The structured answer with token usage metadata.
+
         Raises:
-            ProviderException: If output formatting fails
+            ProviderException: If the output structuring or LLM call fails.
         """
         try:    
             logger.info("Structuring the AutoGen Output")
@@ -362,25 +387,31 @@ class ImageAgent:
                 response_format=ImageAgentResponse
             )
 
-            return response
+            return response["content"]
         except Exception as e:
             logger.exception(f"Exception occurred while structuring the output: {e}")
             raise ProviderException(f"Output formatting failed: {e}", "OUTPUT_FORMAT_FAILED") 
         
     @handle_exceptions(retries=2)
-    async def __call__(self):
-        """
-        Main execution method for the ImageAgent.
-        
+    async def __call__(self) -> Union[ImageAgentResponse, AsyncGenerator[Any, None]]:
+        """Main execution entry point for the ImageAgent.
+
+        Depending on `self.stream`, it either runs the full synchronous workflow
+        or returns an asynchronous generator for streaming updates.
+
         Returns:
-            Formatted ImageAgentResponse
-            
+            Union[ImageAgentResponse, AsyncGenerator]: Final structured response 
+                or a stream generator.
+
         Raises:
-            ProviderException: If execution fails
+            ProviderException: If internal agent execution or formatting fails.
         """
         try:
             if self.stream:
                 response_generator = await self.run_stream()
+                if not self.use_console:
+                    return response_generator
+                    
                 self.result = await Console(response_generator)
                 if isinstance(self.result,TaskResult):
                     self.result = self.result.messages[-1]
@@ -404,6 +435,7 @@ if __name__ == "__main__":
     ]
     use_critic_agent = True
     stream = True
+    use_console = True  # Enable console for local run
 
     image_qna = ImageAgent(
             image_path=image_path,
@@ -411,7 +443,16 @@ if __name__ == "__main__":
             tools=tools,
             use_critic_agent=use_critic_agent,
             stream=stream,
+            use_console=use_console,
             # disable_console_log=False
         )
-    res = asyncio.run(image_qna())
-    print(res)
+    
+    if stream and not use_console:
+        async def iterate_stream():
+            stream_gen = await image_qna()
+            async for chunk in stream_gen:
+                print(chunk)
+        asyncio.run(iterate_stream())
+    else:
+        res = asyncio.run(image_qna())
+        print(res)

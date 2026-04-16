@@ -222,3 +222,39 @@ class AzureReasoningLLMProvider(BaseLLMProvider):
         if self.client:
             logger.info("Closing Azure OpenAI Reasoning LLM client")
             await self.client.close()
+
+    async def generate_json(self, prompt: str, **kwargs) -> Dict[str, Any]:
+        """
+        Generate a JSON response from a prompt.
+        
+        Args:
+            prompt: The prompt to send to the LLM
+            **kwargs: Additional arguments passed to chat_completion
+            
+        Returns:
+            Parsed JSON response as a dictionary
+        """
+        import json
+        
+        messages = [{"role": "user", "content": prompt}]
+        
+        # Request JSON output format
+        response = await self.chat_completion(
+            messages=messages,
+            response_format={"type": "json_object"},
+            **kwargs,
+        )
+        
+        content = response.get("content", "{}")
+        
+        # Parse JSON response
+        if isinstance(content, str):
+            try:
+                return json.loads(content)
+            except json.JSONDecodeError as e:
+                logger.warning(f"Failed to parse JSON response: {e}")
+                return {}
+        elif isinstance(content, dict):
+            return content
+        
+        return {}

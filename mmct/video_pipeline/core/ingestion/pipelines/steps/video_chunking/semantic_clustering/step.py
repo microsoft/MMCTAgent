@@ -2,6 +2,8 @@
 
 from typing import Optional
 
+from mmct.providers.custom_providers import FastEmbedBGEsmallEmbeddingProvider
+
 from ..base import PipelineStep, StepContext, StepResult
 from ..registry import register_step
 from .semantic_chunker import SemanticChunker
@@ -38,10 +40,11 @@ class SemanticClusteringStep(PipelineStep):
         )
 
         try:
-            # Initialize chunker
+            # Initialize chunker with local embedding provider
+            embedding_provider = FastEmbedBGEsmallEmbeddingProvider()
             chunker = SemanticChunker(
                 transcript=transcript,
-                embedding_provider=context.provider.embedding_provider,
+                embedding_provider=embedding_provider,
                 max_chunk_duration=max_chunk_duration,
             )
 

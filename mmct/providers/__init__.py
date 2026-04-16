@@ -1,34 +1,6 @@
-"""Provider system for MMCTAgent.
+"""Provider abstractions for vendor-agnostic services.
 
-Import base classes for custom providers:
-    from mmct.providers.base import BaseLLMProvider, BaseEmbeddingProvider
-
-Import concrete providers directly from convenience modules:
-    from mmct.providers.azure import AzureLLMProvider
-    from mmct.providers.openai import OpenAILLMProvider
-    from mmct.providers.local import LocalFaissSearchProvider
+This package defines the base interfaces for essential services used in MMCT, 
+such as LLMs, embedding models, and blob storage. It includes concrete 
+implementations for specific cloud providers like Azure.
 """
-
-from .base import (
-    BaseLLMProvider,
-    BaseEmbeddingProvider,
-    BaseChapterVectorDBProvider,
-    BaseKeyframesVectorDBProvider,
-    BaseObjectCollectionVectorDBProvider,
-    BaseVisionProvider,
-    BaseTranscriptionProvider,
-    BaseStorageProvider,
-    BaseImageEmbeddingProvider
-)
-
-__all__ = [
-    'BaseLLMProvider',
-    'BaseEmbeddingProvider',
-    'BaseChapterVectorDBProvider',
-    'BaseKeyframesVectorDBProvider',
-    'BaseObjectCollectionVectorDBProvider',
-    'BaseVisionProvider',
-    'BaseTranscriptionProvider',
-    'BaseStorageProvider',
-    'BaseImageEmbeddingProvider',
-]

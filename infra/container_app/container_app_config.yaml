@@ -1,0 +1,105 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Container App Configuration — MMCTAgent
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# This file drives the container deployment for MMCTAgent.
+# Two containers are available — deploy one or both from a single command:
+#
+#   FastAPI   (service: api)  — REST endpoints for video/image query + ingestion
+#   MCP Server (service: mcp) — FastMCP server exposing tools over HTTP
+#
+# HOW TO USE
+#   1. Set acr_name to your Azure Container Registry name.
+#   2. Set service to 'api', 'mcp', or 'both'.
+#   3. Export shell variables:
+#        export AZURE_RESOURCE_GROUP=<existing-rg>
+#        export AZURE_LOCATION=<e.g. eastus, southeastasia>
+#   4. Run:  python infra/container_app/deploy.py
+#   5. Copy the printed HTTPS endpoint into your client or .env file.
+#
+# For full documentation see infra/container_app/README.md
+# ─────────────────────────────────────────────────────────────────────────────
+
+container_app:
+
+  # ── Service to deploy ────────────────────────────────────────────────────────
+  #
+  # 'api'  → Build and deploy only the FastAPI container.
+  #          Dockerfile : infra/container_app/Dockerfile.api
+  #          Container  : mmctagent-api
+  #          Endpoints  : /health, /video-query, /ingestion, /image-query, /docs
+  #
+  # 'mcp'  → Build and deploy only the MCP server container.
+  #          Dockerfile : infra/container_app/Dockerfile.mcp
+  #          Container  : mmctagent-mcp
+  #          Endpoints  : / (health), /mcp
+  #
+  # 'both' → Build and deploy API first, then MCP.
+  #          Both share the same Container Apps Environment and ACR.
+  #
+  service: api
+
+  # ── Azure Container Registry ─────────────────────────────────────────────────
+  #
+  # The ACR must already exist before running deploy.py.
+  # deploy.py calls `az acr login --name <acr_name>` automatically before pushing.
+  #
+  # Set to your ACR name without the .azurecr.io suffix.
+  # Example:  acr_name: myregistry
+  #
+  acr_name: <acr_name_here>
+
+  # ── Container Apps Environment ───────────────────────────────────────────────
+  #
+  # The environment is created once (idempotent Bicep deployment) and shared
+  # by both API and MCP containers. It bundles a Log Analytics Workspace for
+  # centralised log streaming.
+  #
+  # environment_name      : Name of the Azure Container Apps Environment resource.
+  # log_analytics_workspace : Name of the associated Log Analytics Workspace.
+  #
+  # These are used both by the Bicep template and the az containerapp CLI calls.
+  #
+  environment_name: mmct-env
+  log_analytics_workspace: mmct-logs
+
+  # ── API container settings ───────────────────────────────────────────────────
+  #
+  # Used when service is 'api' or 'both'.
+  #
+  # app_name    : Azure Container App resource name (and slug in the FQDN).
+  # image_name  : Docker image name pushed to ACR (no registry prefix).
+  # image_tag   : Tag for the Docker image.
+  #               Use 'latest' for dev/staging.
+  #               Use a Git SHA (git rev-parse --short HEAD) for production traceability.
+  # min_replicas: Always-on replica count. 1 = no cold starts.
+  # max_replicas: Upper limit for HTTP-triggered autoscaling.
+  # cpu         : vCPU allocation per replica (0.25 / 0.5 / 0.75 / 1.0 / 2.0 / 4.0).
+  # memory      : RAM allocation per replica (must match cpu tier — see Azure docs).
+  #               Common pairs: 0.5 cpu / 1Gi | 1.0 cpu / 2Gi | 2.0 cpu / 4Gi
+  #
+  api:
+    app_name: mmctagent-api
+    image_name: mmctagent-api
+    image_tag: latest
+    min_replicas: 1
+    max_replicas: 3
+    cpu: "1.0"
+    memory: 2Gi
+
+  # ── MCP container settings ───────────────────────────────────────────────────
+  #
+  # Used when service is 'mcp' or 'both'.
+  # Same field semantics as the API block above.
+  #
+  # The MCP server is stateless and lighter than the API — 0.5 cpu / 1Gi is
+  # sufficient for most workloads. Increase if you observe OOM restarts.
+  #
+  mcp:
+    app_name: mmctagent-mcp
+    image_name: mmctagent-mcp
+    image_tag: latest
+    min_replicas: 1
+    max_replicas: 2
+    cpu: "0.5"
+    memory: 1Gi

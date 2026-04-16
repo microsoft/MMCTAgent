@@ -1,15 +1,19 @@
-import os
-from typing import Optional, Annotated, Dict
+"""Video ingestion pipeline architecture.
+
+This module provides the core IngestionPipeline class which processes raw video 
+files into structured knowledge within the MMCT system, including scene 
+segmentation, transcription, and graph indexing.
+"""
+
+from typing import Optional, Annotated, Any
 from loguru import logger
 
-from mmct.config.providers import IngestionProviderConfig
 from mmct.video_pipeline.core.ingestion.languages import Languages
 from mmct.video_pipeline.utils.helper import (
     get_media_folder,
+    get_file_hash,
 )
-from mmct.video_pipeline.core.ingestion.utils.helper import (
-    get_video_duration,
-)
+from mmct.video_pipeline.core.ingestion.utils.helper import get_video_duration
 from mmct.utils.logging_config import log_manager
 from mmct.video_pipeline.core.ingestion.pipelines import (
     PipelineRunner,
@@ -21,9 +25,26 @@ from mmct.video_pipeline.core.ingestion.pipelines import (
 
 
 class IngestionPipeline:
-    """
-    IngestionPipeline handles the ingestion to prepare it for use with the VideoAgent system.
-    Refactored to use the new step-based pipeline framework.
+    """Orchestrates the ingestion of video files into the MMCT system.
+
+    The IngestionPipeline handles the end-to-end process of preparing a video 
+    for querying. It manages a sequence of processing steps (pipeline) that 
+    extract metadata, segment the video, generate transcripts, and index 
+    the content in a graph database.
+
+    Attributes:
+        video_path (str): Local path to the source video file.
+        video_id (str): Unique hash-based identifier for the video.
+        provider (Any): Bundle of provider implementations for various services.
+        language (Languages): The primary language of the video content.
+        url (str): Optional URL associated with the video.
+        transcript_path (str): Optional path to a pre-existing transcript.
+        pipeline_config_path (str): Optional path to a custom YAML pipeline config.
+        frame_stacking_grid_size (int): Grid size for combining keyframes.
+        save_local_report (bool): Whether to persist the execution report locally.
+        verbosity (int): Logging level (0=Silent, 1=Info, 2=Debug).
+        playlist_id (str): YouTube/Media playlist identifier.
+        playlist_order (int): Position of the video within the playlist.
     """
 
     def __init__(
@@ -31,12 +52,12 @@ class IngestionPipeline:
         video_path: Annotated[str, "Local path to the video file to be ingested"],
         video_id: Annotated[str, "Unique identifier (hash) for the video"],
         provider: Annotated[
-            IngestionProviderConfig,
-            "Configuration object containing all service providers",
+            Any,
+            "Provider bundle object containing all required providers as attributes",
         ],
         language: Annotated[
             Optional[Languages],
-            "Language of the video (Languages Enum), required only when transcript_path is not provided",
+            "Language of the video (Languages Enum)",
         ] = None,
         url: Annotated[
             Optional[str], "Optional URL associated with the video for metadata enrichment"
@@ -58,7 +79,36 @@ class IngestionPipeline:
         ] = 4,
         save_local_report: Annotated[bool, "Whether to save the pipeline report locally"] = False,
         verbosity: Annotated[int, "Logging verbosity: 0=Progress Bar Only, 1=Info, 2=Debug"] = 0,
+        playlist_id: Annotated[
+            Optional[str],
+            "Optional playlist ID this video belongs to (e.g. YouTube playlist ID)",
+        ] = None,
+        playlist_order: Annotated[
+            Optional[int],
+            "Optional 1-based position of this video within its playlist",
+        ] = None,
     ):
+        """Initializes the IngestionPipeline.
+
+        Args:
+            video_path: Local path to the video file.
+            video_id: Unique identifier for the video, usually a file hash.
+            provider: A bundle of provider instances (LLM, DB, Storage).
+            language: The video's language (required if transcript_path is None).
+            url: Source URL for metadata association.
+            transcript_path: Path to an existing .srt file to skip transcription.
+            pipeline_config_path: Path to a custom YAML pipeline configuration.
+            disable_console_log: Legacy flag (deprecated in favor of verbosity).
+            frame_stacking_grid_size: Grid size for tiled keyframes.
+            save_local_report: If True, saves an execution report to disk.
+            verbosity: Detail level of the logs (0, 1, or 2).
+            playlist_id: Identifier for the parent playlist.
+            playlist_order: Numeric order within the parent playlist.
+
+        Raises:
+            ValueError: If neither language nor transcript_path is provided.
+            Exception: If configuration fetching fails.
+        """
         try:
             # We delay config fetching logging until we set up the logger level
             pass
@@ -103,9 +153,22 @@ class IngestionPipeline:
         self.save_local_report = save_local_report
         self.original_video_path = video_path
         self.verbosity = verbosity
+        self.playlist_id = playlist_id
+        self.playlist_order = playlist_order
 
     async def run(self):
-        """Main ingestion pipeline method using the new PipelineRunner."""
+        """Executes the end-to-end ingestion pipeline.
+
+        This method orchestrates the sequence of steps defined in the pipeline 
+        configuration (load from config or default). It manages the context, 
+        state, and reporting for the entire ingestion process.
+
+        Returns:
+            PipelineReport: A detailed report of the execution status and metrics.
+
+        Raises:
+            Exception: If the pipeline execution fails.
+        """
         try:
             pipeline_config = None
             if self.pipeline_config_path:
@@ -133,7 +196,7 @@ class IngestionPipeline:
             self.logger.info(f"Video ID: {self.video_id}, Duration: {video_duration:.2f}s")
 
             # Create StepContext for this execution
-            context = StepContext(
+            self.context = StepContext(
                 video_path=self.video_path,
                 provider=self.provider,
                 data_store=StepDataStore(),
@@ -146,13 +209,15 @@ class IngestionPipeline:
                 video_duration=video_duration,
                 user_params={
                     "frame_stacking_grid_size": self.frame_stacking_grid_size,
+                    "playlist_id": self.playlist_id,
+                    "playlist_order": self.playlist_order,
                 },
                 save_local_report=self.save_local_report,
                 verbosity=self.verbosity,
             )
 
             # Instantiate PipelineRunner
-            runner = PipelineRunner(pipeline_config=pipeline_config, context=context)
+            runner = PipelineRunner(pipeline_config=pipeline_config, context=self.context)
 
             self.logger.info(f"Starting pipeline execution for {self.video_id}...")
             report = await runner.run()
@@ -161,7 +226,19 @@ class IngestionPipeline:
                 self.logger.error("Pipeline failed.")
                 raise Exception("Ingestion pipeline failed.")
 
-            self.logger.info("Pipeline completed successfully!")
+            if (isinstance(video_duration, (int, float)) and video_duration > 0
+                    and isinstance(report.total_duration_seconds, (int, float))):
+                video_duration_min = video_duration / 60
+                ingestion_min = report.total_duration_seconds / 60
+                ratio = report.total_duration_seconds / video_duration
+                self.logger.info(
+                    f"Pipeline completed successfully! "
+                    f"Video duration: {video_duration_min:.1f}min, "
+                    f"Ingestion time: {ingestion_min:.1f}min "
+                    f"({ratio:.2f}x realtime)"
+                )
+            else:
+                self.logger.info("Pipeline completed successfully!")
             return report
 
         except Exception as e:

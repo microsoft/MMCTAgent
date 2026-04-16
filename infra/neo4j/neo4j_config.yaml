@@ -1,0 +1,122 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Neo4j Configuration — MMCTAgent
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Neo4j is the graph database that powers MMCTAgent's video pipeline.
+# Every ingested video is stored as a temporal knowledge graph here —
+# scenes, objects, transcriptions, and their temporal relationships are all
+# written as nodes and edges. Without a running Neo4j instance the ingestion
+# pipeline cannot write data and queries return nothing.
+#
+# HOW TO USE
+#   1. Edit the fields below to match your setup.
+#   2. Run:  python infra/neo4j/deploy.py
+#   3. Copy the printed connection strings into your .env file.
+#
+# For full documentation see infra/neo4j/README.md
+# ─────────────────────────────────────────────────────────────────────────────
+
+neo4j:
+
+  # ── Edition ────────────────────────────────────────────────────────────────
+  #
+  # 'community'  → Free, open-source. Covers all MMCTAgent features.
+  #                Best choice for most users — no license required.
+  #                Local Docker image : neo4j:5.26.0-community
+  #                Azure VM download  : neo4j-community-5.26.0-unix.tar.gz
+  #                Bicep template     : bicep/main.bicep
+  #
+  # 'enterprise' → Adds multi-database, clustering, advanced security,
+  #                Prometheus metrics, and APOC Extended procedures.
+  #                Requires accepting the Neo4j license agreement.
+  #                deploy.py injects NEO4J_ACCEPT_LICENSE_AGREEMENT=yes
+  #                automatically for eval/dev use — but you must hold a
+  #                valid license for production.
+  #                Local Docker       : Not supported — Azure VM only
+  #                Azure VM download  : neo4j-enterprise-5.26.0-unix.tar.gz
+  #                Bicep template     : bicep/main-enterprise.bicep
+  #                License info       : https://neo4j.com/licensing/
+  #
+  # deploy.py reads this field and selects the correct Bicep template and
+  # Docker image automatically — no manual template switching needed.
+  #
+  version: community
+
+  # ── Enterprise license ─────────────────────────────────────────────────────
+  #
+  # Only used when version is 'enterprise' and vm_deployment is true.
+  # Ignored for community and for local Docker deployments.
+  #
+  # Leave blank ('')  → Evaluation / developer license.
+  #                     deploy.py injects NEO4J_ACCEPT_LICENSE_AGREEMENT=yes
+  #                     into the VM's systemd unit automatically.
+  #                     Suitable for dev, staging, and trial use.
+  #
+  # Paste license text → Paid / production license.
+  #                     deploy.py base64-encodes the text and the VM setup
+  #                     script writes it to /opt/neo4j/licenses/neo4j.license
+  #                     before Neo4j starts.
+  #                     Example:
+  #                       license_key: |
+  #                         <paste raw contents of your neo4j.license file>
+  #
+  license_key: ''
+
+  # ── Deployment mode ────────────────────────────────────────────────────────
+  #
+  # false → Run Neo4j locally as a Docker container.
+  #         No Azure account or CLI required.
+  #         Data persists at 'data_path' below between container restarts.
+  #         Best for: local development, CI, and quick demos.
+  #         Pre-requisite: Docker Engine / Docker Desktop must be running.
+  #         Community edition only. Enterprise requires vm_deployment: true.
+  #
+  # true  → Provision a production-grade Azure VM via Bicep.
+  #         community  → bicep/main.bicep
+  #         enterprise → bicep/main-enterprise.bicep
+  #         Creates: Ubuntu 22.04 VM, VNet, NSG, NAT Gateway,
+  #                  Internal + optional Public Load Balancer, Premium SSD.
+  #         Neo4j runs as a systemd service with APOC + GDS plugins.
+  #         Best for: staging and production workloads.
+  #         Pre-requisites (export before running deploy.py):
+  #           export AZURE_RESOURCE_GROUP=<existing-rg>
+  #           export AZURE_LOCATION=<e.g. southeastasia, eastus>
+  #           export AZURE_ADMIN_PASSWORD=<strong-vm-password>
+  #
+  vm_deployment: false
+
+  # ── Password ───────────────────────────────────────────────────────────────
+  #
+  # Sets the password for the built-in 'neo4j' user on first start.
+  # After deploy.py completes, copy this value into your .env:
+  #   NEO4J_PASSWORD=<this value>
+  #
+  # Rules:
+  #   - Minimum 8 characters.
+  #   - Must not be 'neo4j' (Neo4j rejects the default as a password).
+  #   - Use a strong password for any internet-facing VM deployment.
+  #
+  password: Neo4jPassword#123
+
+  # ── Local data path ────────────────────────────────────────────────────────
+  #
+  # Only used when vm_deployment is false.
+  # The Neo4j Docker container mounts this directory as /data so that your
+  # graph persists between container restarts and upgrades.
+  #
+  # Relative paths are resolved from the repository root.
+  # Absolute paths are used as-is.
+  #
+  # Examples:
+  #   ./neo4j/data          ← default, inside the repo (gitignored)
+  #   /var/data/neo4j       ← system-level path
+  #   ~/mmct-neo4j-data     ← home directory
+  #
+  # On Azure VM, data is always stored on the attached Premium SSD at
+  # /var/lib/neo4j — this field is ignored in that case.
+  #
+  # IMPORTANT: Do not reuse the same data_path across editions.
+  # Community and Enterprise store data in incompatible formats.
+  # Delete or move the data directory when switching editions locally.
+  #
+  data_path: ./neo4j/data

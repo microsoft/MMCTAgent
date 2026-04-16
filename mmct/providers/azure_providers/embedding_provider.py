@@ -1,17 +1,39 @@
+"""Azure OpenAI text embedding provider implementation.
 
-from mmct.providers.base import BaseEmbeddingProvider
-from typing import List, Union, Optional
+This module provides the AzureEmbeddingProvider class, which implements the 
+BaseEmbeddingProvider interface for generating vector embeddings via 
+Azure OpenAI services.
+"""
+
+from typing import List, Union, Optional, Any
 from azure.identity import get_bearer_token_provider
 from loguru import logger
-from mmct.utils.error_handler import ProviderException, ConfigurationException
 from azure.core.credentials import AzureKeyCredential
 from azure.core.credentials_async import AsyncTokenCredential
 from openai import AsyncAzureOpenAI
-from mmct.utils.error_handler import handle_exceptions, convert_exceptions
+
+from mmct.providers.base import BaseEmbeddingProvider
+from mmct.utils.error_handler import ProviderException, ConfigurationException, handle_exceptions, convert_exceptions
 
 
 class AzureEmbeddingProvider(BaseEmbeddingProvider):
-    """Azure OpenAI embedding provider implementation."""
+    """Azure OpenAI embedding provider implementation.
+
+    This provider handles authentication and client management for 
+    generating text embeddings using Azure OpenAI's embedding models. 
+    It supports both single-string and batch embedding generation.
+
+    Attributes:
+        endpoint (str): The Azure OpenAI service endpoint.
+        deployment_name (str): The name of the specific embedding deployment.
+        api_version (str): The Azure OpenAI API version.
+        credentials (Union[AzureKeyCredential, AsyncTokenCredential], optional): 
+            Identity-based credentials.
+        api_key (str, optional): Key-based authentication string.
+        timeout (int): Request timeout in seconds.
+        max_retries (int): Maximum retry attempts.
+        client (AsyncAzureOpenAI): The initialized async client.
+    """
 
     def __init__(
         self,
@@ -23,20 +45,22 @@ class AzureEmbeddingProvider(BaseEmbeddingProvider):
         timeout: int = 200,
         max_retries: int = 2
     ):
-        """Initialize AzureEmbeddingProvider.
+        """Initializes the AzureEmbeddingProvider.
 
         Args:
-            endpoint: Azure OpenAI endpoint URL
-            deployment_name: Name of the embedding deployment
-            api_version: Azure OpenAI API version (default: 2024-08-01-preview)
-            credentials: Azure credentials for token-based authentication (mutually exclusive with api_key)
-            api_key: API key for key-based authentication (mutually exclusive with credentials)
-            timeout: Request timeout in seconds (default: 200)
-            max_retries: Maximum number of retry attempts (default: 2)
+            endpoint: Azure OpenAI endpoint URL.
+            deployment_name: Name of the embedding deployment.
+            api_version: Azure OpenAI API version.
+            credentials: Azure credentials for token-based authentication.
+                Mutually exclusive with `api_key`.
+            api_key: API key for key-based authentication.
+                Mutually exclusive with `credentials`.
+            timeout: Request timeout in seconds.
+            max_retries: Maximum number of retry attempts.
 
         Raises:
-            ConfigurationException: If neither credentials nor api_key is provided,
-                                   or if both are provided, or if required fields are missing
+            ConfigurationException: If required fields are missing or if both
+                `credentials` and `api_key` are provided.
         """
         if not endpoint:
             raise ConfigurationException("Azure OpenAI endpoint is required for Embedding Provider!")
@@ -45,7 +69,7 @@ class AzureEmbeddingProvider(BaseEmbeddingProvider):
             raise ConfigurationException("Azure OpenAI deployment name is required for Embedding Provider!")
         
         if not api_version:
-            raise ConfigurationException("Azure OpenAI api version is required for Whisper Transcription Provider!")
+            raise ConfigurationException("Azure OpenAI api version is required for Embedding Provider!")
 
         # Validate that exactly one of credentials or api_key is provided
         if credentials is None and api_key is None:
@@ -63,8 +87,15 @@ class AzureEmbeddingProvider(BaseEmbeddingProvider):
         self.max_retries = max_retries
         self.client = self._initialize_client()
     
-    def _initialize_client(self):
-        """Initialize Azure OpenAI client with either credentials or API key."""
+    def _initialize_client(self) -> AsyncAzureOpenAI:
+        """Initializes the Azure OpenAI client with either credentials or API key.
+
+        Returns:
+            AsyncAzureOpenAI: The initialized asynchronous client.
+
+        Raises:
+            ProviderException: If client initialization fails.
+        """
         try:
             if self.credentials is not None:
                 # Use credentials with token-based authentication
@@ -93,8 +124,19 @@ class AzureEmbeddingProvider(BaseEmbeddingProvider):
     
     @handle_exceptions(retries=3, exceptions=(Exception,))
     @convert_exceptions({Exception: ProviderException})
-    async def embedding(self, text: str, **kwargs) -> List[float]:
-        """Generate embedding using Azure OpenAI."""
+    async def embedding(self, text: str, **kwargs: Any) -> List[float]:
+        """Generates an embedding for a specific text string using Azure OpenAI.
+
+        Args:
+            text: The input text to be vectorised.
+            **kwargs: Additional parameters passed to the OpenAI embeddings API.
+
+        Returns:
+            List[float]: The normalized vector embedding.
+
+        Raises:
+            ProviderException: If the embedding request fails.
+        """
         try:
             response = await self.client.embeddings.create(
                 model=self.deployment_name,
@@ -109,8 +151,19 @@ class AzureEmbeddingProvider(BaseEmbeddingProvider):
     
     @handle_exceptions(retries=3, exceptions=(Exception,))
     @convert_exceptions({Exception: ProviderException})
-    async def batch_embedding(self, texts: List[str], **kwargs) -> List[List[float]]:
-        """Generate embeddings for multiple texts using Azure OpenAI."""
+    async def batch_embedding(self, texts: List[str], **kwargs: Any) -> List[List[float]]:
+        """Generates vector embeddings for a batch of text strings.
+
+        Args:
+            texts: A list of input strings to be vectorised.
+            **kwargs: Additional parameters passed to the OpenAI embeddings API.
+
+        Returns:
+            List[List[float]]: A list of normalized vector embeddings.
+
+        Raises:
+            ProviderException: If the batch embedding request fails.
+        """
         try:
             response = await self.client.embeddings.create(
                 model=self.deployment_name,
@@ -123,12 +176,16 @@ class AzureEmbeddingProvider(BaseEmbeddingProvider):
             logger.error(f"Azure OpenAI batch embedding failed: {e}")
             raise ProviderException(f"Azure OpenAI batch embedding failed: {e}")
 
-    def get_async_client(self):
-        """Get async OpenAI client for direct embeddings API access."""
+    def get_async_client(self) -> AsyncAzureOpenAI:
+        """Returns the underlying async Azure OpenAI client.
+
+        Returns:
+            AsyncAzureOpenAI: The active async client.
+        """
         return self.client
 
-    async def close(self):
-        """Close the embedding client and cleanup resources."""
+    async def close(self) -> None:
+        """Closes the embedding client and releases underlying resources."""
         if self.client:
             logger.info("Closing Azure OpenAI embedding client")
             await self.client.close()
