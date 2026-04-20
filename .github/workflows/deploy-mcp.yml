@@ -163,6 +163,11 @@ jobs:
               --name $MCP_APP_NAME \
               --resource-group $RESOURCE_GROUP \
               --user-assigned $USER_ASSIGNED_IDENTITY
+            az containerapp registry set \
+              --name $MCP_APP_NAME \
+              --resource-group $RESOURCE_GROUP \
+              --server $ACR_NAME.azurecr.io \
+              --identity $USER_ASSIGNED_IDENTITY
             az containerapp update \
               --name $MCP_APP_NAME \
               --resource-group $RESOURCE_GROUP \
