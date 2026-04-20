@@ -1,0 +1,202 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# GitHub Actions — Build and Deploy MCP Server to Azure Container Apps
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Trigger: push to main when MCP-relevant files change, or manual dispatch.
+#
+# Jobs:
+#   1. detect-changes  — Check if base image deps changed (Dockerfile.base, pyproject.toml)
+#   2. build-base      — Conditional: rebuild & push base image to ACR only if deps changed
+#   3. build-deploy-mcp — Always: build MCP image from ACR base, push, deploy to Container App
+#
+# Required GitHub Secrets:
+#   AZURE_CLIENT_ID        — App registration client ID (from Azure Portal)
+#   AZURE_TENANT_ID        — Azure AD tenant ID
+#   AZURE_SUBSCRIPTION_ID  — Azure subscription ID
+#   ACR_NAME               — Azure Container Registry name (without .azurecr.io)
+#   AZURE_RESOURCE_GROUP   — Azure resource group
+#   AZURE_LOCATION         — Azure region (e.g. eastus)
+#   MCP_APP_NAME           — Container App name (default: mmctagent-mcp)
+#   CONTAINER_ENV_NAME     — Container Apps Environment name (default: mmct-env)
+#   MCP_ENV_VARS_PROD      — Newline-separated KEY=VALUE pairs for the container
+#                            (NEO4J_URI, LLM_ENDPOINT, etc.)
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: Deploy MCP Server
+
+permissions:
+  id-token: write
+  contents: read
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'mcp_server/**'
+      - 'mmct/**'
+      - 'config/**'
+      - 'Dockerfile.base'
+      - 'infra/container_app/Dockerfile.mcp'
+      - 'pyproject.toml'
+  workflow_dispatch:
+
+# Cancel in-progress runs for the same branch
+concurrency:
+  group: deploy-mcp-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  ACR_NAME: ${{ secrets.ACR_NAME }}
+  RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
+  LOCATION: ${{ secrets.AZURE_LOCATION }}
+  MCP_APP_NAME: ${{ secrets.MCP_APP_NAME || (github.ref == 'refs/heads/main' && 'mmctagent-mcp-prod' || 'mmctagent-mcp') }}
+  CONTAINER_ENV_NAME: ${{ secrets.CONTAINER_ENV_NAME || (github.ref == 'refs/heads/main' && 'mmct-env-prod' || 'mmct-env') }}
+  USER_ASSIGNED_IDENTITY: ${{ secrets.USER_ASSIGNED_IDENTITY_ID }}
+
+jobs:
+  # ── Job 1: Detect whether base image needs rebuilding ─────────────────────
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      base_changed: ${{ steps.filter.outputs.base }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            base:
+              - 'Dockerfile.base'
+              - 'pyproject.toml'
+
+  # ── Job 2: Build & push base image (only when deps change) ───────────────
+  build-base:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.base_changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: ACR Login
+        run: az acr login --name $ACR_NAME
+
+      - name: Build & push base image
+        run: |
+          docker build -f Dockerfile.base \
+            -t $ACR_NAME.azurecr.io/mmctagent-base:latest .
+          docker push $ACR_NAME.azurecr.io/mmctagent-base:latest
+
+  # ── Job 3: Build MCP image, push to ACR, deploy Container App ────────────
+  build-deploy-mcp:
+    needs: [detect-changes, build-base]
+    # Always run this job, even if build-base was skipped (base unchanged)
+    if: always() && !failure() && !cancelled()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: ACR Login
+        run: az acr login --name $ACR_NAME
+
+      - name: Set image tag
+        run: echo "IMAGE_TAG=${GITHUB_SHA::7}" >> $GITHUB_ENV
+
+      - name: Build MCP image
+        run: |
+          docker build -f infra/container_app/Dockerfile.mcp \
+            --build-arg BASE_IMAGE=$ACR_NAME.azurecr.io/mmctagent-base:latest \
+            -t $ACR_NAME.azurecr.io/mmctagent-mcp:$IMAGE_TAG \
+            -t $ACR_NAME.azurecr.io/mmctagent-mcp:latest .
+
+      - name: Push MCP image
+        run: |
+          docker push $ACR_NAME.azurecr.io/mmctagent-mcp:$IMAGE_TAG
+          docker push $ACR_NAME.azurecr.io/mmctagent-mcp:latest
+
+      - name: Parse env vars
+        id: env
+        run: |
+          # Build --set-env-vars flag from MCP_ENV_VARS_PROD secret
+          ENV_FLAGS=""
+          if [ -n "${{ secrets.MCP_ENV_VARS_PROD }}" ]; then
+            while IFS= read -r line; do
+              line=$(echo "$line" | xargs)  # trim whitespace
+              [[ -z "$line" || "$line" == \#* ]] && continue
+              ENV_FLAGS="$ENV_FLAGS $line"
+            done <<< "${{ secrets.MCP_ENV_VARS_PROD }}"
+          fi
+          echo "env_flags=$ENV_FLAGS" >> $GITHUB_OUTPUT
+
+      - name: Deploy to Container App
+        run: |
+          # Check if the Container App already exists
+          if az containerapp show --name $MCP_APP_NAME --resource-group $RESOURCE_GROUP &>/dev/null; then
+            echo "Updating existing Container App..."
+            az containerapp identity assign \
+              --name $MCP_APP_NAME \
+              --resource-group $RESOURCE_GROUP \
+              --user-assigned $USER_ASSIGNED_IDENTITY
+            az containerapp update \
+              --name $MCP_APP_NAME \
+              --resource-group $RESOURCE_GROUP \
+              --image $ACR_NAME.azurecr.io/mmctagent-mcp:$IMAGE_TAG \
+              --set-env-vars \
+                BUILD_SHA=${{ github.sha }} \
+                BUILD_RUN_ID=${{ github.run_id }} \
+                BUILD_RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+                BUILD_TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+                ${{ steps.env.outputs.env_flags }}
+          else
+            echo "Creating new Container App..."
+            az containerapp create \
+              --name $MCP_APP_NAME \
+              --resource-group $RESOURCE_GROUP \
+              --environment $CONTAINER_ENV_NAME \
+              --image $ACR_NAME.azurecr.io/mmctagent-mcp:$IMAGE_TAG \
+              --registry-server $ACR_NAME.azurecr.io \
+              --registry-identity system \
+              --user-assigned $USER_ASSIGNED_IDENTITY \
+              --target-port 8000 \
+              --ingress external \
+              --cpu 4.0 \
+              --memory 8Gi \
+              --min-replicas 2 \
+              --max-replicas 10 \
+              --env-vars \
+                BUILD_SHA=${{ github.sha }} \
+                BUILD_RUN_ID=${{ github.run_id }} \
+                BUILD_RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+                BUILD_TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+                ${{ steps.env.outputs.env_flags }}
+          fi
+
+      - name: Print deployment info
+        run: |
+          FQDN=$(az containerapp show \
+            --name $MCP_APP_NAME \
+            --resource-group $RESOURCE_GROUP \
+            --query "properties.configuration.ingress.fqdn" \
+            --output tsv)
+          echo "## MCP Server Deployed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Health** | https://$FQDN/ |" >> $GITHUB_STEP_SUMMARY
+          echo "| **MCP Endpoint** | https://$FQDN/mcp |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Image Tag** | \`$IMAGE_TAG\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Commit** | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
