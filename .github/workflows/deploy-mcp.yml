@@ -181,7 +181,7 @@ jobs:
               --environment $CONTAINER_ENV_NAME \
               --image $ACR_NAME.azurecr.io/mmctagent-mcp:$IMAGE_TAG \
               --registry-server $ACR_NAME.azurecr.io \
-              --registry-identity system \
+              --registry-identity $USER_ASSIGNED_IDENTITY \
               --user-assigned $USER_ASSIGNED_IDENTITY \
               --target-port 8000 \
               --ingress external \
