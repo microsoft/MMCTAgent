@@ -68,7 +68,10 @@ async def image_query(
                     else:
                         raise Exception(f"Failed to download image source: HTTP {response.status}")
 
-        logger.info(f"Executing MMCT ImageAgent with tools: {tools if tools else 'all'}")
+        # Convert string tool names to ImageQnaTools enum members
+        tools_enum = [ImageQnaTools(t) for t in tools] if tools else None
+
+        logger.info(f"Executing MMCT ImageAgent with tools: {tools_enum if tools_enum else 'all'}")
 
         # Initialize and run ImageAgent
         image_agent = ImageAgent(
@@ -76,7 +79,7 @@ async def image_query(
             query=query,
             provider=get_image_agent_provider(),
             use_critic_agent=use_critic_agent,
-            tools=tools, # ImageAgent handles None by using all defaults
+            tools=tools_enum,
             stream=True,
             use_console=True,
             disable_console_log=False
