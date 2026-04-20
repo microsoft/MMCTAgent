@@ -28,6 +28,7 @@ dependencies = [
     "oss2==2.19.1",
     "python-multipart>=0.0.20,<1.0.0",
     "fastmcp==2.11.3",
+    "fastmcp-docs>=1.0.0",
     "autogen-ext[mcp]",
     # Data Validation & Configuration
     "pydantic>=2.8.0,<3.0.0",

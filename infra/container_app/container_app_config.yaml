@@ -99,7 +99,7 @@ container_app:
     app_name: mmctagent-mcp
     image_name: mmctagent-mcp
     image_tag: latest
-    min_replicas: 1
-    max_replicas: 2
-    cpu: "0.5"
-    memory: 1Gi
+    min_replicas: 2
+    max_replicas: 10
+    cpu: "4.0"
+    memory: 8Gi

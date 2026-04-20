@@ -305,3 +305,75 @@ export AZURE_LOCATION=<your-region>
 - Confirm the MCP Container App is in Running state.
 - Use the HTTPS FQDN (not HTTP): `https://<fqdn>/mcp`.
 - The MCP server uses streamable-HTTP transport — ensure your client supports it.
+
+---
+
+## CI/CD — GitHub Actions
+
+The repository includes a GitHub Actions workflow (`.github/workflows/deploy-mcp.yml`)
+that automatically builds and deploys the MCP server on every push to `main`.
+
+### How it works
+
+| Job | Runs when | What it does |
+| --- | --- | --- |
+| `detect-changes` | Always | Checks if `Dockerfile.base` or `pyproject.toml` changed |
+| `build-base` | Only when deps change | Builds and pushes `mmctagent-base:latest` to ACR |
+| `build-deploy-mcp` | Always | Builds MCP image from ACR base, tags with Git SHA, deploys to Container App |
+
+The base image is only rebuilt when Python dependencies or system packages change,
+saving significant build time on routine code changes.
+
+### Required GitHub Secrets
+
+| Secret | Description |
+| --- | --- |
+| `AZURE_CREDENTIALS` | JSON from `az ad sp create-for-rbac --sdk-auth` |
+| `ACR_NAME` | ACR name without `.azurecr.io` |
+| `AZURE_RESOURCE_GROUP` | Azure resource group |
+| `AZURE_LOCATION` | Azure region (e.g. `eastus`) |
+| `MCP_APP_NAME` | Container App name (default: `mmctagent-mcp`) |
+| `CONTAINER_ENV_NAME` | Container Apps Environment (default: `mmct-env`) |
+| `MCP_ENV_VARS` | Newline-separated `KEY=VALUE` pairs (NEO4J_URI, LLM_ENDPOINT, etc.) |
+
+### One-time setup
+
+```bash
+# 1. Create a service principal
+az ad sp create-for-rbac \
+  --name "github-mmctagent-deploy" \
+  --role Contributor \
+  --scopes /subscriptions/<SUBSCRIPTION_ID>/resourceGroups/<RESOURCE_GROUP> \
+  --sdk-auth
+
+# 2. Grant ACR Push access
+SP_APP_ID=<appId from step 1 JSON>
+ACR_ID=$(az acr show --name <acr-name> --query id -o tsv)
+az role assignment create --assignee $SP_APP_ID --role AcrPush --scope $ACR_ID
+
+# 3. Add the JSON output + other values as GitHub repository secrets
+```
+
+### Build metadata
+
+Every deployment injects build information as environment variables into the
+Container App. The MCP health endpoint (`GET /`) returns this metadata:
+
+```json
+{
+  "status": "healthy",
+  "service": "MMCT Agent MCP Server",
+  "version": "1.0.0",
+  "build": {
+    "sha": "a1b2c3d",
+    "run_id": "12345678",
+    "run_url": "https://github.com/microsoft/MMCTAgent/actions/runs/12345678",
+    "timestamp": "2026-04-20T08:00:00Z"
+  }
+}
+```
+
+### Manual trigger
+
+The workflow supports `workflow_dispatch` — trigger it manually from the
+**Actions** tab in GitHub without pushing a commit.

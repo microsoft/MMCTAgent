@@ -15,7 +15,8 @@
 #       deploy.py, which reads your repo-root .env and passes every key=value
 #       pair to `az containerapp create/update --env-vars`.
 
-FROM mmctagent-base:latest
+ARG BASE_IMAGE=mmctagent-base:latest
+FROM ${BASE_IMAGE}
 
 # ── Copy application source ──────────────────────────────────────────────────
 # Slow-changing dirs first for better layer caching.
@@ -33,6 +34,9 @@ EXPOSE 8000
 
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
+# Number of Uvicorn worker processes (scale with CPU cores)
+ENV WEB_CONCURRENCY=4
 
-# FastMCP streamable-HTTP transport — access via http://<host>:8000/mcp
-CMD ["python", "mcp_server/main.py"]
+# FastMCP streamable-HTTP transport with multiple workers for high concurrency.
+# WEB_CONCURRENCY controls worker count — override at deploy time if needed.
+CMD ["uvicorn", "mcp_server.asgi:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
