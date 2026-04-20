@@ -115,7 +115,10 @@ class UniformFrameExtractionStep(PipelineStep):
         norm_id = normalize_video_id(video_id)
 
         # --- 1. Extract frames to local disk ---
-        output_base = os.path.join(context.output_dir, "uniform_frames")
+        output_base = os.path.join(context.output_dir, "uniform_frames", norm_id)
+        # Clean any leftover frames from prior runs
+        if os.path.exists(output_base):
+            shutil.rmtree(output_base)
         os.makedirs(output_base, exist_ok=True)
 
         loop = asyncio.get_running_loop()
