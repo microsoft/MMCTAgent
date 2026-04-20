@@ -42,4 +42,4 @@ _thread.join()
 logger.info("Tool documentation registered at /docs")
 
 # Create the ASGI application for Uvicorn
-app = mcp.http_app(transport="streamable-http")
+app = mcp.http_app(transport="streamable-http", stateless_http=True)
