@@ -34,6 +34,11 @@ from mmct.video_pipeline.graph_agent.agents.image_agent import ImageAgent
 from mmct.video_pipeline.graph_agent.agents.critic_agent import CriticAgent
 from mmct.video_pipeline.graph_agent.query.neo4j_provider import Neo4jQueryProvider
 from mmct.video_pipeline.graph_agent.schemas import QueryResponse
+from mmct.video_pipeline.graph_agent.middleware import (
+    ToolMiddleware,
+    set_query_context,
+    reset_query_context,
+)
 from mmct.image_pipeline.config import ImageAgentProviderConfig
 
 _log = logger.bind(component="agent")
@@ -247,6 +252,7 @@ class GraphOrchestrator:
         use_critic: bool = True,
         max_turns: int = 20,
         video_catalog: Optional[str] = None,
+        tool_middleware: Optional[List[ToolMiddleware]] = None,
     ):
         """Initializes the GraphOrchestrator.
 
@@ -258,6 +264,9 @@ class GraphOrchestrator:
             use_critic: If True, includes a critic agent in the swarm.
             max_turns: Maximum conversation turns before termination.
             video_catalog: Optional text summary for planner tool selection context.
+            tool_middleware: Optional list of ToolMiddleware instances.
+                Each middleware wraps agent tool callables with before/after
+                hooks for cross-cutting concerns (auth, logging, etc.).
         """
         self.model_client = model_client
         self.neo4j_provider = neo4j_provider
@@ -266,6 +275,7 @@ class GraphOrchestrator:
         self.use_critic = use_critic
         self.max_turns = max_turns
         self.video_catalog = video_catalog
+        self._tool_middleware = tool_middleware or []
 
         self._agents_initialized = False
         self._image_agent_wrapper = None
@@ -289,6 +299,7 @@ class GraphOrchestrator:
             model_client=self.model_client,
             neo4j_provider=self.neo4j_provider,
             model_context=BufferedChatCompletionContext(buffer_size=VIDEO_AGENT_BUFFER_SIZE),
+            tool_middleware=self._tool_middleware,
         )
 
         if self.image_llm_provider:
@@ -298,6 +309,7 @@ class GraphOrchestrator:
                 model_client=self.model_client,
                 storage_provider=self.storage_provider,
                 model_context=BufferedChatCompletionContext(buffer_size=IMAGE_AGENT_BUFFER_SIZE),
+                tool_middleware=self._tool_middleware,
             )
 
         if self.use_critic:
@@ -367,6 +379,7 @@ class GraphOrchestrator:
         video_id: Optional[str] = None,
         video_ids: Optional[List[str]] = None,
         request_id: str = "",
+        query_context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Processes a query through the graph swarm pipeline.
 
@@ -375,6 +388,8 @@ class GraphOrchestrator:
             video_id: Optional single video ID scope.
             video_ids: Optional list of video ID scopes.
             request_id: Optional correlation ID for identification.
+            query_context: Optional per-query context dictionary for
+                middleware (e.g. ``{"user_id": "u123", "roles": [...]}``).
 
         Returns:
             Dict[str, Any]: A response dictionary containing the answer, 
@@ -399,6 +414,7 @@ class GraphOrchestrator:
         team = self._build_swarm()
         task = self._build_task(user_query, video_id, video_ids)
 
+        ctx_token = set_query_context(query_context or {})
         try:
             final_result = None
             async for message in team.run_stream(task=task):
@@ -424,6 +440,7 @@ class GraphOrchestrator:
             return response
 
         finally:
+            reset_query_context(ctx_token)
             if self._image_agent_wrapper:
                 self._image_agent_wrapper.cleanup()
 
@@ -433,6 +450,7 @@ class GraphOrchestrator:
         video_id: Optional[str] = None,
         video_ids: Optional[List[str]] = None,
         request_id: str = "",
+        query_context: Optional[Dict[str, Any]] = None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """Processes a query with real-time streaming updates.
 
@@ -441,6 +459,8 @@ class GraphOrchestrator:
             video_id: Optional single video ID scope.
             video_ids: Optional list of video ID scopes.
             request_id: Optional correlation ID.
+            query_context: Optional per-query context dictionary for
+                middleware (e.g. ``{"user_id": "u123", "roles": [...]}``).
 
         Yields:
             Dict[str, Any]: Status messages or the final structured response.
@@ -458,6 +478,7 @@ class GraphOrchestrator:
         team = self._build_swarm()
         task = self._build_task(user_query, video_id, video_ids)
 
+        ctx_token = set_query_context(query_context or {})
         try:
             async for message in team.run_stream(task=task):
                 _log_message(message, token_usage, request_id=request_id)
@@ -484,6 +505,7 @@ class GraphOrchestrator:
                         "content": content,
                     }
         finally:
+            reset_query_context(ctx_token)
             if self._image_agent_wrapper:
                 self._image_agent_wrapper.cleanup()
 

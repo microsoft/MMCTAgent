@@ -22,6 +22,7 @@ from mmct.image_pipeline.core.tools.ocr import OcrTool
 from mmct.image_pipeline.config import ImageAgentProviderConfig
 from mmct.providers.base import BaseStorageProvider
 from mmct.video_pipeline.graph_agent.prompts.image_analyst import IMAGE_AGENT_SYSTEM_PROMPT
+from mmct.video_pipeline.graph_agent.middleware import ToolMiddleware, apply_middleware
 from loguru import logger
 
 
@@ -82,6 +83,7 @@ class ImageAgent:
         storage_provider: Optional[BaseStorageProvider] = None,
         local_frame_dir: str = "./downloaded_frames",
         model_context: Optional[ChatCompletionContext] = None,
+        tool_middleware: Optional[list[ToolMiddleware]] = None,
     ):
         """Initialize the Image agent.
 
@@ -91,6 +93,8 @@ class ImageAgent:
             storage_provider: Optional blob storage for downloading frames.
             local_frame_dir: Directory to store downloaded frames.
             model_context: Optional shared model context for KV cache.
+            tool_middleware: Optional list of ToolMiddleware instances to
+                wrap tool callables with before/after hooks.
         """
         self.provider = provider
         self.model_client = model_client
@@ -99,6 +103,8 @@ class ImageAgent:
         self.model_context = model_context
         self._downloaded_files: list[str] = []
         self.tools = self._create_tool_wrappers()
+        if tool_middleware:
+            self.tools = [apply_middleware(t, tool_middleware) for t in self.tools]
         self.agent = self._create_agent()
 
     async def _download_frame_from_blob(self, blob_url_or_path: str) -> str:

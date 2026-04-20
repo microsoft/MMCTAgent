@@ -15,6 +15,7 @@ from autogen_agentchat.agents import AssistantAgent
 from autogen_core.model_context import ChatCompletionContext
 
 from mmct.video_pipeline.graph_agent.prompts.video_agent import VIDEO_AGENT_SYSTEM_PROMPT
+from mmct.video_pipeline.graph_agent.middleware import ToolMiddleware, apply_middleware
 
 
 class VideoAgent:
@@ -40,6 +41,7 @@ class VideoAgent:
         model_client,
         neo4j_provider,
         model_context: Optional[ChatCompletionContext] = None,
+        tool_middleware: Optional[List[ToolMiddleware]] = None,
     ):
         """Initialize the Video agent.
 
@@ -47,12 +49,16 @@ class VideoAgent:
             model_client: AutoGen model client.
             neo4j_provider: Neo4jQueryProvider instance.
             model_context: Optional shared model context for KV cache.
+            tool_middleware: Optional list of ToolMiddleware instances to
+                wrap tool callables with before/after hooks.
         """
         self.model_client = model_client
         self.neo4j_provider = neo4j_provider
         self.model_context = model_context
 
         self._initialize_tools()
+        if tool_middleware:
+            self.tools = [apply_middleware(t, tool_middleware) for t in self.tools]
         self.agent = self._create_agent()
 
     def _initialize_tools(self):
