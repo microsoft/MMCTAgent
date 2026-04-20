@@ -46,6 +46,11 @@ from mmct.video_pipeline.graph_state.tools.image_analysis import ImageAnalysisEx
 from mmct.video_pipeline.graph_state.query.neo4j_provider import Neo4jQueryProvider
 from mmct.video_pipeline.graph_state.agents.planner_agent import PlannerAgent
 from mmct.video_pipeline.graph_state.agents.critic_agent import CriticAgent
+from mmct.video_pipeline.graph_state.hooks import StateHook, run_before_hooks, run_after_hooks
+from mmct.video_pipeline.graph_agent.middleware import (
+    set_query_context,
+    reset_query_context,
+)
 
 _log = logger.bind(component="state")
 class StateOrchestrator:
@@ -72,6 +77,7 @@ class StateOrchestrator:
         use_critic: bool = True,
         video_catalog: Optional[str] = None,
         max_turns: int = 20,
+        state_hooks: Optional[List[StateHook]] = None,
     ):
         """Initializes the StateOrchestrator.
 
@@ -83,6 +89,8 @@ class StateOrchestrator:
             use_critic: If True, enables the critic revision cycle.
             video_catalog: Optional pre-generated metadata for the planner context.
             max_turns: Conserved for interface parity with GraphOrchestrator (unused).
+            state_hooks: Optional list of StateHook instances for before/after
+                state interception (e.g., auth filtering, logging).
         """
         self.model_client = model_client
         self.neo4j_provider = neo4j_provider
@@ -90,6 +98,7 @@ class StateOrchestrator:
         self.image_llm_provider = image_llm_provider
         self.use_critic = use_critic
         self.video_catalog = video_catalog
+        self._state_hooks: List[StateHook] = state_hooks or []
 
         self._retrieval = RetrievalExecutor(neo4j_provider)
         self._discovery = VideoDiscoveryExecutor(neo4j_provider)
@@ -106,6 +115,7 @@ class StateOrchestrator:
         video_id: Optional[str] = None,
         video_ids: Optional[List[str]] = None,
         request_id: str = "",
+        query_context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Processes a query through the state machine pipeline.
 
@@ -114,6 +124,8 @@ class StateOrchestrator:
             video_id: Single video ID scope.
             video_ids: Multiple video ID scopes.
             request_id: Caller-provided request identifier for tracing.
+            query_context: Optional per-query metadata (user_id, roles, etc.)
+                accessible from state hooks via ``get_query_context()``.
 
         Returns:
             Dict[str, Any]: Dictionary with answer, sources, and usage metrics.
@@ -135,6 +147,7 @@ class StateOrchestrator:
             video_catalog=self.video_catalog,
         )
 
+        token = set_query_context(query_context or {})
         try:
             response = await self._run_state_machine(ctx)
             elapsed = time.time() - start
@@ -146,6 +159,7 @@ class StateOrchestrator:
             _log.info(f"{'=' * 60}")
             return response
         finally:
+            reset_query_context(token)
             self._image_analyzer.cleanup()
 
     async def query_stream(
@@ -154,6 +168,7 @@ class StateOrchestrator:
         video_id: Optional[str] = None,
         video_ids: Optional[List[str]] = None,
         request_id: str = "",
+        query_context: Optional[Dict[str, Any]] = None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """Processes a query with real-time streaming state events.
 
@@ -162,6 +177,8 @@ class StateOrchestrator:
             video_id: Optional single video ID scope.
             video_ids: Optional list of video ID scopes.
             request_id: Optional correlation ID.
+            query_context: Optional per-query metadata accessible from state
+                hooks via ``get_query_context()``.
 
         Yields:
             Dict[str, Any]: State transition messages or the final result.
@@ -181,6 +198,7 @@ class StateOrchestrator:
         llm = StructuredLLMClient(self.model_client)
         state = QueryState.PARSE_INPUT
 
+        token = set_query_context(query_context or {})
         try:
             while state != QueryState.SUBMIT:
                 yield {
@@ -210,6 +228,7 @@ class StateOrchestrator:
                 },
             }
         finally:
+            reset_query_context(token)
             self._image_analyzer.cleanup()
 
     async def close(self) -> None:
@@ -235,35 +254,45 @@ class StateOrchestrator:
         _log.info(f"[{ctx.request_id}] {state.name}")
         ctx.log_state(state)
 
+        # Before hooks (first → last)
+        if self._state_hooks:
+            await run_before_hooks(self._state_hooks, state, ctx)
+
         match state:
             case QueryState.PARSE_INPUT:
-                return self._state_parse_input(ctx)
+                next_state = self._state_parse_input(ctx)
             case QueryState.PLAN:
-                return await self._planner.run(ctx)
+                next_state = await self._planner.run(ctx)
             case QueryState.VALIDATE_PLAN:
-                return self._state_validate_plan(ctx)
+                next_state = self._state_validate_plan(ctx)
             case QueryState.DISCOVER_VIDEOS:
-                return await self._state_discover_videos(ctx)
+                next_state = await self._state_discover_videos(ctx)
             case QueryState.RETRIEVE:
-                return await self._state_retrieve(ctx)
+                next_state = await self._state_retrieve(ctx)
             case QueryState.CHECK_EVIDENCE:
-                return self._state_check_evidence(ctx)
+                next_state = self._state_check_evidence(ctx)
             case QueryState.EXPAND_CONTEXT:
-                return await self._state_expand_context(ctx, llm)
+                next_state = await self._state_expand_context(ctx, llm)
             case QueryState.REPHRASE:
-                return await self._state_rephrase(ctx, llm)
+                next_state = await self._state_rephrase(ctx, llm)
             case QueryState.ANALYZE_IMAGES:
-                return await self._state_analyze_images(ctx)
+                next_state = await self._state_analyze_images(ctx)
             case QueryState.SYNTHESIZE:
-                return await self._state_synthesize(ctx, llm)
+                next_state = await self._state_synthesize(ctx, llm)
             case QueryState.CRITIQUE:
-                return await self._critic.run(ctx)
+                next_state = await self._critic.run(ctx)
             case QueryState.REVISE:
-                return await self._state_revise(ctx, llm)
+                next_state = await self._state_revise(ctx, llm)
             case QueryState.ERROR:
-                return QueryState.SUBMIT
+                next_state = QueryState.SUBMIT
             case _:
                 raise StateTransitionError(state, f"Unhandled state: {state}")
+
+        # After hooks (last → first), may override next_state
+        if self._state_hooks:
+            next_state = await run_after_hooks(self._state_hooks, state, ctx, next_state)
+
+        return next_state
 
     def _state_parse_input(self, ctx: QueryContext) -> QueryState:
         """Determines video scope and ID constraints from input parameters."""
@@ -631,6 +660,7 @@ async def process_query(
     video_id: Optional[str] = None,
     video_ids: Optional[List[str]] = None,
     request_id: str = "",
+    query_context: Optional[Dict[str, Any]] = None,
     **orchestrator_kwargs,
 ) -> Dict[str, Any]:
     """Convenience functional entry point for the state machine pipeline.
@@ -640,6 +670,7 @@ async def process_query(
         video_id: Optional ID to restrict search to a single video.
         video_ids: Optional list of IDs to restrict search scope.
         request_id: Optional correlation ID.
+        query_context: Optional per-query metadata for state hooks.
         **orchestrator_kwargs: Dependencies passed to StateOrchestrator.
 
     Returns:
@@ -652,6 +683,7 @@ async def process_query(
             video_id=video_id,
             video_ids=video_ids,
             request_id=request_id,
+            query_context=query_context,
         )
     finally:
         await orch.close()
