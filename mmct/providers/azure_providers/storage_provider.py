@@ -217,15 +217,19 @@ class AzureStorageProvider(BaseStorageProvider):
     async def check_health(self) -> Dict[str, Any]:
         """Verify Azure Blob Storage connectivity.
 
-        Calls ``get_account_information()`` which is the lightest
-        authenticated round-trip to the storage account.
+        Lists the default container to confirm the service client can
+        authenticate and reach the storage account.
         """
         try:
-            info = await self.service_client.get_account_information()
+            container = self.service_client.get_container_client(
+                self.keyframe_container_name
+            )
+            exists = await container.exists()
+            await container.close()
             return {
                 "status": "ok",
-                "sku_name": info.get("sku_name", "unknown"),
-                "account_kind": info.get("account_kind", "unknown"),
+                "container": self.keyframe_container_name,
+                "container_exists": exists,
             }
         except Exception as e:
             return {"status": "error", "error": str(e)}

@@ -277,23 +277,33 @@ jobs:
           echo "## Readiness Check" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          # Wait for new revision to become active
-          sleep 15
-
-          # Retry up to 3 times — the new revision may still be starting
-          for attempt in 1 2 3; do
-            HTTP_CODE=$(curl -s -o /tmp/readyz_response.json -w "%{http_code}" --max-time 30 "https://$FQDN/readyz" 2>/dev/null || echo "000")
-            if [ "$HTTP_CODE" != "000" ]; then
+          # Wait for health endpoint to return 200 (service may take up to 60s to start)
+          echo "Waiting for health endpoint..."
+          for i in $(seq 1 12); do
+            HEALTH_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "https://$FQDN/" 2>/dev/null) || true
+            if [ "$HEALTH_CODE" = "200" ]; then
+              echo "Health check passed on attempt $i"
               break
             fi
-            echo "Attempt $attempt: container not reachable (HTTP $HTTP_CODE), retrying in 10s..."
+            echo "Health attempt $i/12: HTTP $HEALTH_CODE, retrying in 5s..."
+            sleep 5
+          done
+
+          # Now call readyz for external service connectivity
+          READYZ=""
+          for attempt in 1 2 3; do
+            HTTP_CODE=$(curl -s -o /tmp/readyz_response.json -w "%{http_code}" --max-time 30 "https://$FQDN/readyz" 2>/dev/null) || true
+            if [ -f /tmp/readyz_response.json ] && [ "$HTTP_CODE" -gt 0 ] 2>/dev/null; then
+              READYZ=$(cat /tmp/readyz_response.json)
+              break
+            fi
+            echo "Readyz attempt $attempt: container not reachable (HTTP $HTTP_CODE), retrying in 10s..."
+            rm -f /tmp/readyz_response.json
             sleep 10
           done
 
-          if [ "$HTTP_CODE" = "000" ]; then
+          if [ -z "$READYZ" ]; then
             READYZ="{\"ready\":false,\"error\":\"MCP server at https://$FQDN/readyz is unreachable after 3 attempts. The container may still be starting or the ingress is misconfigured.\"}"
-          else
-            READYZ=$(cat /tmp/readyz_response.json)
           fi
           echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
           echo "$READYZ" | python3 -m json.tool >> $GITHUB_STEP_SUMMARY 2>/dev/null || echo "$READYZ" >> $GITHUB_STEP_SUMMARY
