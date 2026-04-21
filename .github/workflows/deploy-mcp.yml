@@ -259,3 +259,35 @@ jobs:
           echo "| **MCP Endpoint** | https://$FQDN/mcp |" >> $GITHUB_STEP_SUMMARY
           echo "| **Image Tag** | \`$IMAGE_TAG\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Commit** | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Check Neo4j connectivity
+        continue-on-error: true
+        run: |
+          FQDN=$(az containerapp show \
+            --name $MCP_APP_NAME \
+            --resource-group $RESOURCE_GROUP \
+            --query "properties.configuration.ingress.fqdn" -o tsv)
+
+          OUTBOUND_IP=$(az containerapp env show \
+            --name $CONTAINER_ENV_NAME \
+            --resource-group $RESOURCE_GROUP \
+            --query "properties.staticIp" -o tsv 2>/dev/null || echo "unknown")
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Readiness Check" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Wait for new revision to become active
+          sleep 15
+
+          READYZ=$(curl -s --max-time 30 "https://$FQDN/readyz" || echo '{"ready":false,"error":"endpoint unreachable"}')
+          echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
+          echo "$READYZ" | python3 -m json.tool >> $GITHUB_STEP_SUMMARY 2>/dev/null || echo "$READYZ" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Container Apps Environment Static IP:** \`$OUTBOUND_IP\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "If Neo4j or LLM checks fail, ensure the service allows inbound from:" >> $GITHUB_STEP_SUMMARY
+          echo "- Static IP: \`$OUTBOUND_IP\`" >> $GITHUB_STEP_SUMMARY
+          echo "- FQDN: \`$FQDN\`" >> $GITHUB_STEP_SUMMARY

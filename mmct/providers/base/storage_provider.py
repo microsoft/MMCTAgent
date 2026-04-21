@@ -6,7 +6,7 @@ and cloud storage backends.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, Dict
 
 class BaseStorageProvider(ABC):
     """Abstract base class for storage providers.
@@ -14,6 +14,22 @@ class BaseStorageProvider(ABC):
     All storage provider implementations must inherit from this class to handle 
     file lifecycle operations such as uploading, URL generation, and cleanup.
     """
+
+    async def check_health(self) -> Dict[str, Any]:
+        """Verify that the storage backend is reachable.
+
+        Default implementation attempts to generate a URL for a sentinel key.
+        Subclasses may override with a more efficient connectivity check.
+
+        Returns:
+            Dict with ``{"status": "ok"}`` on success,
+            or ``{"status": "error", "error": "..."}`` on failure.
+        """
+        try:
+            await self.get_file_url("__health_check__")
+            return {"status": "ok"}
+        except Exception as e:
+            return {"status": "error", "error": str(e)}
 
     @abstractmethod
     async def get_file_url(self, file_name: str, **kwargs: Any) -> str:

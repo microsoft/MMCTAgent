@@ -40,6 +40,19 @@ class BaseGraphQueryProvider(ABC):
     # Lifecycle
     # =========================================================================
 
+    async def check_health(self) -> Dict[str, Any]:
+        """Verify that the graph database is reachable.
+
+        Returns:
+            Dict with at least ``{"status": "ok"}`` on success,
+            or ``{"status": "error", "error": "..."}`` on failure.
+        """
+        try:
+            ids = await self.get_all_video_ids()
+            return {"status": "ok", "video_count": len(ids)}
+        except Exception as e:
+            return {"status": "error", "error": str(e)}
+
     @abstractmethod
     async def close(self) -> None:
         """Close the underlying driver and release pooled connections."""

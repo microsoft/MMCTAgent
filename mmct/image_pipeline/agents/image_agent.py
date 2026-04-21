@@ -1,7 +1,7 @@
 # importing the required files
 import asyncio
 from enum import Enum
-from typing import Any, List, Union, AsyncGenerator
+from typing import Any, Dict, List, Union, AsyncGenerator
 from typing_extensions import Annotated
 from autogen_agentchat.agents import AssistantAgent
 from autogen_agentchat.teams import SelectorGroupChat, RoundRobinGroupChat
@@ -422,6 +422,19 @@ class ImageAgent:
         except Exception as e:
             logger.exception(f"Exception occurred while executing the MMCT Image Agentic Flow.")
             raise ProviderException(f"ImageAgent execution failed: {e}", "AGENT_CALL_FAILED")
+
+    async def check_health(self) -> Dict[str, Any]:
+        """Verify connectivity of the underlying LLM provider.
+
+        Returns:
+            Dict mapping provider name to its health status.
+        """
+        results: Dict[str, Any] = {}
+        if self.llm_provider is not None and hasattr(self.llm_provider, "check_health"):
+            results["llm"] = await self.llm_provider.check_health()
+        else:
+            results["llm"] = {"status": "not_configured"}
+        return results
 
 if __name__ == "__main__":
     # Example usage - replace with your actual values

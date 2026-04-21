@@ -45,3 +45,48 @@ async def health_check(request):
             "timestamp": os.getenv("BUILD_TIMESTAMP", "n/a"),
         }
     })
+
+
+@mcp.custom_route("/readyz", methods=["GET"])
+async def readiness_check(request):
+    """
+    Readiness probe that verifies connectivity to external dependencies
+    by delegating to the singleton pipeline and image provider health checks.
+
+    Each provider implements its own ``check_health()`` method, so this
+    endpoint works regardless of the underlying database or LLM backend.
+    """
+    from mcp_server.tools.video_query_tool import get_pipeline
+    from mcp_server.tools.image_query_tool import check_image_health
+
+    checks = {}
+    all_ok = True
+
+    # --- Video pipeline (graph_state) providers ---
+    try:
+        pipeline = get_pipeline("graph_state")
+        video_health = await pipeline.check_health()
+        checks["video_pipeline"] = video_health
+        for v in video_health.values():
+            if isinstance(v, dict) and v.get("status") not in ("ok", "not_configured"):
+                all_ok = False
+    except Exception as e:
+        checks["video_pipeline"] = {"status": "error", "error": str(e)}
+        all_ok = False
+
+    # --- Image pipeline LLM provider ---
+    try:
+        image_health = await check_image_health()
+        checks["image_pipeline"] = image_health
+        for v in image_health.values():
+            if isinstance(v, dict) and v.get("status") not in ("ok", "not_configured"):
+                all_ok = False
+    except Exception as e:
+        checks["image_pipeline"] = {"status": "error", "error": str(e)}
+        all_ok = False
+
+    status_code = 200 if all_ok else 503
+    return JSONResponse(
+        {"ready": all_ok, "checks": checks},
+        status_code=status_code,
+    )

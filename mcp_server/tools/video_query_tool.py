@@ -11,6 +11,20 @@ from mcp_server.server import mcp
 from mmct.video_pipeline.query_pipeline import VideoQueryPipeline, QueryPipelineMode
 from config.provider_config import get_query_pipeline_providers
 
+# Singleton pipeline instances — one per mode, reused across requests.
+_pipelines: dict[str, VideoQueryPipeline] = {}
+
+
+def get_pipeline(mode: str) -> VideoQueryPipeline:
+    """Return a singleton VideoQueryPipeline for the given mode."""
+    if mode not in _pipelines:
+        _pipelines[mode] = VideoQueryPipeline(
+            mode=mode,
+            use_provider_defaults=False,
+            **get_query_pipeline_providers().__dict__
+        )
+    return _pipelines[mode]
+
 @mcp.tool(
     name="video_query",
     description="""
@@ -49,13 +63,7 @@ async def video_query(
     try:
         logger.info(f"Executing video_query: {query} (mode={mode}, video_id={video_id}, video_ids={video_ids})")
         
-        # Initialize the pipeline with the selected execution mode
-        # Providers are injected from the centralized configuration
-        pipeline = VideoQueryPipeline(
-            mode=mode,
-            use_provider_defaults=False,
-            **get_query_pipeline_providers().__dict__
-        )
+        pipeline = get_pipeline(mode)
         
         # Execute the query through the pipeline orchestrator
         result = await pipeline.query(

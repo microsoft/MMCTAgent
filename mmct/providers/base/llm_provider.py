@@ -15,6 +15,22 @@ class BaseLLMProvider(ABC):
     the rest of the MMCT ecosystem.
     """
 
+    async def check_health(self) -> Dict[str, Any]:
+        """Verify that the LLM service is reachable and responding.
+
+        Returns:
+            Dict with at least ``{"status": "ok"}`` on success,
+            or ``{"status": "error", "error": "..."}`` on failure.
+        """
+        try:
+            await self.chat_completion(
+                messages=[{"role": "user", "content": "ping"}],
+                max_tokens=1,
+            )
+            return {"status": "ok"}
+        except Exception as e:
+            return {"status": "error", "error": str(e)}
+
     @abstractmethod
     async def chat_completion(self, messages: List[Dict[str, str]], **kwargs: Any) -> Dict[str, Any]:
         """Generates a chat completion response from a list of messages.

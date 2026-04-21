@@ -214,6 +214,22 @@ class AzureStorageProvider(BaseStorageProvider):
             if client:
                 await client.close()
 
+    async def check_health(self) -> Dict[str, Any]:
+        """Verify Azure Blob Storage connectivity.
+
+        Calls ``get_account_information()`` which is the lightest
+        authenticated round-trip to the storage account.
+        """
+        try:
+            info = await self.service_client.get_account_information()
+            return {
+                "status": "ok",
+                "sku_name": info.get("sku_name", "unknown"),
+                "account_kind": info.get("account_kind", "unknown"),
+            }
+        except Exception as e:
+            return {"status": "error", "error": str(e)}
+
     async def close(self) -> None:
         """Closes the Azure Blob Storage service client."""
         if self.service_client:

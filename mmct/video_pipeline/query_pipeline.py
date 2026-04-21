@@ -93,6 +93,13 @@ class VideoQueryPipeline:
             if self.mode == QueryPipelineMode.GRAPH_AGENT
             else StateOrchestrator
         )
+
+        # Store providers for health checks
+        self._neo4j_provider = neo4j_provider
+        self._model_client = model_client
+        self._image_llm_provider = image_llm_provider
+        self._storage_provider = storage_provider
+
         self._orchestrator = orchestrator_cls(
             model_client=model_client,
             neo4j_provider=neo4j_provider,
@@ -158,3 +165,34 @@ class VideoQueryPipeline:
 
     async def close(self) -> None:
         await self._orchestrator.close()
+
+    async def check_health(self) -> Dict[str, Any]:
+        """Verify connectivity of all underlying providers.
+
+        Returns:
+            Dict mapping provider name to its health status. Each entry
+            contains at least ``{"status": "ok"|"error"|"not_configured"}``.
+            Works with any provider implementation (Neo4j, custom, etc.)
+            since it delegates to the provider's own ``check_health()``.
+        """
+        results: Dict[str, Any] = {}
+
+        # Graph database provider
+        if self._neo4j_provider is not None:
+            results["graph_db"] = await self._neo4j_provider.check_health()
+        else:
+            results["graph_db"] = {"status": "not_configured"}
+
+        # LLM provider (image_llm_provider exposes check_health via BaseLLMProvider)
+        if self._image_llm_provider is not None and hasattr(self._image_llm_provider, "check_health"):
+            results["llm"] = await self._image_llm_provider.check_health()
+        else:
+            results["llm"] = {"status": "not_configured"}
+
+        # Storage provider (blob / file storage)
+        if self._storage_provider is not None and hasattr(self._storage_provider, "check_health"):
+            results["storage"] = await self._storage_provider.check_health()
+        else:
+            results["storage"] = {"status": "not_configured"}
+
+        return results
