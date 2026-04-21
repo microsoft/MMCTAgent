@@ -14,7 +14,8 @@ from functools import lru_cache
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from azure.identity import ChainedTokenCredential, AzureCliCredential, DefaultAzureCredential
+import os
+from azure.identity import ChainedTokenCredential, AzureCliCredential, DefaultAzureCredential, ManagedIdentityCredential
 from dotenv import find_dotenv
 from loguru import logger
 from pydantic import Field
@@ -116,10 +117,18 @@ def resolve_credentials():
     Tries AzureCliCredential first (local dev / CI with ``az login``),
     then falls back to DefaultAzureCredential (managed identity,
     workload identity, environment variables, etc.).
+
+    When ``AZURE_CLIENT_ID`` is set (e.g. in Container Apps with a
+    user-assigned managed identity), it is passed explicitly so that
+    ManagedIdentityCredential targets the correct identity instead of
+    defaulting to the system-assigned one.
     """
+    managed_identity_client_id = os.environ.get("AZURE_CLIENT_ID")
     return ChainedTokenCredential(
         AzureCliCredential(),
-        DefaultAzureCredential(),
+        DefaultAzureCredential(
+            managed_identity_client_id=managed_identity_client_id,
+        ),
     )
 
 
