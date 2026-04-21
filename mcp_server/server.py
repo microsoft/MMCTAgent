@@ -11,6 +11,12 @@ from fastmcp import FastMCP
 from loguru import logger
 from starlette.responses import JSONResponse
 
+from mmct.utils.logging_config import log_manager
+
+# Initialise logging sinks — console always, Azure Monitor when configured.
+log_manager.enable_console()
+log_manager.enable_azure_monitor()
+
 try:
     logger.info("Instantiating the FastMCP object")
     mcp = FastMCP(name="MMCT Agent MCP Server")

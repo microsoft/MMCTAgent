@@ -161,6 +161,37 @@ jobs:
           echo "client_id=$CLIENT_ID" >> $GITHUB_OUTPUT
           echo "Resolved managed identity client ID: $CLIENT_ID"
 
+      - name: Ensure Application Insights exists
+        id: appinsights
+        run: |
+          APPINSIGHTS_NAME="mmctagent-insights"
+          if az monitor app-insights component show --app $APPINSIGHTS_NAME --resource-group $RESOURCE_GROUP &>/dev/null; then
+            echo "Application Insights $APPINSIGHTS_NAME already exists."
+          else
+            echo "Creating Application Insights: $APPINSIGHTS_NAME..."
+            WORKSPACE_ID=$(az containerapp env show \
+              --name $CONTAINER_ENV_NAME \
+              --resource-group $RESOURCE_GROUP \
+              --query "properties.appLogsConfiguration.logAnalyticsConfiguration.customerId" -o tsv)
+            WORKSPACE_RESOURCE_ID=$(az monitor log-analytics workspace list \
+              --resource-group $RESOURCE_GROUP \
+              --query "[?customerId=='$WORKSPACE_ID'].id" -o tsv)
+            az monitor app-insights component create \
+              --app $APPINSIGHTS_NAME \
+              --location $LOCATION \
+              --resource-group $RESOURCE_GROUP \
+              --kind web \
+              --application-type web \
+              --workspace "$WORKSPACE_RESOURCE_ID" \
+              -o none
+          fi
+          CONN_STR=$(az monitor app-insights component show \
+            --app $APPINSIGHTS_NAME \
+            --resource-group $RESOURCE_GROUP \
+            --query connectionString -o tsv)
+          echo "appinsights_conn_str=$CONN_STR" >> $GITHUB_OUTPUT
+          echo "Resolved App Insights connection string"
+
       - name: Deploy to Container App
         run: |
           # Check if the Container App already exists
@@ -181,6 +212,7 @@ jobs:
               --image $ACR_NAME.azurecr.io/mmctagent-mcp:$IMAGE_TAG \
               --set-env-vars \
                 AZURE_CLIENT_ID=${{ steps.identity.outputs.client_id }} \
+                APPLICATIONINSIGHTS_CONNECTION_STRING="${{ steps.appinsights.outputs.appinsights_conn_str }}" \
                 BUILD_SHA=${{ github.sha }} \
                 BUILD_RUN_ID=${{ github.run_id }} \
                 BUILD_RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
@@ -204,6 +236,7 @@ jobs:
               --max-replicas 10 \
               --env-vars \
                 AZURE_CLIENT_ID=${{ steps.identity.outputs.client_id }} \
+                APPLICATIONINSIGHTS_CONNECTION_STRING="${{ steps.appinsights.outputs.appinsights_conn_str }}" \
                 BUILD_SHA=${{ github.sha }} \
                 BUILD_RUN_ID=${{ github.run_id }} \
                 BUILD_RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \

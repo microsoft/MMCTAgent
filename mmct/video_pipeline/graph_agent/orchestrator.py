@@ -64,7 +64,8 @@ def _log_message(message: Any, token_usage: TokenUsage, request_id: str = "") ->
     """Logs a formatted agentic message or event via loguru.
 
     Tracks accumulated token usage and logs different message types
-    (tool calls, handoffs, text results) at DEBUG level.
+    (tool calls, handoffs, text results) with structured extras for
+    Azure Monitor filtering.
 
     Args:
         message: The message object or event (from AutoGen).
@@ -74,44 +75,51 @@ def _log_message(message: Any, token_usage: TokenUsage, request_id: str = "") ->
     """
     source = getattr(message, "source", "Unknown")
     rid = f"[{request_id}] " if request_id else ""
+    bound = _log.bind(request_id=request_id, agent=source)
 
     if hasattr(message, "models_usage") and message.models_usage:
         token_usage.prompt_tokens += message.models_usage.prompt_tokens
         token_usage.completion_tokens += message.models_usage.completion_tokens
 
     if isinstance(message, TaskResult):
-        _log.info(f"{rid}[System] Task Completed")
-        _log.info(f"{rid}Messages: {len(message.messages)}")
-        _log.info(f"{rid}Finish reason: {message.stop_reason}")
-        _log.info(f"{rid}Prompt tokens: {token_usage.prompt_tokens}")
-        _log.info(f"{rid}Completion tokens: {token_usage.completion_tokens}")
+        bound.info(f"{rid}[System] Task Completed")
+        bound.info(f"{rid}Messages: {len(message.messages)}")
+        bound.info(f"{rid}Finish reason: {message.stop_reason}")
+        bound.info(f"{rid}Prompt tokens: {token_usage.prompt_tokens}")
+        bound.info(f"{rid}Completion tokens: {token_usage.completion_tokens}")
     elif isinstance(message, TextMessage):
-        _log.debug(f"{rid}[{source}] {message.content}")
+        text = message.content
+        if len(text) > 500:
+            text = text[:500] + "… [truncated]"
+        bound.info(f"{rid}[{source}] {text}")
     elif isinstance(message, HandoffMessage):
-        _log.debug(f"{rid}[{source}] Handoff → {message.target}")
+        bound.info(f"{rid}[{source}] Handoff → {message.target}")
         if message.content:
-            _log.debug(f"{rid}  Message: {message.content}")
+            bound.info(f"{rid}  Message: {message.content}")
     elif isinstance(message, ToolCallRequestEvent):
         content = message.content
         if isinstance(content, list):
             for tc in content:
-                _log.debug(f"{rid}[{source}] Tool Call: {tc.name}")
-                _log.debug(f"{rid}  Args: {tc.arguments}")
+                bound.bind(tool_name=tc.name).info(f"{rid}[{source}] Tool Call: {tc.name}")
+                bound.info(f"{rid}  Args: {tc.arguments}")
         else:
-            _log.debug(f"{rid}[{source}] Tool Call: {content}")
+            bound.info(f"{rid}[{source}] Tool Call: {content}")
     elif isinstance(message, ToolCallExecutionEvent):
         content = message.content
         if isinstance(content, list):
             for tr in content:
-                _log.debug(f"{rid}[{source}] Tool Result ({tr.call_id}): {tr.content}")
+                result_text = str(tr.content)
+                if len(result_text) > 500:
+                    result_text = result_text[:500] + "… [truncated]"
+                bound.info(f"{rid}[{source}] Tool Result ({tr.call_id}): {result_text}")
         else:
-            _log.debug(f"{rid}[{source}] Tool Result: {content}")
+            bound.info(f"{rid}[{source}] Tool Result: {content}")
     else:
         content = str(getattr(message, "content", str(message)))
-        _log.debug(f"{rid}[{source}] [{type(message).__name__}] {content}")
+        bound.info(f"{rid}[{source}] [{type(message).__name__}] {content}")
 
     if hasattr(message, "models_usage") and message.models_usage and not isinstance(message, TaskResult):
-        _log.debug(
+        bound.info(
             f"{rid}[Tokens: +{message.models_usage.prompt_tokens} prompt, "
             f"+{message.models_usage.completion_tokens} completion]"
         )
@@ -383,13 +391,14 @@ class GraphOrchestrator:
         start_time = time.time()
         token_usage = TokenUsage()
         rid = f"[{request_id}] " if request_id else ""
+        qlog = _log.bind(request_id=request_id, query=user_query, video_id=video_id)
 
-        _log.info(f"{'=' * 60}")
-        _log.info(f"{rid}Graph Query Pipeline")
-        _log.info(f"{'=' * 60}")
-        _log.info(f"{rid}Query: {user_query}")
+        qlog.info(f"{'=' * 60}")
+        qlog.info(f"{rid}Graph Query Pipeline")
+        qlog.info(f"{'=' * 60}")
+        qlog.info(f"{rid}Query: {user_query}")
         if video_id:
-            _log.info(f"{rid}Video: {video_id}")
+            qlog.info(f"{rid}Video: {video_id}")
         elif video_ids:
             _log.info(f"{rid}Videos: {video_ids}")
         else:

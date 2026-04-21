@@ -232,7 +232,9 @@ class StateOrchestrator:
         self, state: QueryState, ctx: QueryContext, llm: StructuredLLMClient
     ) -> QueryState:
         """Executes the logic for a single pipeline state and determine next state."""
-        _log.info(f"[{ctx.request_id}] {state.name}")
+        _log.bind(request_id=ctx.request_id, state=state.name, video_id=ctx.video_id, query=ctx.query).info(
+            f"[{ctx.request_id}] {state.name}"
+        )
         ctx.log_state(state)
 
         match state:
@@ -406,7 +408,7 @@ class StateOrchestrator:
             desc = e.get("summary") or e.get("transcript") or e.get("description") or ""
             if len(desc) > 120:
                 desc = desc[:120] + "..."
-            _log.debug(f"[{ctx.request_id}] RETRIEVE — [{i+1}] {ntype} {vid}{score_str}: {desc}")
+            _log.info(f"[{ctx.request_id}] RETRIEVE — [{i+1}] {ntype} {vid}{score_str}: {desc}")
 
         if plan.get("visual") and ctx.evidence:
             _log.info(f"[{ctx.request_id}] RETRIEVE — searching keyframes (visual=True)")
