@@ -130,15 +130,19 @@ jobs:
 
       - name: Parse env vars
         id: env
+        env:
+          MCP_ENV_VARS_RAW: ${{ secrets.MCP_ENV_VARS_PROD }}
         run: |
-          # Build --set-env-vars flag from MCP_ENV_VARS_PROD secret
+          # Build --set-env-vars flag from MCP_ENV_VARS_PROD secret.
+          # Each KEY=VALUE pair is single-quoted to prevent shell expansion
+          # of special characters (e.g. $ in passwords).
           ENV_FLAGS=""
-          if [ -n "${{ secrets.MCP_ENV_VARS_PROD }}" ]; then
+          if [ -n "$MCP_ENV_VARS_RAW" ]; then
             while IFS= read -r line; do
               line=$(echo "$line" | xargs)  # trim whitespace
               [[ -z "$line" || "$line" == \#* ]] && continue
-              ENV_FLAGS="$ENV_FLAGS $line"
-            done <<< "${{ secrets.MCP_ENV_VARS_PROD }}"
+              ENV_FLAGS="$ENV_FLAGS '$line'"
+            done <<< "$MCP_ENV_VARS_RAW"
           fi
           echo "env_flags=$ENV_FLAGS" >> $GITHUB_OUTPUT
 
