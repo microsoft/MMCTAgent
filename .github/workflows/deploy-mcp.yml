@@ -280,7 +280,21 @@ jobs:
           # Wait for new revision to become active
           sleep 15
 
-          READYZ=$(curl -s --max-time 30 "https://$FQDN/readyz" || echo '{"ready":false,"error":"endpoint unreachable"}')
+          # Retry up to 3 times — the new revision may still be starting
+          for attempt in 1 2 3; do
+            HTTP_CODE=$(curl -s -o /tmp/readyz_response.json -w "%{http_code}" --max-time 30 "https://$FQDN/readyz" 2>/dev/null || echo "000")
+            if [ "$HTTP_CODE" != "000" ]; then
+              break
+            fi
+            echo "Attempt $attempt: container not reachable (HTTP $HTTP_CODE), retrying in 10s..."
+            sleep 10
+          done
+
+          if [ "$HTTP_CODE" = "000" ]; then
+            READYZ="{\"ready\":false,\"error\":\"MCP server at https://$FQDN/readyz is unreachable after 3 attempts. The container may still be starting or the ingress is misconfigured.\"}"
+          else
+            READYZ=$(cat /tmp/readyz_response.json)
+          fi
           echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
           echo "$READYZ" | python3 -m json.tool >> $GITHUB_STEP_SUMMARY 2>/dev/null || echo "$READYZ" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
