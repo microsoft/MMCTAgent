@@ -163,9 +163,10 @@ class Neo4jQueryProvider(BaseGraphQueryProvider):
             List of record dictionaries.
         """
         await self._ensure_driver()
+        db = self.get_database(self._database)
         for attempt in range(2):
             try:
-                async with self._driver.session(database=self._database) as session:
+                async with self._driver.session(database=db) as session:
                     result = await session.run(query, parameters or {})
                     return [dict(record) async for record in result]
             except Exception as e:

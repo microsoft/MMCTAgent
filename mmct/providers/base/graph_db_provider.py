@@ -3,6 +3,8 @@
 from abc import ABC, abstractmethod
 from typing import List, Optional, Any, Dict
 
+from mmct.providers.base.database_context import get_database_override
+
 
 class BaseGraphDBProvider(ABC):
     """Abstract base class for graph database providers.
@@ -18,6 +20,14 @@ class BaseGraphDBProvider(ABC):
             database_name: Optional name of the database to use.
         """
         self.database_name = database_name
+
+    def get_database(self, default: Optional[str] = None) -> Optional[str]:
+        """Return the active database name for the current request.
+
+        Checks the per-request ``database_override`` context variable first;
+        falls back to *default* (typically ``self.database_name``).
+        """
+        return get_database_override() or default
     
     @abstractmethod
     async def create_node(

@@ -63,8 +63,12 @@ async def video_query(
         QueryPipelineMode.GRAPH_STATE,
         description="Pipeline mode: **graph_agent** (agentic knowledge-graph traversal) or **graph_state** (deterministic state machine)",
     ),
+    database: Optional[str] = Form(
+        None,
+        description="Graph database name override. When provided, queries target this database instead of the server default.",
+    ),
 ):
-    return await run_video_query(query=query, mode=mode, video_id=video_id)
+    return await run_video_query(query=query, mode=mode, video_id=video_id, database=database)
 
 
 @router.post(
@@ -92,9 +96,13 @@ async def video_query_stream(
         QueryPipelineMode.GRAPH_STATE,
         description="Pipeline mode: **graph_agent** or **graph_state**",
     ),
+    database: Optional[str] = Form(
+        None,
+        description="Graph database name override. When provided, queries target this database instead of the server default.",
+    ),
 ):
     async def event_generator():
-        async for json_str in stream_video_query(query=query, mode=mode, video_id=video_id):
+        async for json_str in stream_video_query(query=query, mode=mode, video_id=video_id, database=database):
             yield {"data": json_str}
 
     return EventSourceResponse(event_generator())

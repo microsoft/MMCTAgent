@@ -4,6 +4,7 @@ from .image_embedding_provider import BaseImageEmbeddingProvider
 from .storage_provider import BaseStorageProvider
 from .graph_query_provider import BaseGraphQueryProvider
 from .transcription_provider import BaseTranscriptionProvider
+from .database_context import database_override, get_database_override
 
 __all__ = [
     'BaseLLMProvider',
@@ -12,4 +13,6 @@ __all__ = [
     'BaseTranscriptionProvider',
     'BaseStorageProvider',
     'BaseGraphQueryProvider',
+    'database_override',
+    'get_database_override',
 ]

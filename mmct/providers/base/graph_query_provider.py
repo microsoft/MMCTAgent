@@ -9,6 +9,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
+from mmct.providers.base.database_context import get_database_override
+
 
 @dataclass
 class SearchResult:
@@ -35,6 +37,19 @@ class BaseGraphQueryProvider(ABC):
     _vector_search, _keyword_search, _merge_search_results, and _ensure_driver
     are implementation details left to concrete classes.
     """
+
+    # =========================================================================
+    # Database resolution
+    # =========================================================================
+
+    def get_database(self, default: Optional[str] = None) -> Optional[str]:
+        """Return the active database name for the current request.
+
+        Checks the per-request ``database_override`` context variable first;
+        falls back to *default* (typically ``self._database`` in concrete
+        providers).
+        """
+        return get_database_override() or default
 
     # =========================================================================
     # Lifecycle

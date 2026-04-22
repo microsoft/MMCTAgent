@@ -9,6 +9,7 @@ from typing import Optional, List, Literal
 from loguru import logger
 from mcp_server.server import mcp
 from mmct.video_pipeline.query_pipeline import VideoQueryPipeline, QueryPipelineMode
+from mmct.providers.base.database_context import database_override
 from config.provider_config import get_query_pipeline_providers
 
 # Singleton pipeline instances — one per mode, reused across requests.
@@ -36,6 +37,8 @@ def get_pipeline(mode: str) -> VideoQueryPipeline:
         video_ids: Optional list of video IDs to scope the query.
         mode: Pipeline mode to use. 'graph_agent' for complex agentic reasoning, 
               'graph_state' for deterministic extraction (default: 'graph_state').
+        database: Optional graph database name. Overrides the server's default
+                  database setting for this request only.
     """
 )
 async def video_query(
@@ -43,6 +46,7 @@ async def video_query(
     video_id: Optional[str] = None,
     video_ids: Optional[List[str]] = None,
     mode: Literal["graph_agent", "graph_state"] = "graph_state",
+    database: Optional[str] = None,
 ) -> dict:
     """
     Executes a query against the video knowledge graph or state machine index.
@@ -56,21 +60,23 @@ async def video_query(
         mode (str, optional): The pipeline execution strategy. 
             'graph_agent' uses an autonomous swarm of agents; 'graph_state' 
             uses a deterministic state machine. Defaults to 'graph_state'.
+        database (str, optional): Graph database name override. When provided,
+            queries target this database instead of the server default.
 
     Returns:
         dict: The structured query result containing the answer, sources, and metadata.
     """
     try:
-        logger.info(f"Executing video_query: {query} (mode={mode}, video_id={video_id}, video_ids={video_ids})")
+        logger.info(f"Executing video_query: {query} (mode={mode}, video_id={video_id}, video_ids={video_ids}, database={database})")
         
         pipeline = get_pipeline(mode)
         
-        # Execute the query through the pipeline orchestrator
-        result = await pipeline.query(
-            user_query=query,
-            video_id=video_id,
-            video_ids=video_ids
-        )
+        async with database_override(database):
+            result = await pipeline.query(
+                user_query=query,
+                video_id=video_id,
+                video_ids=video_ids
+            )
         
         return result
         

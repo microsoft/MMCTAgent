@@ -9,6 +9,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional
 
+from mmct.providers.base.database_context import get_database_override
+
 try:
     import networkx as nx  # type: ignore
 except ImportError:  # pragma: no cover
@@ -26,6 +28,14 @@ class BaseGraphStoreProvider(ABC):
     - Designed for uploading complete graphs from NetworkX
     - Supports vector embeddings as node properties
     """
+
+    def get_database(self, default: Optional[str] = None) -> Optional[str]:
+        """Return the active database name for the current request.
+
+        Checks the per-request ``database_override`` context variable first;
+        falls back to *default*.
+        """
+        return get_database_override() or default
     
     @abstractmethod
     async def upload_graph(

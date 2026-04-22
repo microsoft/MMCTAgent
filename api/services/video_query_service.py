@@ -7,6 +7,7 @@ from typing import Any, AsyncGenerator, Dict, Optional, Union
 from fastapi import HTTPException
 from loguru import logger
 
+from mmct.providers.base.database_context import database_override
 from mmct.utils.error_handler import ConfigurationException
 from mmct.video_pipeline.query_pipeline import QueryPipelineMode, VideoQueryPipeline
 
@@ -15,21 +16,29 @@ async def run_video_query(
     query: str,
     mode: QueryPipelineMode,
     video_id: Optional[str] = None,
+    database: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Execute a one-shot video query against the stored knowledge graph.
 
     Initialises VideoQueryPipeline with use_provider_defaults=True so all
     providers are resolved automatically from environment variables.
+
+    Args:
+        query: Natural language question about the video content.
+        mode: Pipeline execution mode (graph_agent or graph_state).
+        video_id: Optional single video ID scope.
+        database: Optional Neo4j database name override.
     """
     pipeline: Optional[VideoQueryPipeline] = None
     try:
         pipeline = VideoQueryPipeline(mode=mode, use_provider_defaults=True)
-        result = await pipeline.query(
-            user_query=query,
-            video_id=video_id,
-            request_id=str(uuid.uuid4()),
-        )
+        async with database_override(database):
+            result = await pipeline.query(
+                user_query=query,
+                video_id=video_id,
+                request_id=str(uuid.uuid4()),
+            )
         return result
 
     except ConfigurationException as exc:
@@ -46,6 +55,7 @@ async def stream_video_query(
     query: str,
     mode: QueryPipelineMode,
     video_id: Optional[str] = None,
+    database: Optional[str] = None,
 ) -> AsyncGenerator[str, None]:
     """
     Yield SSE-formatted JSON strings from VideoQueryPipeline.query_stream().
@@ -53,16 +63,23 @@ async def stream_video_query(
     Each yielded value is a JSON-serialised event dict from the orchestrator.
     On error, yields a final {"type": "error", "detail": "..."} event before stopping.
     The pipeline is closed in the finally block regardless of outcome.
+
+    Args:
+        query: Natural language question about the video content.
+        mode: Pipeline execution mode (graph_agent or graph_state).
+        video_id: Optional single video ID scope.
+        database: Optional Neo4j database name override.
     """
     pipeline: Optional[VideoQueryPipeline] = None
     try:
         pipeline = VideoQueryPipeline(mode=mode, use_provider_defaults=True)
-        async for event in pipeline.query_stream(
-            user_query=query,
-            video_id=video_id,
-            request_id=str(uuid.uuid4()),
-        ):
-            yield json.dumps(event)
+        async with database_override(database):
+            async for event in pipeline.query_stream(
+                user_query=query,
+                video_id=video_id,
+                request_id=str(uuid.uuid4()),
+            ):
+                yield json.dumps(event)
 
     except ConfigurationException as exc:
         yield json.dumps({"type": "error", "detail": f"Provider configuration error: {exc}"})
