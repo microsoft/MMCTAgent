@@ -98,6 +98,19 @@ async def main():
                     "mode": "graph_agent"
                 }
             )
+
+            # 4. Test video_query with database override
+            # Targets a specific Neo4j database instead of the server default.
+            await test_tool(
+                client,
+                "video_query",
+                {
+                    "query": "What are the main topics discussed?",
+                    "video_id": "58550",
+                    "mode": "graph_state",
+                    "database": "neo4j"
+                }
+            )
             
     except Exception as e:
         logger.error(f"Test client initialization or execution failed: {e}")
