@@ -10,6 +10,24 @@
     },
     "logAnalyticsWorkspaceName": {
       "value": "mmct-logs"
+    },
+    "vnetName": {
+      "value": "mmct-vnet"
+    },
+    "subnetName": {
+      "value": "mmct-subnet-apps"
+    },
+    "vnetAddressPrefix": {
+      "value": "10.0.0.0/16"
+    },
+    "subnetAddressPrefix": {
+      "value": "10.0.0.0/23"
+    },
+    "natGatewayName": {
+      "value": "mmct-natgw"
+    },
+    "natGatewayPipName": {
+      "value": "mmct-natgw-pip"
     }
   }
 }

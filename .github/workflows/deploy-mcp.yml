@@ -20,6 +20,16 @@
 #   CONTAINER_ENV_NAME     — Container Apps Environment name (default: mmct-env)
 #   MCP_ENV_VARS_PROD      — Newline-separated KEY=VALUE pairs for the container
 #                            (NEO4J_URI, LLM_ENDPOINT, etc.)
+#
+# Networking:
+#   This workflow provisions a VNet + NAT Gateway so the Container App
+#   Environment has a single, stable outbound IP. That IP must be manually
+#   added to the graph database's firewall/NSG allow-list for Bolt (7687)
+#   access. The NAT IP is printed in the workflow summary after each deploy.
+#
+#   ⚠  One-time migration: if the Container Apps Environment was originally
+#      created without a VNet, it must be deleted and recreated. The
+#      workflow_dispatch input "recreate_environment" handles this.
 # ─────────────────────────────────────────────────────────────────────────────
 
 name: Deploy MCP Server
@@ -39,6 +49,19 @@ on:
       - 'infra/container_app/Dockerfile.mcp'
       - 'pyproject.toml'
   workflow_dispatch:
+    inputs:
+      recreate_environment:
+        description: >
+          One-time migration: delete and recreate the Container Apps
+          Environment with VNet + NAT Gateway networking. Required if the
+          env was originally created without a VNet. WARNING: this will
+          cause downtime for all apps in the environment.
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
 
 # Cancel in-progress runs for the same branch
 concurrency:
@@ -52,6 +75,11 @@ env:
   MCP_APP_NAME: ${{ secrets.MCP_APP_NAME || (github.ref == 'refs/heads/main' && 'mmctagent-mcp-prod' || 'mmctagent-mcp') }}
   CONTAINER_ENV_NAME: ${{ secrets.CONTAINER_ENV_NAME || (github.ref == 'refs/heads/main' && 'mmct-env-prod' || 'mmct-env') }}
   USER_ASSIGNED_IDENTITY: ${{ secrets.USER_ASSIGNED_IDENTITY_ID }}
+  # Networking — VNet + NAT Gateway for stable outbound IP
+  VNET_NAME: ${{ github.ref == 'refs/heads/main' && 'mmct-vnet-prod' || 'mmct-vnet' }}
+  SUBNET_NAME: mmct-subnet-apps
+  NAT_GW_NAME: ${{ github.ref == 'refs/heads/main' && 'mmct-natgw-prod' || 'mmct-natgw' }}
+  NAT_GW_PIP_NAME: ${{ github.ref == 'refs/heads/main' && 'mmct-natgw-pip-prod' || 'mmct-natgw-pip' }}
 
 jobs:
   # ── Job 1: Detect whether base image needs rebuilding ─────────────────────
@@ -146,16 +174,124 @@ jobs:
           fi
           echo "env_flags=$ENV_FLAGS" >> $GITHUB_OUTPUT
 
+      - name: Ensure networking infrastructure (VNet + NAT Gateway)
+        id: networking
+        run: |
+          echo "::group::VNet"
+          if az network vnet show --name $VNET_NAME --resource-group $RESOURCE_GROUP &>/dev/null; then
+            echo "VNet $VNET_NAME already exists."
+          else
+            echo "Creating VNet $VNET_NAME..."
+            az network vnet create \
+              --name $VNET_NAME \
+              --resource-group $RESOURCE_GROUP \
+              --location $LOCATION \
+              --address-prefixes 10.0.0.0/16
+          fi
+          echo "::endgroup::"
+
+          echo "::group::Subnet"
+          if az network vnet subnet show --name $SUBNET_NAME --vnet-name $VNET_NAME --resource-group $RESOURCE_GROUP &>/dev/null; then
+            echo "Subnet $SUBNET_NAME already exists."
+          else
+            echo "Creating subnet $SUBNET_NAME (10.0.0.0/23, delegated to Microsoft.App/environments)..."
+            az network vnet subnet create \
+              --name $SUBNET_NAME \
+              --vnet-name $VNET_NAME \
+              --resource-group $RESOURCE_GROUP \
+              --address-prefixes 10.0.0.0/23 \
+              --delegations Microsoft.App/environments
+          fi
+          echo "::endgroup::"
+
+          echo "::group::Public IP for NAT Gateway"
+          if az network public-ip show --name $NAT_GW_PIP_NAME --resource-group $RESOURCE_GROUP &>/dev/null; then
+            echo "Public IP $NAT_GW_PIP_NAME already exists."
+          else
+            echo "Creating static public IP $NAT_GW_PIP_NAME..."
+            az network public-ip create \
+              --name $NAT_GW_PIP_NAME \
+              --resource-group $RESOURCE_GROUP \
+              --location $LOCATION \
+              --sku Standard \
+              --allocation-method Static \
+              --zone 1 2 3
+          fi
+          echo "::endgroup::"
+
+          echo "::group::NAT Gateway"
+          if az network nat gateway show --name $NAT_GW_NAME --resource-group $RESOURCE_GROUP &>/dev/null; then
+            echo "NAT Gateway $NAT_GW_NAME already exists."
+          else
+            echo "Creating NAT Gateway $NAT_GW_NAME..."
+            az network nat gateway create \
+              --name $NAT_GW_NAME \
+              --resource-group $RESOURCE_GROUP \
+              --location $LOCATION \
+              --public-ip-addresses $NAT_GW_PIP_NAME \
+              --idle-timeout 4
+          fi
+          echo "::endgroup::"
+
+          echo "::group::Associate NAT Gateway with subnet"
+          CURRENT_NAT=$(az network vnet subnet show \
+            --name $SUBNET_NAME --vnet-name $VNET_NAME --resource-group $RESOURCE_GROUP \
+            --query "natGateway.id" -o tsv 2>/dev/null)
+          if [ -n "$CURRENT_NAT" ] && [ "$CURRENT_NAT" != "None" ]; then
+            echo "Subnet already has NAT Gateway associated."
+          else
+            echo "Associating NAT Gateway with subnet..."
+            az network vnet subnet update \
+              --name $SUBNET_NAME \
+              --vnet-name $VNET_NAME \
+              --resource-group $RESOURCE_GROUP \
+              --nat-gateway $NAT_GW_NAME
+          fi
+          echo "::endgroup::"
+
+          # Export subnet resource ID and NAT public IP for downstream steps
+          SUBNET_ID=$(az network vnet subnet show \
+            --name $SUBNET_NAME --vnet-name $VNET_NAME --resource-group $RESOURCE_GROUP \
+            --query id -o tsv)
+          NAT_PUBLIC_IP=$(az network public-ip show \
+            --name $NAT_GW_PIP_NAME --resource-group $RESOURCE_GROUP \
+            --query ipAddress -o tsv)
+
+          echo "subnet_id=$SUBNET_ID" >> $GITHUB_OUTPUT
+          echo "nat_public_ip=$NAT_PUBLIC_IP" >> $GITHUB_OUTPUT
+          echo "NAT Gateway public IP: $NAT_PUBLIC_IP"
+
+      - name: Recreate Container Apps Environment with VNet (one-time migration)
+        if: github.event.inputs.recreate_environment == 'true'
+        run: |
+          echo "⚠️  Recreating Container Apps Environment with VNet integration..."
+          echo "Deleting existing environment $CONTAINER_ENV_NAME..."
+          az containerapp env delete \
+            --name $CONTAINER_ENV_NAME \
+            --resource-group $RESOURCE_GROUP \
+            --yes || echo "Environment did not exist or already deleted."
+          echo "Waiting for deletion to complete..."
+          sleep 30
+
       - name: Ensure Container Apps Environment exists
         run: |
           if ! az containerapp env show --name $CONTAINER_ENV_NAME --resource-group $RESOURCE_GROUP &>/dev/null; then
-            echo "Creating Container Apps Environment: $CONTAINER_ENV_NAME..."
+            echo "Creating Container Apps Environment: $CONTAINER_ENV_NAME with VNet integration..."
             az containerapp env create \
               --name $CONTAINER_ENV_NAME \
               --resource-group $RESOURCE_GROUP \
-              --location $LOCATION
+              --location $LOCATION \
+              --infrastructure-subnet-resource-id ${{ steps.networking.outputs.subnet_id }}
           else
             echo "Environment $CONTAINER_ENV_NAME already exists."
+            # Verify VNet integration
+            VNET_ID=$(az containerapp env show --name $CONTAINER_ENV_NAME --resource-group $RESOURCE_GROUP \
+              --query "properties.vnetConfiguration.infrastructureSubnetId" -o tsv 2>/dev/null)
+            if [ -z "$VNET_ID" ] || [ "$VNET_ID" = "None" ]; then
+              echo "::warning::Environment exists but has NO VNet integration. Run this workflow with 'recreate_environment=true' to migrate."
+            else
+              echo "Environment has VNet integration: $VNET_ID"
+            fi
           fi
 
       - name: Resolve managed identity client ID
@@ -263,6 +399,7 @@ jobs:
           echo "| **MCP Endpoint** | https://$FQDN/mcp |" >> $GITHUB_STEP_SUMMARY
           echo "| **Image Tag** | \`$IMAGE_TAG\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Commit** | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **NAT Gateway IP** | \`${{ steps.networking.outputs.nat_public_ip }}\` |" >> $GITHUB_STEP_SUMMARY
 
       - name: Verify external service connectivity
         continue-on-error: true
@@ -272,10 +409,7 @@ jobs:
             --resource-group $RESOURCE_GROUP \
             --query "properties.configuration.ingress.fqdn" -o tsv)
 
-          OUTBOUND_IP=$(az containerapp env show \
-            --name $CONTAINER_ENV_NAME \
-            --resource-group $RESOURCE_GROUP \
-            --query "properties.staticIp" -o tsv 2>/dev/null || echo "unknown")
+          OUTBOUND_IP="${{ steps.networking.outputs.nat_public_ip }}"
 
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## Readiness Check" >> $GITHUB_STEP_SUMMARY
@@ -314,8 +448,9 @@ jobs:
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
 
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Container Apps Environment Static IP:** \`$OUTBOUND_IP\`" >> $GITHUB_STEP_SUMMARY
+          echo "**NAT Gateway Outbound IP:** \`$OUTBOUND_IP\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "If any service checks fail, ensure it allows inbound from:" >> $GITHUB_STEP_SUMMARY
-          echo "- Static IP: \`$OUTBOUND_IP\`" >> $GITHUB_STEP_SUMMARY
-          echo "- FQDN: \`$FQDN\`" >> $GITHUB_STEP_SUMMARY
+          echo "> **Graph DB allowlisting:** If the readiness check below shows a" >> $GITHUB_STEP_SUMMARY
+          echo "> graph\_db connection error, add \`$OUTBOUND_IP\` to the inbound" >> $GITHUB_STEP_SUMMARY
+          echo "> allow-list (NSG rule / firewall) on the graph database for the" >> $GITHUB_STEP_SUMMARY
+          echo "> Bolt port (default 7687)." >> $GITHUB_STEP_SUMMARY
