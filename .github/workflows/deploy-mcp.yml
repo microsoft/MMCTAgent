@@ -384,6 +384,19 @@ jobs:
                 ${{ steps.env.outputs.env_flags }}
           fi
 
+      - name: Set BASE_URL env var on container
+        run: |
+          FQDN=$(az containerapp show \
+            --name $MCP_APP_NAME \
+            --resource-group $RESOURCE_GROUP \
+            --query "properties.configuration.ingress.fqdn" \
+            --output tsv)
+          echo "Setting BASE_URL=https://$FQDN on container app..."
+          az containerapp update \
+            --name $MCP_APP_NAME \
+            --resource-group $RESOURCE_GROUP \
+            --set-env-vars "BASE_URL=https://$FQDN"
+
       - name: Print deployment info
         run: |
           FQDN=$(az containerapp show \

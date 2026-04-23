@@ -66,6 +66,9 @@ llm_endpoint=https://<resource>.openai.azure.com/
 llm_deployment_name=gpt-4o
 neo4j_password=<password>
 storage_account_name=<account>
+
+# Optional: enable data retrieval endpoints (transcript & frames)
+ENABLE_DATA_APIS=true
 ```
 
 ### 3. Start the Server
@@ -99,6 +102,31 @@ Analyze images and answer questions about their content.
 | `image_path` | `string` | Yes | Local file path or public URL. |
 | `tools` | `list` | No | Vision tools to use: `vit`, `recog`, `object_detection`, `ocr`. |
 | `use_critic_agent`| `boolean`| No | Enable reflective feedback (default: `false`). |
+
+---
+
+## Data Retrieval Endpoints
+
+> **Gated by environment variable:** Set `ENABLE_DATA_APIS=true` to enable these endpoints. They are **not** loaded by default.
+
+### `GET /lively/transcript/{video_id}`
+Returns the SRT transcript for a video as plain text.
+
+| Parameter | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `video_id` | path | `string` | Yes | The video identifier. |
+
+**Responses:** `200` plain text SRT, `404` transcript not found, `500` internal error.
+
+### `GET /lively/frames/{video_id}?ts={timestamp}`
+Returns base64-encoded JPEG frames at `ts-1`, `ts`, and `ts+1` (seconds).
+
+| Parameter | In | Type | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `video_id` | path | `string` | Yes | The video identifier. |
+| `ts` | query | `integer` | Yes | Timestamp in seconds (≥ 0). |
+
+**Responses:** `200` JSON with `{ video_id, requested_ts, frames: { "<second>": "<base64>" } }`, `400` invalid ts, `404` no frames found.
 
 ---
 

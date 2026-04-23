@@ -12,7 +12,6 @@ Blob path convention:
 """
 
 import os
-import re
 import tempfile
 from typing import Optional
 
@@ -20,14 +19,7 @@ from loguru import logger
 
 from mmct.video_pipeline import PipelineStep, StepContext, StepResult, register_step
 from mmct.providers.base.storage_provider import BaseStorageProvider
-
-
-_BLOB_INVALID_RE = re.compile(r'[^a-zA-Z0-9\-_.]')
-
-
-def normalize_video_id(video_id: str) -> str:
-    """Normalize a video ID for use as a blob path segment."""
-    return _BLOB_INVALID_RE.sub('_', video_id)
+from mmct.utils.blob_helpers import normalize_video_id
 
 
 @register_step("ingestion.transcript_upload")

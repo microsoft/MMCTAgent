@@ -6,15 +6,20 @@ then starts the server using the Streamable HTTP transport.
 
 Endpoints:
     /       — Health check (JSON)
+    /api    — HTTP API reference
     /mcp    — MCP protocol (streamable-HTTP)
-    /docs   — Interactive tool documentation (Swagger-like UI)
+    /docs   — Interactive MCP tool documentation (Swagger-like UI)
 """
 
 import asyncio
+import os
 
 from mcp_server.server import mcp
 from mcp_server.tools.image_query_tool import image_query
 from mcp_server.tools.video_query_tool import video_query
+
+if os.environ.get("ENABLE_DATA_APIS", "").lower() == "true":
+    from mcp_server.tools.data_routes import get_transcript, get_frames  # noqa: F401
 
 if __name__ == '__main__':
     from loguru import logger
@@ -28,6 +33,7 @@ if __name__ == '__main__':
         title="MMCT Agent MCP Tools",
         description="Interactive documentation for MMCT Agent MCP server tools. "
                     "Browse available tools, view input/output schemas, and test calls.",
+        base_url=os.environ.get("BASE_URL", ""),
     )
     asyncio.run(docs.setup())
     logger.info("Tool documentation available at /docs")

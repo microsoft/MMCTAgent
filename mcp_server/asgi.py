@@ -10,11 +10,15 @@ For local development, use `python -m mcp_server.main` instead (single worker).
 """
 
 import asyncio
+import os
 import threading
 
 from mcp_server.server import mcp
 from mcp_server.tools.image_query_tool import image_query  # noqa: F401 — registers tool
 from mcp_server.tools.video_query_tool import video_query  # noqa: F401 — registers tool
+
+if os.environ.get("ENABLE_DATA_APIS", "").lower() == "true":
+    from mcp_server.tools.data_routes import get_transcript, get_frames  # noqa: F401 — registers routes
 
 from fastmcp_docs import FastMCPDocs
 from loguru import logger
@@ -27,6 +31,7 @@ docs = FastMCPDocs(
     title="MMCT Agent MCP Tools",
     description="Interactive documentation for MMCT Agent MCP server tools. "
                 "Browse available tools, view input/output schemas, and test calls.",
+    base_url=os.environ.get("BASE_URL", ""),
 )
 
 
