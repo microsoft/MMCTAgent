@@ -18,7 +18,7 @@ from mcp_server.tools.image_query_tool import image_query  # noqa: F401 — regi
 from mcp_server.tools.video_query_tool import video_query  # noqa: F401 — registers tool
 
 if os.environ.get("ENABLE_DATA_APIS", "").lower() == "true":
-    from mcp_server.tools.data_routes import get_transcript, get_frames  # noqa: F401 — registers routes
+    from mcp_server.tools.data_routes import get_transcript, get_frames, get_video_ids  # noqa: F401 — registers routes
 
 from fastmcp_docs import FastMCPDocs
 from loguru import logger

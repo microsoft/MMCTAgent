@@ -1,7 +1,7 @@
 """Data retrieval routes for the MMCT MCP Server.
 
-Provides HTTP GET endpoints for fetching video transcripts and frames
-from Azure Blob Storage.  These routes are only loaded when the
+Provides HTTP GET endpoints for fetching video transcripts, frames,
+and graph-based video discovery.  These routes are only loaded when the
 ``ENABLE_DATA_APIS`` environment variable is set to ``true``.
 
 Blob path conventions (matching the ingestion custom steps):
@@ -17,7 +17,8 @@ from loguru import logger
 from starlette.responses import JSONResponse, PlainTextResponse
 
 from mcp_server.server import mcp, register_api_endpoint
-from config.provider_config import get_storage_provider
+from config.provider_config import get_storage_provider, get_neo4j_query_provider
+from mmct.providers.base.database_context import database_override
 from mmct.utils.blob_helpers import normalize_video_id
 
 TRANSCRIPT_CONTAINER = "video-transcript-lively"
@@ -34,6 +35,12 @@ register_api_endpoint(
     "GET", "/lively/frames/{video_id}?ts={int}",
     "Get video frames around a timestamp",
     "Returns base64-encoded JPEG frames at ts-1, ts, and ts+1 (seconds).",
+    tag="Lively",
+)
+register_api_endpoint(
+    "GET", "/lively/videos/{database}",
+    "List video IDs in a graph database",
+    "Returns all unique video IDs from ChapterGroup nodes in the specified Neo4j database.",
     tag="Lively",
 )
 
@@ -133,4 +140,45 @@ async def get_frames(request):
         "video_id": video_id,
         "requested_ts": ts,
         "frames": frames,
+    })
+
+
+# ---------------------------------------------------------------------------
+# GET /lively/videos/{database}
+# ---------------------------------------------------------------------------
+
+@mcp.custom_route("/lively/videos/{database}", methods=["GET"])
+async def get_video_ids(request):
+    """Return all unique video IDs from ChapterGroup nodes in *database*."""
+    db_name: str = request.path_params["database"]
+
+    provider = get_neo4j_query_provider()
+    if provider is None:
+        return JSONResponse(
+            {"error": "Neo4j is not configured on this server"},
+            status_code=503,
+        )
+
+    query = """
+    MATCH (g:ChapterGroup)
+    WHERE g.video_id IS NOT NULL
+    RETURN DISTINCT g.video_id AS video_id
+    ORDER BY g.video_id
+    """
+
+    try:
+        async with database_override(db_name):
+            records = await provider._run_read(query)
+        video_ids = [r["video_id"] for r in records]
+    except Exception as exc:
+        logger.exception(f"Failed to list video IDs from database '{db_name}': {exc}")
+        return JSONResponse(
+            {"error": f"Failed to query database '{db_name}': {exc}"},
+            status_code=500,
+        )
+
+    return JSONResponse({
+        "database": db_name,
+        "count": len(video_ids),
+        "video_ids": video_ids,
     })

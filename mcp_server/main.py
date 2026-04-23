@@ -19,7 +19,7 @@ from mcp_server.tools.image_query_tool import image_query
 from mcp_server.tools.video_query_tool import video_query
 
 if os.environ.get("ENABLE_DATA_APIS", "").lower() == "true":
-    from mcp_server.tools.data_routes import get_transcript, get_frames  # noqa: F401
+    from mcp_server.tools.data_routes import get_transcript, get_frames, get_video_ids  # noqa: F401
 
 if __name__ == '__main__':
     from loguru import logger
