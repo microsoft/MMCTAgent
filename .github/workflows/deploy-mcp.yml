@@ -337,6 +337,12 @@ jobs:
           # Check if the Container App already exists
           if az containerapp show --name $MCP_APP_NAME --resource-group $RESOURCE_GROUP &>/dev/null; then
             echo "Updating existing Container App..."
+            # Fetch existing FQDN so BASE_URL can be set in the same revision
+            FQDN=$(az containerapp show \
+              --name $MCP_APP_NAME \
+              --resource-group $RESOURCE_GROUP \
+              --query "properties.configuration.ingress.fqdn" \
+              --output tsv)
             az containerapp identity assign \
               --name $MCP_APP_NAME \
               --resource-group $RESOURCE_GROUP \
@@ -357,6 +363,7 @@ jobs:
                 BUILD_RUN_ID=${{ github.run_id }} \
                 BUILD_RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
                 BUILD_TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+                BASE_URL="https://$FQDN" \
                 ${{ steps.env.outputs.env_flags }}
           else
             echo "Creating new Container App..."
@@ -382,20 +389,79 @@ jobs:
                 BUILD_RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
                 BUILD_TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
                 ${{ steps.env.outputs.env_flags }}
+            # Set BASE_URL after creation (FQDN only available post-create)
+            FQDN=$(az containerapp show \
+              --name $MCP_APP_NAME \
+              --resource-group $RESOURCE_GROUP \
+              --query "properties.configuration.ingress.fqdn" \
+              --output tsv)
+            az containerapp update \
+              --name $MCP_APP_NAME \
+              --resource-group $RESOURCE_GROUP \
+              --set-env-vars "BASE_URL=https://$FQDN"
           fi
 
-      - name: Set BASE_URL env var on container
+      - name: Configure health probes
         run: |
-          FQDN=$(az containerapp show \
+          # Probes persist across image/env-var updates, so only set once.
+          PROBE_COUNT=$(az containerapp show \
             --name $MCP_APP_NAME \
             --resource-group $RESOURCE_GROUP \
-            --query "properties.configuration.ingress.fqdn" \
-            --output tsv)
-          echo "Setting BASE_URL=https://$FQDN on container app..."
+            --query "length(properties.template.containers[0].probes || \`[]\`)" \
+            -o tsv 2>/dev/null || echo "0")
+
+          if [ "$PROBE_COUNT" -gt "0" ]; then
+            echo "Health probes already configured ($PROBE_COUNT probes), skipping."
+            exit 0
+          fi
+
+          echo "Configuring startup, liveness, and readiness probes..."
+
+          # Fetch current container config, inject probes, wrap as update payload
+          az containerapp show \
+            --name $MCP_APP_NAME \
+            --resource-group $RESOURCE_GROUP \
+            -o json \
+          | jq '{
+              properties: {
+                template: {
+                  containers: [
+                    .properties.template.containers[0] | .probes = [
+                      {
+                        "type": "Startup",
+                        "httpGet": {"path": "/", "port": 8000},
+                        "initialDelaySeconds": 15,
+                        "periodSeconds": 5,
+                        "failureThreshold": 10,
+                        "timeoutSeconds": 3
+                      },
+                      {
+                        "type": "Liveness",
+                        "httpGet": {"path": "/", "port": 8000},
+                        "periodSeconds": 15,
+                        "failureThreshold": 3,
+                        "timeoutSeconds": 3
+                      },
+                      {
+                        "type": "Readiness",
+                        "httpGet": {"path": "/readyz", "port": 8000},
+                        "initialDelaySeconds": 20,
+                        "periodSeconds": 30,
+                        "failureThreshold": 3,
+                        "timeoutSeconds": 10
+                      }
+                    ]
+                  ]
+                }
+              }
+            }' > /tmp/app-probes.json
+
           az containerapp update \
             --name $MCP_APP_NAME \
             --resource-group $RESOURCE_GROUP \
-            --set-env-vars "BASE_URL=https://$FQDN"
+            --yaml /tmp/app-probes.json
+
+          echo "Health probes configured successfully."
 
       - name: Print deployment info
         run: |
