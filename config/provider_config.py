@@ -104,6 +104,10 @@ class ProviderEnvSettings(BaseSettings):
     neo4j_password: str = Field(default="")
     neo4j_database: str = Field(default="neo4j")
 
+    # Access Control (ACL) Settings
+    acl_enabled_graph_agent: bool = Field(default=False)
+    acl_enabled_graph_state: bool = Field(default=False)
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> ProviderEnvSettings:

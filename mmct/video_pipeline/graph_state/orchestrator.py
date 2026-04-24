@@ -47,6 +47,9 @@ from mmct.video_pipeline.graph_state.query.neo4j_provider import Neo4jQueryProvi
 from mmct.video_pipeline.graph_state.agents.planner_agent import PlannerAgent
 from mmct.video_pipeline.graph_state.agents.critic_agent import CriticAgent
 
+from mmct.acl import ACLContext, ACLFilter
+from mmct.acl.filter import _apply_filter_fail_closed
+
 _log = logger.bind(component="state")
 class StateOrchestrator:
     """State machine-driven query orchestrator.
@@ -72,6 +75,7 @@ class StateOrchestrator:
         use_critic: bool = True,
         video_catalog: Optional[str] = None,
         max_turns: int = 20,
+        acl_context: Optional[ACLContext] = None,
     ):
         """Initializes the StateOrchestrator.
 
@@ -99,6 +103,16 @@ class StateOrchestrator:
         )
         self._planner = PlannerAgent(model_client)
         self._critic = CriticAgent(model_client)
+
+        from config.provider_config import get_settings
+        acl_enabled = get_settings().acl_enabled_graph_state
+        if acl_enabled and acl_context is None:
+            raise ValueError(
+                "ACL_ENABLED_GRAPH_STATE=true but no acl_context provided"
+            )
+        self._acl_filter: Optional[ACLFilter] = (
+            ACLFilter(acl_context) if acl_enabled else None
+        )
 
     async def query(
         self,
@@ -331,6 +345,12 @@ class StateOrchestrator:
     async def _state_discover_videos(self, ctx: QueryContext) -> QueryState:
         """Identifies relevant video IDs for cross-video scope queries."""
         ranked = await self._discovery.discover(query=ctx.query, limit=8)
+
+        if self._acl_filter is not None and ranked:
+            allowed = await _apply_filter_fail_closed(
+                self._acl_filter, [r[0] for r in ranked]
+            )
+            ranked = [r for r in ranked if r[0] in allowed]
 
         if not ranked:
             logger.warning(f"[{ctx.request_id}] No videos discovered")

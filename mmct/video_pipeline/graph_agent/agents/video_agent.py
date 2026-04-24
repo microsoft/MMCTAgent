@@ -11,9 +11,12 @@ Uses AutoGen's handoff mechanism for agent communication.
 """
 
 from typing import Optional, List
+
 from autogen_agentchat.agents import AssistantAgent
 from autogen_core.model_context import ChatCompletionContext
 
+from mmct.acl import ACLContext, ACLFilter
+from mmct.acl.filter import wrap_find_relevant_videos, wrap_search_graph
 from mmct.video_pipeline.graph_agent.prompts.video_agent import VIDEO_AGENT_SYSTEM_PROMPT
 
 
@@ -40,6 +43,7 @@ class VideoAgent:
         model_client,
         neo4j_provider,
         model_context: Optional[ChatCompletionContext] = None,
+        acl_context: Optional[ACLContext] = None,
     ):
         """Initialize the Video agent.
 
@@ -47,10 +51,22 @@ class VideoAgent:
             model_client: AutoGen model client.
             neo4j_provider: Neo4jQueryProvider instance.
             model_context: Optional shared model context for KV cache.
+            acl_context: Optional ACL configuration. Required when
+                ACL_ENABLED_GRAPH_AGENT is true; otherwise ignored.
         """
         self.model_client = model_client
         self.neo4j_provider = neo4j_provider
         self.model_context = model_context
+
+        from config.provider_config import get_settings
+        acl_enabled = get_settings().acl_enabled_graph_agent
+        if acl_enabled and acl_context is None:
+            raise ValueError(
+                "ACL_ENABLED_GRAPH_AGENT=true but no acl_context provided"
+            )
+        self._acl_filter: Optional[ACLFilter] = (
+            ACLFilter(acl_context) if acl_enabled else None
+        )
 
         self._initialize_tools()
         self.agent = self._create_agent()
@@ -79,12 +95,22 @@ class VideoAgent:
             neo4j_provider=self.neo4j_provider,
         )
 
+        search_graph_tool = graph_search.search_graph
+        find_relevant_videos_tool = video_discovery.find_relevant_videos
+        if self._acl_filter is not None:
+            search_graph_tool = wrap_search_graph(
+                search_graph_tool, self._acl_filter
+            )
+            find_relevant_videos_tool = wrap_find_relevant_videos(
+                find_relevant_videos_tool, self._acl_filter
+            )
+
         self.tools = [
-            video_overview.get_video_overview,     # Overview (no vector search)
-            graph_search.search_graph,             # Multi-granularity vector search
-            graph_traversal.traverse_graph,        # Unified hierarchy traversal
-            keyframe_tool.search_keyframes,        # Image-based keyframe search
-            video_discovery.find_relevant_videos,  # Cross-video discovery
+            video_overview.get_video_overview,
+            search_graph_tool,
+            graph_traversal.traverse_graph,
+            keyframe_tool.search_keyframes,
+            find_relevant_videos_tool,
         ]
 
     def _create_agent(self) -> AssistantAgent:
