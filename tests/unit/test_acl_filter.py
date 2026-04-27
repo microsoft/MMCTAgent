@@ -468,15 +468,16 @@ def test_state_orchestrator_no_callback_no_filter(monkeypatch):
 
 @_skip_no_pipeline
 @pytest.mark.unit
-def test_pipeline_toggle_off_ignores_supplied_callback(
+def test_pipeline_toggle_off_with_callback_raises(
     monkeypatch, reset_settings_cache
 ):
-    """ACL_ENABLED=false + callback supplied → orchestrator gets None.
+    """ACL_ENABLED=false + callback supplied → fail-fast.
 
-    The env var is the single source of truth; a callback handed in by a
-    well-meaning caller while the toggle is off must be silently ignored
-    (no filtering, no per-request user_ctx requirement).
+    A stray acl_callback while the toggle is off is almost certainly a
+    misconfiguration (callback intended but env not flipped, or vice
+    versa). Fail loudly so the developer notices before serving traffic.
     """
+    from mmct.utils.error_handler import ConfigurationException
     from mmct.video_pipeline.query_pipeline import VideoQueryPipeline, QueryPipelineMode
 
     monkeypatch.setenv("ACL_ENABLED", "false")
@@ -484,13 +485,13 @@ def test_pipeline_toggle_off_ignores_supplied_callback(
     async def cb(video_ids, user_ctx):
         return AccessCheckResult(access_allowed=list(video_ids))
 
-    pipeline = VideoQueryPipeline(
-        mode=QueryPipelineMode.GRAPH_STATE,
-        model_client=object(),
-        neo4j_provider=object(),
-        acl_callback=cb,
-    )
-    assert pipeline._orchestrator._acl_filter is None
+    with pytest.raises(ConfigurationException, match="ACL_ENABLED=false"):
+        VideoQueryPipeline(
+            mode=QueryPipelineMode.GRAPH_STATE,
+            model_client=object(),
+            neo4j_provider=object(),
+            acl_callback=cb,
+        )
 
 
 @_skip_no_state

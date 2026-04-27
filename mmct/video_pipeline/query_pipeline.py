@@ -65,13 +65,14 @@ class VideoQueryPipeline:
                 centralized configuration if not explicitly provided.
             acl_callback: Per-deployment access-check callback with signature
                 ``async (video_ids: list[str], user_identifier_context: dict)
-                -> AccessCheckResult``. Required when ACL_ENABLED=true;
-                ignored otherwise.
+                -> AccessCheckResult``. Must be supplied when
+                ACL_ENABLED=true; must NOT be supplied when ACL_ENABLED=false.
 
         Raises:
             ConfigurationException: If required dependencies are missing and
-                cannot be hydrated from defaults, or if ACL_ENABLED=true but
-                no ``acl_callback`` is supplied.
+                cannot be hydrated from defaults, if ACL_ENABLED=true but no
+                ``acl_callback`` is supplied, or if ``acl_callback`` is
+                supplied while ACL_ENABLED=false.
         """
         self.mode = QueryPipelineMode(mode)
 
@@ -80,6 +81,11 @@ class VideoQueryPipeline:
         if self._acl_enabled and acl_callback is None:
             raise ConfigurationException(
                 "ACL_ENABLED=true but no acl_callback provided to VideoQueryPipeline"
+            )
+        if not self._acl_enabled and acl_callback is not None:
+            raise ConfigurationException(
+                "acl_callback was supplied to VideoQueryPipeline but ACL_ENABLED=false. "
+                "Either set ACL_ENABLED=true or remove the acl_callback argument."
             )
         self._acl_callback = acl_callback
 
@@ -118,11 +124,9 @@ class VideoQueryPipeline:
         self._image_llm_provider = image_llm_provider
         self._storage_provider = storage_provider
 
-        # Env var is the single source of truth for "is ACL active". Only
-        # forward the callback to the orchestrator when the toggle is on, so
-        # a callback supplied with ACL_ENABLED=false is silently ignored.
-        effective_callback = acl_callback if self._acl_enabled else None
-
+        # __init__ enforces (acl_enabled iff acl_callback is not None), so
+        # passing acl_callback through directly accurately reflects whether
+        # filtering is active.
         self._orchestrator = orchestrator_cls(
             model_client=model_client,
             neo4j_provider=neo4j_provider,
@@ -131,7 +135,7 @@ class VideoQueryPipeline:
             use_critic=use_critic,
             max_turns=max_turns,
             video_catalog=video_catalog,
-            acl_callback=effective_callback,
+            acl_callback=acl_callback,
         )
 
     async def query(
