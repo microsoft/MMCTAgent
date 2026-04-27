@@ -47,8 +47,8 @@ from mmct.video_pipeline.graph_state.query.neo4j_provider import Neo4jQueryProvi
 from mmct.video_pipeline.graph_state.agents.planner_agent import PlannerAgent
 from mmct.video_pipeline.graph_state.agents.critic_agent import CriticAgent
 
-from mmct.acl import ACLContext, ACLFilter
-from mmct.acl.filter import _apply_filter_fail_closed
+from mmct.acl import AccessCheckCallback, ACLFilter
+from mmct.acl.filter import _apply_filter_fail_closed, _require_user_ctx
 
 _log = logger.bind(component="state")
 class StateOrchestrator:
@@ -75,7 +75,7 @@ class StateOrchestrator:
         use_critic: bool = True,
         video_catalog: Optional[str] = None,
         max_turns: int = 20,
-        acl_context: Optional[ACLContext] = None,
+        acl_callback: Optional[AccessCheckCallback] = None,
     ):
         """Initializes the StateOrchestrator.
 
@@ -87,6 +87,10 @@ class StateOrchestrator:
             use_critic: If True, enables the critic revision cycle.
             video_catalog: Optional pre-generated metadata for the planner context.
             max_turns: Conserved for interface parity with GraphOrchestrator (unused).
+            acl_callback: Optional access-check callback. When provided, the
+                discover-videos step is wrapped with an ACL post-filter; when
+                None, discovery runs unfiltered. Pipeline-level enforcement
+                of ACL_ENABLED is the source of truth for when this must be set.
         """
         self.model_client = model_client
         self.neo4j_provider = neo4j_provider
@@ -104,14 +108,11 @@ class StateOrchestrator:
         self._planner = PlannerAgent(model_client)
         self._critic = CriticAgent(model_client)
 
-        from config.provider_config import get_settings
-        acl_enabled = get_settings().acl_enabled_graph_state
-        if acl_enabled and acl_context is None:
-            raise ValueError(
-                "ACL_ENABLED_GRAPH_STATE=true but no acl_context provided"
-            )
+        # ACL_ENABLED is enforced one layer up in VideoQueryPipeline; the
+        # orchestrator just trusts the callback presence/absence to decide
+        # whether to wire up filtering.
         self._acl_filter: Optional[ACLFilter] = (
-            ACLFilter(acl_context) if acl_enabled else None
+            ACLFilter(acl_callback) if acl_callback is not None else None
         )
 
     async def query(
@@ -347,8 +348,9 @@ class StateOrchestrator:
         ranked = await self._discovery.discover(query=ctx.query, limit=8)
 
         if self._acl_filter is not None and ranked:
+            user_ctx = _require_user_ctx()
             allowed = await _apply_filter_fail_closed(
-                self._acl_filter, [r[0] for r in ranked]
+                self._acl_filter, [r[0] for r in ranked], user_ctx
             )
             ranked = [r for r in ranked if r[0] in allowed]
 
@@ -394,6 +396,16 @@ class StateOrchestrator:
         """Executes programmatic retrieval of video metadata and features."""
         plan = ctx.plan
         ctx.retrieve_attempts += 1
+
+        # Defense-in-depth: when ACL is on, every retrieval must be scoped
+        # to an explicit set of video_ids that has already been filtered by
+        # _state_discover_videos. An unscoped retrieval (None) would query
+        # across all videos and bypass ACL.
+        if self._acl_filter is not None and ctx.effective_video_ids is None:
+            raise ValueError(
+                "ACL is enabled but _state_retrieve was reached with "
+                "effective_video_ids=None; discovery must run first."
+            )
 
         if plan["strategy"] == "OVERVIEW":
             vid = (ctx.effective_video_ids or [""])[0]
@@ -666,7 +678,22 @@ async def process_query(
 
     Returns:
         Dict[str, Any]: Structured query result.
+
+    Raises:
+        ConfigurationException: If ACL_ENABLED=true. This convenience entry
+            point bypasses the ACL gate; callers must use VideoQueryPipeline
+            instead so the callback + user_identifier_context contract is
+            enforced.
     """
+    from config.provider_config import get_settings
+    from mmct.utils.error_handler import ConfigurationException
+
+    if get_settings().acl_enabled:
+        raise ConfigurationException(
+            "process_query() bypasses the ACL gate; use VideoQueryPipeline "
+            "instead when ACL_ENABLED=true."
+        )
+
     orch = StateOrchestrator(**orchestrator_kwargs)
     try:
         return await orch.query(

@@ -28,6 +28,7 @@ from autogen_agentchat.messages import (
 )
 from autogen_core.model_context import BufferedChatCompletionContext
 
+from mmct.acl import AccessCheckCallback
 from mmct.video_pipeline.graph_agent.agents.planner_agent import PlannerAgent, SUBMIT_TOOL_NAME, reset_handoff_counter
 from mmct.video_pipeline.graph_agent.agents.video_agent import VideoAgent
 from mmct.video_pipeline.graph_agent.agents.image_agent import ImageAgent
@@ -255,6 +256,7 @@ class GraphOrchestrator:
         use_critic: bool = True,
         max_turns: int = 20,
         video_catalog: Optional[str] = None,
+        acl_callback: Optional[AccessCheckCallback] = None,
     ):
         """Initializes the GraphOrchestrator.
 
@@ -266,6 +268,10 @@ class GraphOrchestrator:
             use_critic: If True, includes a critic agent in the swarm.
             max_turns: Maximum conversation turns before termination.
             video_catalog: Optional text summary for planner tool selection context.
+            acl_callback: Optional access-check callback. When provided, the
+                VideoAgent's tools are wrapped with ACL post-filters; when
+                None, tools run unwrapped. Pipeline-level enforcement of
+                ACL_ENABLED is the source of truth for when this must be set.
         """
         self.model_client = model_client
         self.neo4j_provider = neo4j_provider
@@ -274,6 +280,7 @@ class GraphOrchestrator:
         self.use_critic = use_critic
         self.max_turns = max_turns
         self.video_catalog = video_catalog
+        self._acl_callback = acl_callback
 
         self._agents_initialized = False
         self._image_agent_wrapper = None
@@ -297,6 +304,7 @@ class GraphOrchestrator:
             model_client=self.model_client,
             neo4j_provider=self.neo4j_provider,
             model_context=BufferedChatCompletionContext(buffer_size=VIDEO_AGENT_BUFFER_SIZE),
+            acl_callback=self._acl_callback,
         )
 
         if self.image_llm_provider:
@@ -571,7 +579,22 @@ async def process_query(
     Returns:
         Union[Dict[str, Any], AsyncGenerator]: Structured response dictionary or
             a streaming generator.
+
+    Raises:
+        ConfigurationException: If ACL_ENABLED=true. This convenience entry
+            point bypasses the ACL gate; callers must use VideoQueryPipeline
+            instead so the callback + user_identifier_context contract is
+            enforced.
     """
+    from config.provider_config import get_settings
+    from mmct.utils.error_handler import ConfigurationException
+
+    if get_settings().acl_enabled:
+        raise ConfigurationException(
+            "process_query() bypasses the ACL gate; use VideoQueryPipeline "
+            "instead when ACL_ENABLED=true."
+        )
+
     orchestrator = GraphOrchestrator(
         model_client=model_client,
         neo4j_provider=neo4j_provider,

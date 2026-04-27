@@ -10,13 +10,20 @@ Handles Neo4j graph interactions:
 Uses AutoGen's handoff mechanism for agent communication.
 """
 
-from typing import Optional, List
+from typing import Optional
 
 from autogen_agentchat.agents import AssistantAgent
 from autogen_core.model_context import ChatCompletionContext
 
-from mmct.acl import ACLContext, ACLFilter
-from mmct.acl.filter import wrap_find_relevant_videos, wrap_search_graph
+from mmct.acl import (
+    AccessCheckCallback,
+    ACLFilter,
+    wrap_find_relevant_videos,
+    wrap_get_video_overview,
+    wrap_search_graph,
+    wrap_search_keyframes,
+    wrap_traverse_graph,
+)
 from mmct.video_pipeline.graph_agent.prompts.video_agent import VIDEO_AGENT_SYSTEM_PROMPT
 
 
@@ -36,6 +43,11 @@ class VideoAgent:
     - traverse_graph: Unified relationship traversal with filters
     - search_keyframes: Image-based keyframe search
     - find_relevant_videos: Cross-video discovery
+
+    When an ``acl_callback`` is supplied, every tool's output is post-
+    filtered against the per-request user identifier context. The
+    callback is shared across all five tools through a single
+    ``ACLFilter`` instance.
     """
 
     def __init__(
@@ -43,7 +55,7 @@ class VideoAgent:
         model_client,
         neo4j_provider,
         model_context: Optional[ChatCompletionContext] = None,
-        acl_context: Optional[ACLContext] = None,
+        acl_callback: Optional[AccessCheckCallback] = None,
     ):
         """Initialize the Video agent.
 
@@ -51,21 +63,16 @@ class VideoAgent:
             model_client: AutoGen model client.
             neo4j_provider: Neo4jQueryProvider instance.
             model_context: Optional shared model context for KV cache.
-            acl_context: Optional ACL configuration. Required when
-                ACL_ENABLED_GRAPH_AGENT is true; otherwise ignored.
+            acl_callback: Optional access-check callback. When provided,
+                all five tools are wrapped with ACL post-filters; when
+                ``None``, tools run unwrapped (zero overhead).
         """
         self.model_client = model_client
         self.neo4j_provider = neo4j_provider
         self.model_context = model_context
 
-        from config.provider_config import get_settings
-        acl_enabled = get_settings().acl_enabled_graph_agent
-        if acl_enabled and acl_context is None:
-            raise ValueError(
-                "ACL_ENABLED_GRAPH_AGENT=true but no acl_context provided"
-            )
         self._acl_filter: Optional[ACLFilter] = (
-            ACLFilter(acl_context) if acl_enabled else None
+            ACLFilter(acl_callback) if acl_callback is not None else None
         )
 
         self._initialize_tools()
@@ -79,37 +86,40 @@ class VideoAgent:
         from mmct.video_pipeline.graph_agent.tools.graph_traversal_tool import GraphTraversalTool
         from mmct.video_pipeline.graph_agent.tools.video_overview_tool import VideoOverviewTool
 
-        graph_search = GraphSearchTool(
-            neo4j_provider=self.neo4j_provider,
-        )
-        video_overview = VideoOverviewTool(
-            neo4j_provider=self.neo4j_provider,
-        )
-        keyframe_tool = KeyframeRetrievalTool(
-            neo4j_provider=self.neo4j_provider,
-        )
-        video_discovery = VideoDiscoveryTool(
-            neo4j_provider=self.neo4j_provider,
-        )
-        graph_traversal = GraphTraversalTool(
-            neo4j_provider=self.neo4j_provider,
-        )
+        graph_search = GraphSearchTool(neo4j_provider=self.neo4j_provider)
+        video_overview = VideoOverviewTool(neo4j_provider=self.neo4j_provider)
+        keyframe_tool = KeyframeRetrievalTool(neo4j_provider=self.neo4j_provider)
+        video_discovery = VideoDiscoveryTool(neo4j_provider=self.neo4j_provider)
+        graph_traversal = GraphTraversalTool(neo4j_provider=self.neo4j_provider)
 
+        get_video_overview_tool = video_overview.get_video_overview
         search_graph_tool = graph_search.search_graph
+        traverse_graph_tool = graph_traversal.traverse_graph
+        search_keyframes_tool = keyframe_tool.search_keyframes
         find_relevant_videos_tool = video_discovery.find_relevant_videos
+
         if self._acl_filter is not None:
+            get_video_overview_tool = wrap_get_video_overview(
+                get_video_overview_tool, self._acl_filter
+            )
             search_graph_tool = wrap_search_graph(
                 search_graph_tool, self._acl_filter
+            )
+            traverse_graph_tool = wrap_traverse_graph(
+                traverse_graph_tool, self._acl_filter
+            )
+            search_keyframes_tool = wrap_search_keyframes(
+                search_keyframes_tool, self._acl_filter
             )
             find_relevant_videos_tool = wrap_find_relevant_videos(
                 find_relevant_videos_tool, self._acl_filter
             )
 
         self.tools = [
-            video_overview.get_video_overview,
+            get_video_overview_tool,
             search_graph_tool,
-            graph_traversal.traverse_graph,
-            keyframe_tool.search_keyframes,
+            traverse_graph_tool,
+            search_keyframes_tool,
             find_relevant_videos_tool,
         ]
 

@@ -3,7 +3,7 @@
 from enum import Enum
 from typing import Annotated, Any, AsyncGenerator, Dict, List, Optional
 
-from config.provider_config import get_query_pipeline_providers
+from mmct.acl import AccessCheckCallback, UserIdentifierContext, user_identifier_scope
 from mmct.utils.error_handler import ConfigurationException
 from mmct.video_pipeline.graph_agent.orchestrator import GraphOrchestrator
 from mmct.video_pipeline.graph_state.orchestrator import StateOrchestrator
@@ -43,6 +43,10 @@ class VideoQueryPipeline:
             bool,
             "Hydrate missing dependencies from config.provider_config",
         ] = False,
+        acl_callback: Annotated[
+            Optional[AccessCheckCallback],
+            "Per-deployment access-check callback. Required when ACL_ENABLED=true.",
+        ] = None,
     ) -> None:
         """Initializes the VideoQueryPipeline with selected mode and providers.
 
@@ -59,14 +63,28 @@ class VideoQueryPipeline:
             video_catalog: Pre-populated catalog of videos for the planner.
             use_provider_defaults: If True, automatically fetches providers from
                 centralized configuration if not explicitly provided.
+            acl_callback: Per-deployment access-check callback with signature
+                ``async (video_ids: list[str], user_identifier_context: dict)
+                -> AccessCheckResult``. Required when ACL_ENABLED=true;
+                ignored otherwise.
 
         Raises:
             ConfigurationException: If required dependencies are missing and
-                cannot be hydrated from defaults.
+                cannot be hydrated from defaults, or if ACL_ENABLED=true but
+                no ``acl_callback`` is supplied.
         """
         self.mode = QueryPipelineMode(mode)
 
+        from config.provider_config import get_settings
+        self._acl_enabled = get_settings().acl_enabled
+        if self._acl_enabled and acl_callback is None:
+            raise ConfigurationException(
+                "ACL_ENABLED=true but no acl_callback provided to VideoQueryPipeline"
+            )
+        self._acl_callback = acl_callback
+
         if use_provider_defaults:
+            from config.provider_config import get_query_pipeline_providers
             defaults = get_query_pipeline_providers()
             model_client = model_client or defaults.model_client
             neo4j_provider = neo4j_provider or defaults.neo4j_provider
@@ -100,6 +118,11 @@ class VideoQueryPipeline:
         self._image_llm_provider = image_llm_provider
         self._storage_provider = storage_provider
 
+        # Env var is the single source of truth for "is ACL active". Only
+        # forward the callback to the orchestrator when the toggle is on, so
+        # a callback supplied with ACL_ENABLED=false is silently ignored.
+        effective_callback = acl_callback if self._acl_enabled else None
+
         self._orchestrator = orchestrator_cls(
             model_client=model_client,
             neo4j_provider=neo4j_provider,
@@ -108,6 +131,7 @@ class VideoQueryPipeline:
             use_critic=use_critic,
             max_turns=max_turns,
             video_catalog=video_catalog,
+            acl_callback=effective_callback,
         )
 
     async def query(
@@ -116,6 +140,10 @@ class VideoQueryPipeline:
         video_id: Annotated[Optional[str], "Single video scope"] = None,
         video_ids: Annotated[Optional[List[str]], "Multi-video scope"] = None,
         request_id: Annotated[str, "Optional request correlation ID"] = "",
+        user_identifier_context: Annotated[
+            Optional[UserIdentifierContext],
+            "Per-request caller identity dict; required when ACL_ENABLED=true.",
+        ] = None,
     ) -> Dict[str, Any]:
         """Executes a natural language query against the video knowledge graph.
 
@@ -125,17 +153,26 @@ class VideoQueryPipeline:
             video_ids: Optional list of IDs to restrict the search to a subset
                 of videos.
             request_id: Optional unique identifier for tracking the request.
+            user_identifier_context: Per-request caller identity dict whose
+                shape matches the ``acl_callback`` supplied at construction.
+                Required when ACL_ENABLED=true; ignored otherwise.
 
         Returns:
             Dict[str, Any]: The structured response containing the answer,
                 evidence, and metadata.
+
+        Raises:
+            ConfigurationException: When ACL_ENABLED=true and
+                ``user_identifier_context`` is None.
         """
-        return await self._orchestrator.query(
-            user_query=user_query,
-            video_id=video_id,
-            video_ids=video_ids,
-            request_id=request_id,
-        )
+        self._require_user_ctx_when_acl_enabled(user_identifier_context)
+        async with user_identifier_scope(user_identifier_context):
+            return await self._orchestrator.query(
+                user_query=user_query,
+                video_id=video_id,
+                video_ids=video_ids,
+                request_id=request_id,
+            )
 
     def query_stream(
         self,
@@ -143,6 +180,10 @@ class VideoQueryPipeline:
         video_id: Annotated[Optional[str], "Single video scope"] = None,
         video_ids: Annotated[Optional[List[str]], "Multi-video scope"] = None,
         request_id: Annotated[str, "Optional request correlation ID"] = "",
+        user_identifier_context: Annotated[
+            Optional[UserIdentifierContext],
+            "Per-request caller identity dict; required when ACL_ENABLED=true.",
+        ] = None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """Executes a query and returns an asynchronous generator for streaming updates.
 
@@ -151,17 +192,43 @@ class VideoQueryPipeline:
             video_id: Optional ID to restrict search.
             video_ids: Optional list of IDs to restrict search.
             request_id: Optional correlation ID.
+            user_identifier_context: Per-request caller identity dict whose
+                shape matches the ``acl_callback`` supplied at construction.
+                Required when ACL_ENABLED=true; ignored otherwise.
 
         Returns:
             AsyncGenerator[Dict[str, Any], None]: A generator yielding status
                 updates and the final query results.
+
+        Raises:
+            ConfigurationException: When ACL_ENABLED=true and
+                ``user_identifier_context`` is None. Raised eagerly before
+                the generator yields its first event.
         """
-        return self._orchestrator.query_stream(
-            user_query=user_query,
-            video_id=video_id,
-            video_ids=video_ids,
-            request_id=request_id,
-        )
+        # Eagerly fail-fast before constructing the generator, so callers see
+        # the misconfiguration immediately rather than on first iteration.
+        self._require_user_ctx_when_acl_enabled(user_identifier_context)
+
+        async def _stream():
+            async with user_identifier_scope(user_identifier_context):
+                async for event in self._orchestrator.query_stream(
+                    user_query=user_query,
+                    video_id=video_id,
+                    video_ids=video_ids,
+                    request_id=request_id,
+                ):
+                    yield event
+
+        return _stream()
+
+    def _require_user_ctx_when_acl_enabled(
+        self, user_identifier_context: Optional[UserIdentifierContext]
+    ) -> None:
+        if self._acl_enabled and user_identifier_context is None:
+            raise ConfigurationException(
+                "ACL_ENABLED=true but no user_identifier_context provided to "
+                "VideoQueryPipeline.query()"
+            )
 
     async def close(self) -> None:
         await self._orchestrator.close()
