@@ -98,8 +98,17 @@ class LoggerManager:
         """
         if self.console_sink_id is None:
             resolved_level = level or os.environ.get("LOG_LEVEL", "INFO")
+            # diagnose=False prevents loguru from dumping frame locals on
+            # exception logging. Frame locals can hold per-request secrets
+            # (e.g., the ACL user_identifier_context dict carrying a graph
+            # token); backtrace=True keeps the stack itself.
             self.console_sink_id = logger.add(
-                sys.stdout, level=resolved_level, colorize=True, format=_format,
+                sys.stdout,
+                level=resolved_level,
+                colorize=True,
+                format=_format,
+                backtrace=True,
+                diagnose=False,
             )
 
     def disable_console(self):
@@ -128,10 +137,13 @@ class LoggerManager:
         try:
             sink_fn, provider = _create_azure_monitor_sink(conn_str)
             self._otel_provider = provider
+            # diagnose=False — see enable_console() for rationale.
             self._azure_sink_id = logger.add(
                 sink_fn,
                 level=level,
                 format="{message}",
+                backtrace=True,
+                diagnose=False,
             )
         except Exception as e:
             logger.warning(f"Failed to initialise Azure Monitor sink: {e}")

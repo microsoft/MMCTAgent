@@ -38,6 +38,7 @@ from mmct.providers.custom_providers import (
 )
 from mmct.providers.custom_providers.neo4j_graph_store_provider import Neo4jGraphStoreProvider
 from mmct.image_pipeline.config import ImageAgentProviderConfig
+from mmct.acl import AccessCheckCallback
 
 
 @dataclass(frozen=True)
@@ -375,3 +376,17 @@ def get_image_agent_provider() -> ImageAgentProviderConfig:
     """Return a singleton ImageAgentProviderConfig."""
     logger.info("Initializing ImageAgentProviderConfig")
     return ImageAgentProviderConfig(llm_provider=get_llm_provider())
+
+
+@lru_cache(maxsize=1)
+def get_acl_callback() -> Optional[AccessCheckCallback]:
+    """Return the deployment's ACL callback, or None when ACL is disabled.
+
+    Deployers who set ACL_ENABLED=true must edit this body to return
+    their callback (signature: ``async (video_ids, user_identifier_context)
+    -> AccessCheckResult``). An unmodified body with the env flag on
+    triggers a ConfigurationException at pipeline construction.
+    """
+    if not get_settings().acl_enabled:
+        return None
+    return None

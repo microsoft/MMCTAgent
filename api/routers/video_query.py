@@ -1,8 +1,9 @@
 """Routers for POST /video-query and POST /video-query/stream."""
 
-from typing import Optional
+import json
+from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Form
+from fastapi import APIRouter, Form, HTTPException
 from sse_starlette.sse import EventSourceResponse
 
 from api.schemas.video_query import VideoQueryResponse
@@ -10,6 +11,34 @@ from api.services.video_query_service import run_video_query, stream_video_query
 from mmct.video_pipeline.query_pipeline import QueryPipelineMode
 
 router = APIRouter()
+
+
+def _parse_user_identifier_context(
+    raw: Optional[str],
+) -> Optional[Dict[str, Any]]:
+    """Decode the form field's JSON string into a dict, or return None.
+
+    A 400 is raised if the field is present but doesn't decode to a JSON
+    object. Whether the field is required is enforced one layer down by
+    VideoQueryPipeline (which raises ConfigurationException when
+    ACL_ENABLED=true and the dict is missing).
+    """
+    if raw is None or raw == "":
+        return None
+    try:
+        decoded = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"user_identifier_context must be a JSON object ({exc.msg})",
+        )
+    if not isinstance(decoded, dict):
+        raise HTTPException(
+            status_code=400,
+            detail="user_identifier_context must be a JSON object, not a "
+                   f"{type(decoded).__name__}",
+        )
+    return decoded
 
 
 @router.post(
@@ -67,8 +96,25 @@ async def video_query(
         None,
         description="Graph database name override. When provided, queries target this database instead of the server default.",
     ),
+    user_identifier_context: Optional[str] = Form(
+        None,
+        description=(
+            "JSON-encoded freeform dict carrying caller identity (e.g. "
+            "`{\"email\":\"alice@example.com\",\"graph_token\":\"...\"}`). "
+            "Required when the server has ACL_ENABLED=true; ignored otherwise. "
+            "Shape is a private contract between the caller and the deployment's "
+            "configured access-check callback."
+        ),
+    ),
 ):
-    return await run_video_query(query=query, mode=mode, video_id=video_id, database=database)
+    user_ctx = _parse_user_identifier_context(user_identifier_context)
+    return await run_video_query(
+        query=query,
+        mode=mode,
+        video_id=video_id,
+        database=database,
+        user_identifier_context=user_ctx,
+    )
 
 
 @router.post(
@@ -100,9 +146,24 @@ async def video_query_stream(
         None,
         description="Graph database name override. When provided, queries target this database instead of the server default.",
     ),
+    user_identifier_context: Optional[str] = Form(
+        None,
+        description=(
+            "JSON-encoded freeform dict carrying caller identity. Required "
+            "when the server has ACL_ENABLED=true; ignored otherwise."
+        ),
+    ),
 ):
+    user_ctx = _parse_user_identifier_context(user_identifier_context)
+
     async def event_generator():
-        async for json_str in stream_video_query(query=query, mode=mode, video_id=video_id, database=database):
+        async for json_str in stream_video_query(
+            query=query,
+            mode=mode,
+            video_id=video_id,
+            database=database,
+            user_identifier_context=user_ctx,
+        ):
             yield {"data": json_str}
 
     return EventSourceResponse(event_generator())
