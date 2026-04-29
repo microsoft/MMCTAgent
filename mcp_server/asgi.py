@@ -13,6 +13,7 @@ import asyncio
 import os
 import threading
 
+from mcp_server.acl_middleware import ACLContextMiddleware
 from mcp_server.server import mcp
 from mcp_server.tools.image_query_tool import image_query  # noqa: F401 — registers tool
 from mcp_server.tools.video_query_tool import video_query  # noqa: F401 — registers tool
@@ -48,3 +49,4 @@ logger.info("Tool documentation registered at /docs")
 
 # Create the ASGI application for Uvicorn
 app = mcp.http_app(transport="streamable-http", stateless_http=True)
+app.add_middleware(ACLContextMiddleware)

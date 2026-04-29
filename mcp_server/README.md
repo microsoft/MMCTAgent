@@ -150,6 +150,53 @@ Add the following to your MCP settings (`claude_desktop_config.json`):
 
 ---
 
+## ACL Caller-Identity Header
+
+When the server is deployed with `ACL_ENABLED=true`, every `video_query`
+tool call must arrive with a caller-identity HTTP header so the
+configured access-check callback can decide which videos the caller may
+see. The header carries an opaque JSON object — its shape is a private
+contract between the deployer and the ACL callback (e.g. an MS Graph
+token plus the user's email; or a username plus a tenant id; or
+whatever the callback expects).
+
+**Header name:** `MMCT-User-Identifier-Context`
+
+**Header value:** a JSON-encoded object. Example:
+
+```
+MMCT-User-Identifier-Context: {"email":"alice@example.com","graph_token":"eyJ..."}
+```
+
+Semantics:
+
+* Missing/empty header — request proceeds. With `ACL_ENABLED=true`, the
+  pipeline raises a configuration error per tool call (fail-fast).
+* Malformed JSON or non-object value — middleware returns HTTP 400
+  immediately.
+
+The header is read by an ASGI middleware before the JSON-RPC dispatch,
+so the value never appears in the LLM-visible tool schema. Trusted
+client apps inject it at the dispatch layer; the LLM does not need to
+(and should not) author it.
+
+Custom-header config in MCP clients:
+
+```json
+{
+  "mcpServers": {
+    "mmct-agent": {
+      "url": "http://localhost:8000/mcp",
+      "headers": {
+        "MMCT-User-Identifier-Context": "{\"email\":\"alice@example.com\",\"graph_token\":\"...\"}"
+      }
+    }
+  }
+}
+```
+
+---
+
 ## Testing
 
 A lightweight test client is provided to verify server registration and tool execution:

@@ -10,7 +10,7 @@ from loguru import logger
 from mcp_server.server import mcp
 from mmct.video_pipeline.query_pipeline import VideoQueryPipeline, QueryPipelineMode
 from mmct.providers.base.database_context import database_override
-from config.provider_config import get_query_pipeline_providers
+from config.provider_config import get_acl_callback, get_query_pipeline_providers
 
 # Singleton pipeline instances — one per mode, reused across requests.
 _pipelines: dict[str, VideoQueryPipeline] = {}
@@ -22,6 +22,7 @@ def get_pipeline(mode: str) -> VideoQueryPipeline:
         _pipelines[mode] = VideoQueryPipeline(
             mode=mode,
             use_provider_defaults=False,
+            acl_callback=get_acl_callback(),
             **get_query_pipeline_providers().__dict__
         )
     return _pipelines[mode]
